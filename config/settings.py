@@ -29,6 +29,8 @@ class APIConfig:
     
     # OpenAI for LLM scoring
     openai_api_key: str = os.getenv('OPENAI_API_KEY', '')
+    # YouTube Data API v3
+    youtube_api_key: str = os.getenv('YOUTUBE_API_KEY', '')
 
 # Global settings
 SETTINGS = {
@@ -51,6 +53,7 @@ SETTINGS = {
     'reddit_rate_limit': 60,      # requests per minute
     'amazon_rate_limit': 1,       # requests per second
     'openai_rate_limit': 60,      # requests per minute
+    'youtube_rate_limit': 60,    # requests per minute (YouTube Data API key quota should be considered)
     
     # Data retention
     'data_retention_days': 90,
@@ -68,7 +71,7 @@ BRAND_TEMPLATES = {
     'default': {
         'keywords': [],
         'exclude_keywords': [],
-        'sources': ['reddit', 'amazon'],
+        'sources': ['reddit', 'amazon', 'youtube'],
         'custom_scoring_weights': None,
     }
 }

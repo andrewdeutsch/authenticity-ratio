@@ -11,6 +11,7 @@ from enum import Enum
 class ContentSource(Enum):
     REDDIT = "reddit"
     AMAZON = "amazon"
+    YOUTUBE = "youtube"
 
 class ContentClass(Enum):
     AUTHENTIC = "authentic"

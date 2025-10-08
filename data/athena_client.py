@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import json
 import logging
+import time
 
 from config.database import DATABASE_CONFIG, AWS_CONFIG, ATHENA_CONFIG
 from data.models import NormalizedContent, ContentScores, AuthenticityRatio

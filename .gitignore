@@ -1,0 +1,60 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtualenv
+venv/
+.env/
+.env
+.env.*
+
+# Pytest
+.pytest_cache/
+
+# VSCode
+.vscode/
+
+# macOS
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Data and output
+output/
+*.parquet
+*.csv
+
+# AWS credentials (if present locally)
+.aws/
+
+# Ignore temporary files
+*.swp
+
+# Ignore local SQLite DBs
+*.db
+
+# Ignore dotenv file with secrets
+.env
+
+# Keep optional local config out
+config/local_settings.py

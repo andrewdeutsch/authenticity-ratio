@@ -20,7 +20,7 @@ DATABASE_CONFIG = {
     
     # Partition configuration
     'partition_scheme': ['brand_id', 'source'],
-    'supported_sources': ['reddit', 'amazon'],
+    'supported_sources': ['reddit', 'amazon', 'youtube'],
     
     # File format settings
     'file_format': 'PARQUET',
@@ -40,7 +40,8 @@ ATHENA_CONFIG = {
     'max_execution_time': 3600,  # 1 hour
     'output_location': DATABASE_CONFIG['results_bucket'],
     'encryption_configuration': {
-        'encryption_option': 'SSE_S3'
+        # boto3 expects 'EncryptionOption' (capitalized) and optional 'KmsKey'
+        'EncryptionOption': 'SSE_S3'
     }
 }
 

@@ -3,7 +3,7 @@
 Scores content on Provenance, Verification, Transparency, Coherence, Resonance
 """
 
-import openai
+from openai import OpenAI
 from typing import Dict, Any, List, Optional
 import logging
 import json
@@ -27,7 +27,9 @@ class ContentScorer:
     """Scores content on 5D Trust Dimensions"""
     
     def __init__(self):
-        openai.api_key = APIConfig.openai_api_key
+        # Use the new OpenAI client (openai>=1.0.0)
+        # If API key is None or empty, the client will fall back to environment variables.
+        self.client = OpenAI(api_key=APIConfig.openai_api_key)
         self.rubric_version = SETTINGS['rubric_version']
     
     def score_content(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> DimensionScores:
@@ -237,7 +239,8 @@ class ContentScorer:
     def _get_llm_score(self, prompt: str) -> float:
         """Get score from LLM API"""
         try:
-            response = openai.ChatCompletion.create(
+            # New API: client.chat.completions.create(...)
+            response = self.client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "You are an expert content authenticity evaluator. Always respond with only a number between 0.0 and 1.0."},
@@ -246,8 +249,15 @@ class ContentScorer:
                 max_tokens=10,
                 temperature=0.1
             )
-            
-            score_text = response.choices[0].message.content.strip()
+
+            # The new response shape still exposes choices with a message
+            # Attempt to read the content defensively
+            try:
+                score_text = response.choices[0].message.content.strip()
+            except Exception:
+                # Fallback to dict-like access if needed
+                score_text = str(response.choices[0].message.get('content', '')).strip()
+
             score = float(score_text)
             
             # Ensure score is in valid range

@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
 
-from data.models import NormalizedContent, ContentScores, PipelineRun
+from data.models import NormalizedContent, ContentScores, PipelineRun, AuthenticityRatio
 from data.athena_client import AthenaClient
 from .scorer import ContentScorer
 from .classifier import ContentClassifier
@@ -103,50 +103,51 @@ class ScoringPipeline:
             self.athena_client.upload_content_scores(source_scores, brand_id, source, run_id)
     
     def _calculate_authenticity_ratio(self, scores_list: List[ContentScores], 
-                                    brand_id: str, run_id: str) -> Dict[str, Any]:
-        """Calculate Authenticity Ratio from scores"""
+                                    brand_id: str, run_id: str) -> AuthenticityRatio:
+        """Calculate Authenticity Ratio from scores and return an AuthenticityRatio dataclass"""
         if not scores_list:
-            return {
-                "brand_id": brand_id,
-                "run_id": run_id,
-                "total_items": 0,
-                "authentic_items": 0,
-                "suspect_items": 0,
-                "inauthentic_items": 0,
-                "authenticity_ratio_pct": 0.0,
-                "extended_ar_pct": 0.0
-            }
-        
+            logger.info(f"AR Calculation for {brand_id}: no scores")
+            return AuthenticityRatio(
+                brand_id=brand_id,
+                source=",",
+                run_id=run_id,
+                total_items=0,
+                authentic_items=0,
+                suspect_items=0,
+                inauthentic_items=0,
+                authenticity_ratio_pct=0.0
+            )
+
         # Count classifications
         authentic_count = sum(1 for s in scores_list if s.class_label == "authentic")
         suspect_count = sum(1 for s in scores_list if s.class_label == "suspect")
         inauthentic_count = sum(1 for s in scores_list if s.class_label == "inauthentic")
         total_count = len(scores_list)
-        
+
         # Calculate AR percentages
         core_ar = (authentic_count / total_count * 100) if total_count > 0 else 0.0
-        extended_ar = ((authentic_count + 0.5 * suspect_count) / total_count * 100) if total_count > 0 else 0.0
-        
-        ar_result = {
-            "brand_id": brand_id,
-            "run_id": run_id,
-            "total_items": total_count,
-            "authentic_items": authentic_count,
-            "suspect_items": suspect_count,
-            "inauthentic_items": inauthentic_count,
-            "authenticity_ratio_pct": core_ar,
-            "extended_ar_pct": extended_ar
-        }
-        
+
+        # Build source string from unique sources in the scores list
+        sources = sorted({s.src for s in scores_list})
+        source_str = ",".join(sources) if sources else ""
+
         logger.info(f"AR Calculation for {brand_id}:")
         logger.info(f"  Total items: {total_count}")
-        logger.info(f"  Authentic: {authentic_count} ({authentic_count/total_count*100:.1f}%)")
-        logger.info(f"  Suspect: {suspect_count} ({suspect_count/total_count*100:.1f}%)")
-        logger.info(f"  Inauthentic: {inauthentic_count} ({inauthentic_count/total_count*100:.1f}%)")
+        logger.info(f"  Authentic: {authentic_count} ({(authentic_count/total_count*100) if total_count else 0:.1f}%)")
+        logger.info(f"  Suspect: {suspect_count} ({(suspect_count/total_count*100) if total_count else 0:.1f}%)")
+        logger.info(f"  Inauthentic: {inauthentic_count} ({(inauthentic_count/total_count*100) if total_count else 0:.1f}%)")
         logger.info(f"  Core AR: {core_ar:.2f}%")
-        logger.info(f"  Extended AR: {extended_ar:.2f}%")
-        
-        return ar_result
+
+        return AuthenticityRatio(
+            brand_id=brand_id,
+            source=source_str,
+            run_id=run_id,
+            total_items=total_count,
+            authentic_items=authentic_count,
+            suspect_items=suspect_count,
+            inauthentic_items=inauthentic_count,
+            authenticity_ratio_pct=core_ar
+        )
     
     def get_pipeline_status(self, run_id: str) -> Optional[PipelineRun]:
         """Get status of a pipeline run"""
@@ -192,6 +193,23 @@ class ScoringPipeline:
             brand_config.get('brand_id', 'unknown'),
             scores_list[0].run_id if scores_list else 'unknown'
         )
+
+        # Reporting expects a dict-like structure (with .get). If we returned
+        # an AuthenticityRatio dataclass, convert it to a dict with the
+        # previous keys including extended_ar_pct.
+        if hasattr(ar_result, '__dict__'):
+            ar_dict = {
+                'brand_id': ar_result.brand_id,
+                'run_id': ar_result.run_id,
+                'total_items': ar_result.total_items,
+                'authentic_items': ar_result.authentic_items,
+                'suspect_items': ar_result.suspect_items,
+                'inauthentic_items': ar_result.inauthentic_items,
+                'authenticity_ratio_pct': ar_result.authenticity_ratio_pct,
+                'extended_ar_pct': ar_result.extended_ar
+            }
+        else:
+            ar_dict = ar_result
         
         # Generate dimension breakdown
         dimension_breakdown = {}
@@ -208,7 +226,7 @@ class ScoringPipeline:
             "brand_id": brand_config.get('brand_id', 'unknown'),
             "run_id": scores_list[0].run_id if scores_list else 'unknown',
             "generated_at": datetime.now().isoformat(),
-            "authenticity_ratio": ar_result,
+            "authenticity_ratio": ar_dict,
             "classification_analysis": analysis,
             "dimension_breakdown": dimension_breakdown,
             "total_items_analyzed": len(scores_list),

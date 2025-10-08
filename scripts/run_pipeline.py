@@ -17,6 +17,7 @@ from utils.logging_config import setup_logging
 from utils.helpers import generate_run_id, validate_config
 from ingestion.reddit_crawler import RedditCrawler
 from ingestion.amazon_scraper import AmazonScraper
+from ingestion.youtube_scraper import YouTubeScraper
 from ingestion.normalizer import ContentNormalizer
 from scoring.pipeline import ScoringPipeline
 from reporting.pdf_generator import PDFReportGenerator
@@ -79,10 +80,12 @@ def main():
             athena_client = AthenaClient()
             reddit_crawler = RedditCrawler()
             amazon_scraper = AmazonScraper()
+            youtube_scraper = YouTubeScraper()
         else:
             athena_client = None
             reddit_crawler = None
             amazon_scraper = None
+            youtube_scraper = None
         
         normalizer = ContentNormalizer()
         scoring_pipeline = ScoringPipeline()
@@ -111,8 +114,9 @@ def main():
         if 'amazon' in args.sources:
             logger.info("Ingesting Amazon data...")
             if not args.dry_run:
+                # mock_reviews_for_demo signature = (brand_keywords: List[str], num_reviews: int = 50)
                 amazon_reviews = amazon_scraper.mock_reviews_for_demo(
-                    keywords=args.keywords,
+                    args.keywords,
                     num_reviews=args.max_content // len(args.sources)
                 )
                 amazon_content = amazon_scraper.convert_to_normalized_content(
@@ -122,6 +126,18 @@ def main():
                 logger.info(f"Retrieved {len(amazon_content)} Amazon content items")
             else:
                 logger.info("Dry run: Skipping Amazon ingestion")
+
+        if 'youtube' in args.sources:
+            logger.info("Ingesting YouTube data...")
+            if not args.dry_run:
+                # Build a search query from keywords
+                query = ' '.join(args.keywords)
+                videos = youtube_scraper.search_videos(query=query, max_results=args.max_content // len(args.sources))
+                youtube_content = youtube_scraper.convert_videos_to_normalized(videos, args.brand_id, run_id)
+                all_content.extend(youtube_content)
+                logger.info(f"Retrieved {len(youtube_content)} YouTube content items")
+            else:
+                logger.info("Dry run: Skipping YouTube ingestion")
         
         if not all_content:
             logger.warning("No content retrieved from any source")
