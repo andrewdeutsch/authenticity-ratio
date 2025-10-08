@@ -185,8 +185,30 @@ class ScoringPipeline:
     def generate_scoring_report(self, scores_list: List[ContentScores], 
                               brand_config: Dict[str, Any]) -> Dict[str, Any]:
         """Generate detailed scoring report"""
+        # If no scores are provided, return a structured report with zeros so
+        # callers don't need to handle a special error case.
         if not scores_list:
-            return {"error": "No scores to report on"}
+            ar_zero = {
+                'brand_id': brand_config.get('brand_id', 'unknown'),
+                'run_id': 'unknown',
+                'total_items': 0,
+                'authentic_items': 0,
+                'suspect_items': 0,
+                'inauthentic_items': 0,
+                'authenticity_ratio_pct': 0.0,
+                'extended_ar_pct': 0.0
+            }
+
+            return {
+                "brand_id": brand_config.get('brand_id', 'unknown'),
+                "run_id": 'unknown',
+                "generated_at": datetime.now().isoformat(),
+                "authenticity_ratio": ar_zero,
+                "classification_analysis": {},
+                "dimension_breakdown": {},
+                "total_items_analyzed": 0,
+                "rubric_version": "unknown"
+            }
         
         # Get classification analysis
         analysis = self.classifier.analyze_dimension_performance(scores_list)
