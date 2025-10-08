@@ -219,11 +219,17 @@ class AthenaClient:
             )
         
         # Aggregate across sources
-        total_items = results['total_items'].sum()
-        authentic_items = results['authentic_items'].sum()
-        suspect_items = results['suspect_items'].sum()
-        inauthentic_items = results['inauthentic_items'].sum()
-        ar_pct = results['authenticity_ratio_pct'].mean()
+        # Athena can return numeric columns as strings; coerce to numeric types
+        for col in ['total_items', 'authentic_items', 'suspect_items', 'inauthentic_items', 'authenticity_ratio_pct']:
+            if col in results.columns:
+                results[col] = pd.to_numeric(results[col], errors='coerce')
+
+        total_items = int(results['total_items'].sum())
+        authentic_items = int(results['authentic_items'].sum())
+        suspect_items = int(results['suspect_items'].sum())
+        inauthentic_items = int(results['inauthentic_items'].sum())
+        # Mean of percentages; if NaN, default to 0.0
+        ar_pct = float(results['authenticity_ratio_pct'].mean() if not results['authenticity_ratio_pct'].isna().all() else 0.0)
         
         return AuthenticityRatio(
             brand_id=brand_id,
