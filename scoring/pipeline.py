@@ -67,6 +67,10 @@ class ScoringPipeline:
             logger.info("Step 4: Calculating Authenticity Ratio")
             ar_result = self._calculate_authenticity_ratio(classified_scores, brand_id, run_id)
             
+            # Attach classified scores to the pipeline run so callers can use
+            # the exact objects that were uploaded to S3/Athena.
+            pipeline_run.classified_scores = classified_scores
+
             # Complete pipeline run
             pipeline_run.end_time = datetime.now()
             pipeline_run.status = "completed"

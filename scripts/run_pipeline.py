@@ -166,31 +166,12 @@ def main():
         
         # Step 5: Generate Reports
         logger.info("Step 4: Generating Reports")
-        
-        # Get scoring report data
-        scores_list = []
-        for source in args.sources:
-            source_content = [c for c in normalized_content if c.src == source]
-            if source_content:
-                # Mock scores for demo (in production, these would come from the scoring pipeline)
-                from data.models import ContentScores
-                for content in source_content:
-                    scores_list.append(ContentScores(
-                        content_id=content.content_id,
-                        brand=brand_config['brand_name'],
-                        src=content.src,
-                        event_ts=content.event_ts,
-                        score_provenance=0.75,
-                        score_resonance=0.68,
-                        score_coherence=0.72,
-                        score_transparency=0.70,
-                        score_verification=0.65,
-                        class_label="authentic" if content.rating and content.rating > 0.7 else "suspect",
-                        is_authentic=content.rating and content.rating > 0.7,
-                        rubric_version="v1.0",
-                        run_id=run_id
-                    ))
-        
+
+        # Use the classified scores produced by the scoring pipeline for report
+        # generation. This ensures the report reflects the actual classifications
+        # that were uploaded to S3/Athena.
+        scores_list = pipeline_run.classified_scores or []
+
         # Generate scoring report
         scoring_report = scoring_pipeline.generate_scoring_report(scores_list, brand_config)
         

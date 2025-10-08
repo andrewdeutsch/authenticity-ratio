@@ -110,6 +110,10 @@ class PipelineRun:
     status: str = "running"  # running, completed, failed
     items_processed: int = 0
     errors: List[str] = None
+    # Optional: hold classified scores produced by the scoring pipeline so
+    # callers (reports/telemetry) can consume the exact objects that were
+    # uploaded to S3/Athena.
+    classified_scores: Optional[List[Any]] = None
     
     def __post_init__(self):
         if self.errors is None:
