@@ -256,6 +256,8 @@ class ScoringPipeline:
             "classification_analysis": analysis,
             "dimension_breakdown": dimension_breakdown,
             "total_items_analyzed": len(scores_list),
+            # Include data sources used for this report (prefer explicit brand_config, fallback to sources present on scores)
+            "sources": brand_config.get('sources') if brand_config.get('sources') else sorted({s.src for s in scores_list}),
             "rubric_version": scores_list[0].rubric_version if scores_list else "unknown"
         }
         

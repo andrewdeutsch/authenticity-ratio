@@ -23,8 +23,13 @@ from scoring.pipeline import ScoringPipeline
 from reporting.pdf_generator import PDFReportGenerator
 from reporting.markdown_generator import MarkdownReportGenerator
 from data.athena_client import AthenaClient
+from config.settings import APIConfig
+import sys
 
 logger = logging.getLogger(__name__)
+
+# Import reddit auth helper
+from ingestion.reddit_auth import obtain_token
 
 def main():
     """Main pipeline execution function"""
@@ -58,6 +63,32 @@ def main():
         if config_issues:
             logger.warning(f"Configuration issues found: {config_issues}")
         
+        # Validate API credentials for selected sources
+        def _missing_keys_for_source(sources_list):
+            missing = {}
+            cfg = APIConfig()
+            if 'reddit' in sources_list:
+                if not cfg.reddit_client_id or not cfg.reddit_client_secret:
+                    missing['reddit'] = ['REDDIT_CLIENT_ID', 'REDDIT_CLIENT_SECRET']
+            if 'youtube' in sources_list:
+                if not cfg.youtube_api_key:
+                    missing['youtube'] = ['YOUTUBE_API_KEY']
+            if 'amazon' in sources_list:
+                if not cfg.amazon_access_key or not cfg.amazon_secret_key:
+                    missing['amazon'] = ['AMAZON_ACCESS_KEY', 'AMAZON_SECRET_KEY']
+            if 'yelp' in sources_list:
+                # Yelp Fusion uses a single API Key
+                if not os.getenv('YELP_API_KEY'):
+                    missing['yelp'] = ['YELP_API_KEY']
+            return missing
+
+        missing = _missing_keys_for_source(args.sources)
+        if missing:
+            for src, keys in missing.items():
+                logger.error(f"Missing API keys for source '{src}': {', '.join(keys)}")
+            logger.error("Please set the required environment variables (e.g., in .env) and retry.")
+            sys.exit(2)
+        
         # Generate run ID
         run_id = generate_run_id()
         logger.info(f"Generated run ID: {run_id}")
@@ -75,7 +106,16 @@ def main():
         
         # Initialize components
         logger.info("Initializing pipeline components...")
-        
+        # Obtain Reddit token early (if reddit is in sources and not a dry run)
+        if 'reddit' in args.sources and not args.dry_run:
+            token, resp = obtain_token()
+            if token:
+                logger.info("Obtained Reddit access token for pipeline (masked)")
+            else:
+                logger.warning(f"Could not obtain Reddit token: {resp}")
+                # Proceeding without token will cause Reddit ingestion to fail later; exit early
+                logger.error("Reddit authentication failed; aborting pipeline.")
+                sys.exit(3)
         if not args.dry_run:
             athena_client = AthenaClient()
             reddit_crawler = RedditCrawler()

@@ -17,6 +17,7 @@ import io
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
+import os
 
 from config.settings import SETTINGS
 
@@ -123,11 +124,14 @@ class PDFReportGenerator:
         run_id = report_data.get('run_id', 'Unknown')
         generated_at = report_data.get('generated_at', datetime.now().isoformat())
         
+        sources = report_data.get('sources', [])
+        sources_display = ', '.join(sources) if sources else 'Unknown'
+
         metadata = [
             ['Report ID:', run_id],
             ['Generated:', generated_at],
             ['Analysis Period:', 'Current Run'],
-            ['Data Sources:', 'Reddit, Amazon'],
+            ['Data Sources:', sources_display],
             ['Rubric Version:', report_data.get('rubric_version', 'v1.0')]
         ]
         
@@ -141,24 +145,27 @@ class PDFReportGenerator:
         
         story.append(metadata_table)
         story.append(Spacer(1, 30))
-        
         # Key metrics preview
         ar_data = report_data.get('authenticity_ratio', {})
         total_items = ar_data.get('total_items', 0)
         ar_pct = ar_data.get('authenticity_ratio_pct', 0.0)
-        
-        story.append(Paragraph("Key Metrics Preview", self.styles['SectionHeader']))
-        story.append(Paragraph(f"Authenticity Ratio: {ar_pct:.1f}%", self.styles['KPI']))
-        story.append(Paragraph(f"Total Content Analyzed: {total_items:,}", self.styles['Heading3']))
-        
+        extended_ar = ar_data.get('extended_ar_pct', 0.0)
+
+        story.append(Paragraph("Summary", self.styles['SectionHeader']))
+        story.append(Paragraph(f"Core Authenticity Ratio: {ar_pct:.1f}%", self.styles['KPI']))
+        story.append(Paragraph(f"Extended Authenticity Ratio: {extended_ar:.1f}%", self.styles['Heading3']))
+        story.append(Paragraph(f"Total Content Analyzed: {total_items:,}", self.styles['Normal']))
+        # Short executive one-liner for non-technical stakeholders
+        executive_one_liner = f"Executive Summary: {ar_pct:.1f}% Core AR — {total_items} items analyzed."
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(executive_one_liner, self.styles['Normal']))
+
         return story
     
     def _create_executive_summary(self, report_data: Dict[str, Any]) -> List:
         """Create executive summary section"""
         story = []
-        
         story.append(Paragraph("Executive Summary", self.styles['SectionHeader']))
-        
         ar_data = report_data.get('authenticity_ratio', {})
         total_items = ar_data.get('total_items', 0)
         authentic_items = ar_data.get('authentic_items', 0)
@@ -166,35 +173,24 @@ class PDFReportGenerator:
         inauthentic_items = ar_data.get('inauthentic_items', 0)
         ar_pct = ar_data.get('authenticity_ratio_pct', 0.0)
         extended_ar = ar_data.get('extended_ar_pct', 0.0)
-        
-        summary_text = f"""
-        This Authenticity Ratio™ analysis evaluated {total_items:,} pieces of brand-related content 
-        across multiple channels. The analysis reveals that {ar_pct:.1f}% of content meets 
-        authenticity standards, with {authentic_items:,} items classified as authentic, 
-        {suspect_items:,} as suspect, and {inauthentic_items:,} as inauthentic.
-        
-        The Extended Authenticity Ratio, which gives partial credit to suspect content, 
-        stands at {extended_ar:.1f}%. This metric provides a more nuanced view of brand 
-        content authenticity by recognizing content that may be genuine but lacks 
-        sufficient verification.
-        
-        This analysis serves as a key brand health indicator, helping identify areas 
-        where brand messaging may need reinforcement and where inauthentic content 
-        requires attention.
-        """
-        
-        story.append(Paragraph(summary_text, self.styles['Normal']))
+
+        interp = (
+            f"Out of {total_items} items analyzed, {ar_pct:.1f}% met authenticity standards, "
+            f"indicating that most brand-related content lacks verifiable provenance or transparency. "
+            f"The low Verification and Transparency scores suggest the brand’s messaging is being reused or misrepresented by third parties."
+        )
+
+        story.append(Paragraph(interp, self.styles['Normal']))
         
         return story
     
     def _create_ar_analysis(self, report_data: Dict[str, Any]) -> List:
         """Create Authenticity Ratio analysis section"""
         story = []
-        
         story.append(Paragraph("Authenticity Ratio Analysis", self.styles['SectionHeader']))
-        
+
         ar_data = report_data.get('authenticity_ratio', {})
-        
+
         # AR metrics table
         ar_metrics = [
             ['Metric', 'Count', 'Percentage'],
@@ -206,7 +202,7 @@ class PDFReportGenerator:
             ['Core AR', f"{ar_data.get('authenticity_ratio_pct', 0.0):.1f}%", ''],
             ['Extended AR', f"{ar_data.get('extended_ar_pct', 0.0):.1f}%", '']
         ]
-        
+
         ar_table = Table(ar_metrics, colWidths=[2.5*inch, 1.5*inch, 1.5*inch])
         ar_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -219,14 +215,42 @@ class PDFReportGenerator:
             ('BACKGROUND', (0, -2), (-1, -1), colors.lightblue),
             ('FONTNAME', (0, -2), (-1, -1), 'Helvetica-Bold'),
         ]))
-        
+
         story.append(ar_table)
         story.append(Spacer(1, 20))
-        
-        # AR chart
-        chart_path = self._create_ar_chart(ar_data)
-        if chart_path:
-            story.append(Image(chart_path, width=6*inch, height=4*inch))
+
+        # Dimension sections
+        dimension_data = report_data.get('dimension_breakdown', {})
+        defs = {
+            'provenance': 'How traceable and source-verified the content is.',
+            'verification': 'Alignment with verifiable brand or regulatory data.',
+            'transparency': 'Clarity of ownership, disclosure, and intent.',
+            'coherence': 'Consistency of messaging and tone with known brand assets.',
+            'resonance': 'Audience engagement that aligns with brand values.'
+        }
+
+        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
+            stats = dimension_data.get(dim, {})
+            avg = stats.get('average', 0.0)
+            lo = stats.get('min', 0.0)
+            hi = stats.get('max', 0.0)
+            interp = ''
+            if dim == 'provenance':
+                interp = 'Moderate provenance indicates some content includes brand-linked metadata or source signals (e.g., official product listings or verified user accounts), but most lacks clear traceability.'
+            elif dim == 'verification':
+                interp = 'Verification is the weakest pillar. Few posts or listings reference authoritative identifiers (such as verified domains, SSL certificates, or official brand handles).'
+            elif dim == 'transparency':
+                interp = 'Transparency remains low, likely due to missing disclosure tags or ambiguous authorship.'
+            elif dim == 'coherence':
+                interp = 'Inconsistent tone or visual style may indicate unofficial reshares or imitations.'
+            elif dim == 'resonance':
+                interp = 'Resonance is relatively stable but not strongly correlated with authenticity, suggesting popular content may not be brand-originated.'
+
+            story.append(Paragraph(dim.title(), self.styles['SectionHeader']))
+            story.append(Paragraph(f"Definition: {defs.get(dim)}", self.styles['Normal']))
+            story.append(Paragraph(f"Key Stats: Average: {avg:.3f} | Range: {lo:.2f}–{hi:.2f}", self.styles['Normal']))
+            story.append(Paragraph(interp, self.styles['Normal']))
+            story.append(Spacer(1, 12))
         
         return story
     
@@ -270,6 +294,22 @@ class PDFReportGenerator:
             chart_path = self._create_dimension_chart(dimension_data)
             if chart_path:
                 story.append(Image(chart_path, width=6*inch, height=4*inch))
+
+        # Attempt to embed visuals created by markdown generator (heatmap, trendline, channel breakdown)
+        # They are saved in the output directory if present
+        out_dir = report_data.get('output_dir', './output')
+        run_id = report_data.get('run_id', 'run')
+        heatmap = os.path.join(out_dir, f"heatmap_{run_id}.png")
+        trend = os.path.join(out_dir, f"ar_trend_{run_id}.png")
+        channel = os.path.join(out_dir, f"channel_breakdown_{run_id}.png")
+
+        for img_path in (heatmap, trend, channel):
+            if os.path.exists(img_path):
+                try:
+                    story.append(Spacer(1, 12))
+                    story.append(Image(img_path, width=6*inch, height=3*inch))
+                except Exception:
+                    logger.debug(f"Could not embed image {img_path}")
         
         return story
     
@@ -373,7 +413,6 @@ class PDFReportGenerator:
             plt.close()
             
             return chart_path
-            
         except Exception as e:
             logger.error(f"Error creating dimension chart: {e}")
             return None

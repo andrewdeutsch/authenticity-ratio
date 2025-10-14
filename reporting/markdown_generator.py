@@ -6,6 +6,15 @@ Creates markdown reports for easy sharing and documentation
 from typing import Dict, Any, List
 import logging
 from datetime import datetime
+import os
+import re
+import json
+from statistics import mean
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +73,9 @@ class MarkdownReportGenerator:
     def _create_header(self, report_data: Dict[str, Any]) -> str:
         """Create report header"""
         brand_id = report_data.get('brand_id', 'Unknown Brand')
-        return f"# Authenticity Ratio™ Report\n\n## Brand: {brand_id}"
+        run_id = report_data.get('run_id', 'unknown')
+        generated_at = report_data.get('generated_at', datetime.now().isoformat())
+        return f"# Authenticity Ratio™ Report\n\n## Brand: {brand_id}\n\n*Run ID:* `{run_id}`  \n*Generated:* {generated_at}"
     
     def _create_metadata(self, report_data: Dict[str, Any]) -> str:
         """Create metadata section"""
@@ -79,7 +90,7 @@ class MarkdownReportGenerator:
 | Report ID | `{run_id}` |
 | Generated | {generated_at} |
 | Analysis Period | Current Run |
-| Data Sources | Reddit, Amazon |
+| Data Sources | {', '.join(report_data.get('sources', [])) if report_data.get('sources') else 'Unknown'} |
 | Rubric Version | {rubric_version} |"""
     
     def _create_executive_summary(self, report_data: Dict[str, Any]) -> str:
@@ -91,69 +102,97 @@ class MarkdownReportGenerator:
         inauthentic_items = ar_data.get('inauthentic_items', 0)
         ar_pct = ar_data.get('authenticity_ratio_pct', 0.0)
         extended_ar = ar_data.get('extended_ar_pct', 0.0)
-        
-        return f"""## Executive Summary
 
-This Authenticity Ratio™ analysis evaluated **{total_items:,}** pieces of brand-related content across multiple channels. The analysis reveals that **{ar_pct:.1f}%** of content meets authenticity standards.
+        # Plain English interpretation paragraph (templated)
+        interp = (
+            f"Out of {total_items} items analyzed, {ar_pct:.1f}% met authenticity standards, "
+            f"indicating that most brand-related content lacks verifiable provenance or transparency. "
+            f"The low Verification and Transparency scores suggest the brand’s messaging is being reused or misrepresented by third parties."
+        )
 
-### Key Findings
+        # Short one-line summary for non-technical stakeholders
+        executive_one_liner = f"Executive Summary: {ar_pct:.1f}% Core AR — {total_items} items analyzed."
 
-- **Authentic Content**: {authentic_items:,} items ({authentic_items/total_items*100:.1f}% of total)
-- **Suspect Content**: {suspect_items:,} items ({suspect_items/total_items*100:.1f}% of total)  
-- **Inauthentic Content**: {inauthentic_items:,} items ({inauthentic_items/total_items*100:.1f}% of total)
+        # Build images (heatmap, trendline, channel breakdown) and include them if created
+        visuals_md = []
+        # Heatmap from dimension breakdown
+        heatmap_path = self._create_dimension_heatmap(report_data)
+        if heatmap_path:
+            visuals_md.append(f"![5D Heatmap]({heatmap_path})")
 
-### Authenticity Metrics
+        # Trendline from previous reports (optional)
+        trend_path = self._create_trendline(report_data)
+        if trend_path:
+            visuals_md.append(f"![AR Trend]({trend_path})")
 
-| Metric | Value |
-|--------|-------|
-| **Core Authenticity Ratio** | **{ar_pct:.1f}%** |
-| **Extended Authenticity Ratio** | **{extended_ar:.1f}%** |
+        # Channel breakdown (if provided)
+        channel_path = self._create_channel_breakdown(report_data)
+        if channel_path:
+            visuals_md.append(f"![Channel Breakdown]({channel_path})")
 
-> The Extended Authenticity Ratio gives partial credit to suspect content, providing a more nuanced view of brand content authenticity.
+        visuals_block = "\n\n".join(visuals_md)
 
-### Strategic Implications
+        return f"""## Summary
 
-This analysis serves as a key brand health indicator, helping identify areas where:
-- Brand messaging may need reinforcement
-- Inauthentic content requires immediate attention
-- Content verification processes can be improved"""
+**Core Authenticity Ratio:** {ar_pct:.1f}%  
+**Extended Authenticity Ratio:** {extended_ar:.1f}%  
+**Total content analyzed:** {total_items:,}  
+**Distribution:** Authentic: {authentic_items:,} | Suspect: {suspect_items:,} | Inauthentic: {inauthentic_items:,}
+
+{interp}
+
+**Executive (one-liner):** {executive_one_liner}
+
+{visuals_block}
+
+"""
     
     def _create_ar_analysis(self, report_data: Dict[str, Any]) -> str:
         """Create Authenticity Ratio analysis section"""
         ar_data = report_data.get('authenticity_ratio', {})
-        
-        # Create classification breakdown table
+        # Build per-dimension subsections
+        dimension_breakdown = report_data.get('dimension_breakdown', {})
+        dimension_sections = []
+        defs = {
+            'provenance': 'How traceable and source-verified the content is.',
+            'verification': 'Alignment with verifiable brand or regulatory data.',
+            'transparency': 'Clarity of ownership, disclosure, and intent.',
+            'coherence': 'Consistency of messaging and tone with known brand assets.',
+            'resonance': 'Audience engagement that aligns with brand values.'
+        }
+
+        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
+            stats = dimension_breakdown.get(dim, {})
+            avg = stats.get('average', 0.0)
+            lo = stats.get('min', 0.0)
+            hi = stats.get('max', 0.0)
+            interp = ''
+            # Use provided plain-language interpretations from spec where helpful
+            if dim == 'provenance':
+                interp = 'Moderate provenance indicates some content includes brand-linked metadata or source signals (e.g., official product listings or verified user accounts), but most lacks clear traceability.'
+            elif dim == 'verification':
+                interp = 'Verification is the weakest pillar. Few posts or listings reference authoritative identifiers (such as verified domains, SSL certificates, or official brand handles).'
+            elif dim == 'transparency':
+                interp = 'Transparency remains low, likely due to missing disclosure tags or ambiguous authorship.'
+            elif dim == 'coherence':
+                interp = 'Inconsistent tone or visual style may indicate unofficial reshares or imitations.'
+            elif dim == 'resonance':
+                interp = 'Resonance is relatively stable but not strongly correlated with authenticity, suggesting popular content may not be brand-originated.'
+
+            section = f"### {dim.title()}\n\n**Definition:** {defs.get(dim)}\n\n**Key Stats:** Average: {avg:.3f} | Range: {lo:.2f}–{hi:.2f}\n\n**Interpretation:** {interp}\n"
+            dimension_sections.append(section)
+
+        dimension_text = '\n'.join(dimension_sections)
+
+        # Summary block
         total_items = ar_data.get('total_items', 0)
         authentic_items = ar_data.get('authentic_items', 0)
         suspect_items = ar_data.get('suspect_items', 0)
         inauthentic_items = ar_data.get('inauthentic_items', 0)
-        
-        return f"""## Authenticity Ratio Analysis
 
-### Content Classification Breakdown
+        summary = f"""## Authenticity Ratio Analysis\n\n**Total:** {total_items:,} | **Authentic:** {authentic_items} | **Suspect:** {suspect_items} | **Inauthentic:** {inauthentic_items}\n\n**Core AR:** {ar_data.get('authenticity_ratio_pct', 0.0):.1f}% | **Extended AR:** {ar_data.get('extended_ar_pct', 0.0):.1f}%\n\n{dimension_text}"""
 
-| Classification | Count | Percentage |
-|----------------|-------|------------|
-| **Total Content** | {total_items:,} | 100.0% |
-| **Authentic** | {authentic_items:,} | {authentic_items/total_items*100:.1f}% |
-| **Suspect** | {suspect_items:,} | {suspect_items/total_items*100:.1f}% |
-| **Inauthentic** | {inauthentic_items:,} | {inauthentic_items/total_items*100:.1f}% |
-
-### Authenticity Ratio Calculations
-
-| Metric | Formula | Result |
-|--------|---------|--------|
-| **Core AR** | (Authentic ÷ Total) × 100 | **{ar_data.get('authenticity_ratio_pct', 0.0):.1f}%** |
-| **Extended AR** | (Authentic + 0.5×Suspect) ÷ Total × 100 | **{ar_data.get('extended_ar_pct', 0.0):.1f}%** |
-
-### Interpretation Guidelines
-
-- **Core AR ≥ 80%**: Excellent authenticity
-- **Core AR 60-79%**: Good authenticity with room for improvement
-- **Core AR 40-59%**: Moderate authenticity requiring attention
-- **Core AR < 40%**: Poor authenticity requiring immediate action
-
-### Current Status: {"🟢 Excellent" if ar_data.get('authenticity_ratio_pct', 0) >= 80 else "🟡 Good" if ar_data.get('authenticity_ratio_pct', 0) >= 60 else "🟠 Moderate" if ar_data.get('authenticity_ratio_pct', 0) >= 40 else "🔴 Poor"}"""
+        return summary
     
     def _create_dimension_breakdown(self, report_data: Dict[str, Any]) -> str:
         """Create dimension breakdown section"""
@@ -377,3 +416,116 @@ This report analyzes content using the 5D Trust Dimensions framework:
 ---
 
 *This report is confidential and proprietary. For questions or additional analysis, contact the Authenticity Ratio team.*"""
+
+    # --- Visual helpers -------------------------------------------------
+    def _ensure_output_dir(self, report_data: Dict[str, Any]) -> str:
+        out_dir = report_data.get('output_dir', './output')
+        os.makedirs(out_dir, exist_ok=True)
+        return out_dir
+
+    def _create_dimension_heatmap(self, report_data: Dict[str, Any]) -> str:
+        """Create a simple heatmap of the five-dimension averages. Returns image path or empty string."""
+        dims = report_data.get('dimension_breakdown', {})
+        if not dims:
+            return ""
+
+        labels = ['Provenance', 'Verification', 'Transparency', 'Coherence', 'Resonance']
+        values = [dims.get(k.lower(), {}).get('average', 0.0) for k in labels]
+        if sum(values) == 0:
+            return ""
+
+        out_dir = self._ensure_output_dir(report_data)
+        img_path = os.path.join(out_dir, f"heatmap_{report_data.get('run_id','run')}.png")
+
+        # heatmap as a 1x5 colored bar
+        fig, ax = plt.subplots(figsize=(6, 1.5))
+        cmap = plt.get_cmap('RdYlGn')
+        norm = plt.Normalize(0, 1)
+        ax.imshow([values], aspect='auto', cmap=cmap, norm=norm)
+        ax.set_yticks([])
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, rotation=45, ha='right')
+        ax.set_title('5D Trust Dimensions (average scores)')
+        plt.tight_layout()
+        fig.savefig(img_path, dpi=150)
+        plt.close(fig)
+        return img_path
+
+    def _create_trendline(self, report_data: Dict[str, Any]) -> str:
+        """Attempt to build a simple AR trendline by scanning previous markdown reports in output dir."""
+        out_dir = self._ensure_output_dir(report_data)
+        # Scan output dir for existing markdown reports with run IDs and AR lines
+        pattern = re.compile(r"Core Authenticity Ratio:\*\* (\d+\.?\d*)%")
+        runs = []  # list of (timestamp, ar_pct)
+        for fname in os.listdir(out_dir):
+            if not fname.endswith('.md'):
+                continue
+            path = os.path.join(out_dir, fname)
+            try:
+                with open(path, 'r', encoding='utf-8') as fh:
+                    content = fh.read()
+                m = pattern.search(content)
+                if m:
+                    ar = float(m.group(1))
+                    # try to extract timestamp from filename if included
+                    ts_match = re.search(r'run_(\d{8}_\d{6}_[0-9a-f]+)', fname)
+                    ts = ts_match.group(1) if ts_match else fname
+                    runs.append((ts, ar))
+            except Exception:
+                continue
+
+        # include current run at the end
+        current_ar = report_data.get('authenticity_ratio', {}).get('authenticity_ratio_pct', None)
+        if current_ar is None:
+            return ""
+
+        # sort by filename (best-effort chronological ordering)
+        if runs:
+            runs_sorted = sorted(runs, key=lambda x: x[0])
+            xs = list(range(len(runs_sorted)))
+            ys = [r[1] for r in runs_sorted]
+            xs.append(len(xs))
+            ys.append(current_ar)
+        else:
+            # no historical runs
+            return ""
+
+        img_path = os.path.join(out_dir, f"ar_trend_{report_data.get('run_id','run')}.png")
+        fig, ax = plt.subplots(figsize=(6, 2.5))
+        ax.plot(xs, ys, marker='o')
+        ax.set_xlabel('Run (historic -> latest)')
+        ax.set_ylabel('Core AR (%)')
+        ax.set_title('Authenticity Ratio Trend')
+        ax.grid(True, linestyle='--', alpha=0.4)
+        plt.tight_layout()
+        fig.savefig(img_path, dpi=150)
+        plt.close(fig)
+        return img_path
+
+    def _create_channel_breakdown(self, report_data: Dict[str, Any]) -> str:
+        """Create channel breakdown bar chart if classification includes source channel info."""
+        class_analysis = report_data.get('classification_analysis', {})
+        if not class_analysis:
+            return ""
+        # look for per-channel distribution
+        per_channel = class_analysis.get('by_channel', {})
+        if not per_channel:
+            return ""
+
+        labels = list(per_channel.keys())
+        counts = [per_channel[k] for k in labels]
+        if sum(counts) == 0:
+            return ""
+
+        out_dir = self._ensure_output_dir(report_data)
+        img_path = os.path.join(out_dir, f"channel_breakdown_{report_data.get('run_id','run')}.png")
+
+        fig, ax = plt.subplots(figsize=(6, 3))
+        ax.bar(labels, counts, color='tab:blue')
+        ax.set_ylabel('Count')
+        ax.set_title('Per-Channel Classification Counts')
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        fig.savefig(img_path, dpi=150)
+        plt.close(fig)
+        return img_path

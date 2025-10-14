@@ -5,6 +5,10 @@ Main configuration settings for AR tool
 import os
 from typing import Dict, List, Any
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+# Load local .env file if present so os.getenv reads local secrets during dev
+load_dotenv()
 
 @dataclass
 class ScoringWeights:
@@ -71,7 +75,7 @@ BRAND_TEMPLATES = {
     'default': {
         'keywords': [],
         'exclude_keywords': [],
-        'sources': ['reddit', 'amazon', 'youtube'],
+        'sources': ['reddit', 'amazon', 'youtube', 'yelp'],
         'custom_scoring_weights': None,
     }
 }
