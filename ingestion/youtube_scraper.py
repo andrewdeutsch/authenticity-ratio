@@ -151,7 +151,7 @@ class YouTubeScraper:
         return comments
 
     def convert_videos_to_normalized(self, videos: List[YouTubeVideo], brand_id: str, run_id: str,
-                                     include_comments: bool = False, comments_per_video: int = 20) -> List[NormalizedContent]:
+                                     include_comments: bool | None = None, comments_per_video: int = 20) -> List[NormalizedContent]:
         """Convert YouTube videos (and optional comments) into NormalizedContent objects"""
         normalized: List[NormalizedContent] = []
 
@@ -180,6 +180,11 @@ class YouTubeScraper:
                 run_id=run_id,
                 meta={**meta, 'content_type': 'video'}
             ))
+
+            # Respect global setting if not explicitly provided
+            from config.settings import SETTINGS as _SETTINGS
+            if include_comments is None:
+                include_comments = bool(_SETTINGS.get('include_comments_in_analysis', False))
 
             if include_comments and vid.comment_count and int(vid.comment_count) > 0:
                 comments = self.fetch_comments(vid.video_id, max_comments=comments_per_video)

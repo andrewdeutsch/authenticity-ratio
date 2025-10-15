@@ -206,7 +206,7 @@ class RedditCrawler:
                 helpful_count=None,  # Not applicable for Reddit
                 event_ts=event_ts,
                 run_id=run_id,
-                meta=meta
+                meta={**meta, 'content_type': ('text' if post.selftext else ('link' if post.url else 'title'))}
             ))
         
         return normalized_content

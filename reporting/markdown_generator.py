@@ -130,6 +130,11 @@ class MarkdownReportGenerator:
         if channel_path:
             visuals_md.append(f"![Channel Breakdown]({channel_path})")
 
+        # Content-type breakdown visualization
+        ctype_path = self._create_content_type_breakdown(report_data)
+        if ctype_path:
+            visuals_md.append(f"![Content Type Breakdown]({ctype_path})")
+
         visuals_block = "\n\n".join(visuals_md)
 
         return f"""## Summary
@@ -529,3 +534,40 @@ This report analyzes content using the 5D Trust Dimensions framework:
         fig.savefig(img_path, dpi=150)
         plt.close(fig)
         return img_path
+
+    def _create_content_type_breakdown(self, report_data: Dict[str, Any]) -> str:
+        """Create pie and bar charts for content-type percentage breakdown."""
+        ctype = report_data.get('content_type_breakdown_pct', {})
+        if not ctype:
+            return ""
+
+        out_dir = self._ensure_output_dir(report_data)
+        pie_path = os.path.join(out_dir, f"content_type_pie_{report_data.get('run_id','run')}.png")
+        bar_path = os.path.join(out_dir, f"content_type_bar_{report_data.get('run_id','run')}.png")
+
+        labels = list(ctype.keys())
+        values = [ctype[k] for k in labels]
+        if sum(values) == 0:
+            return ""
+
+        # Pie chart
+        fig1, ax1 = plt.subplots(figsize=(5, 3))
+        ax1.pie(values, labels=labels, autopct='%1.1f%%', startangle=140)
+        ax1.axis('equal')
+        ax1.set_title('Content Type Distribution')
+        plt.tight_layout()
+        fig1.savefig(pie_path, dpi=150)
+        plt.close(fig1)
+
+        # Bar chart
+        fig2, ax2 = plt.subplots(figsize=(6, 3))
+        ax2.bar(labels, values, color='tab:green')
+        ax2.set_ylabel('Percentage')
+        ax2.set_title('Content Type Percentage')
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        fig2.savefig(bar_path, dpi=150)
+        plt.close(fig2)
+
+        # Return the pie path (used in the executive visuals); the bar is saved alongside
+        return pie_path

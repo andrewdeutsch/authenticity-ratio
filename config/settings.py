@@ -73,6 +73,8 @@ SETTINGS = {
     'triage_promote_threshold': 0.6,
     # When true, items demoted by triage are excluded from S3 uploads and reports
     'exclude_demoted_from_upload': False,
+    # Global control: whether to include parsed comments in the analysis
+    'include_comments_in_analysis': False,
 }
 
 # Brand configuration templates
