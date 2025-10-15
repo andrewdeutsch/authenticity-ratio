@@ -8,8 +8,18 @@ LLM-based `ContentScorer`.
 """
 from typing import List, Dict, Any
 import logging
+import os
+
+from config.settings import SETTINGS
 
 logger = logging.getLogger(__name__)
+
+
+def _get_threshold(default: float = 0.6) -> float:
+    try:
+        return float(SETTINGS.get('triage_promote_threshold', default))
+    except Exception:
+        return default
 
 
 def triage_score_item(content, brand_keywords: List[str]) -> float:
@@ -41,8 +51,14 @@ def triage_score_item(content, brand_keywords: List[str]) -> float:
     return final
 
 
-def triage_filter(content_list: List, brand_keywords: List[str], promote_threshold: float = 0.6):
-    """Return a tuple (promoted, demoted) where promoted items have triage score >= threshold."""
+def triage_filter(content_list: List, brand_keywords: List[str], promote_threshold: float | None = None):
+    """Return a tuple (promoted, demoted) where promoted items have triage score >= threshold.
+
+    If promote_threshold is None, the value will be read from configuration.
+    """
+    if promote_threshold is None:
+        promote_threshold = _get_threshold()
+
     promoted = []
     demoted = []
     for c in content_list:
