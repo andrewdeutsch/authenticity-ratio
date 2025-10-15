@@ -151,7 +151,7 @@ class YouTubeScraper:
         return comments
 
     def convert_videos_to_normalized(self, videos: List[YouTubeVideo], brand_id: str, run_id: str,
-                                     include_comments: bool = True, comments_per_video: int = 20) -> List[NormalizedContent]:
+                                     include_comments: bool = False, comments_per_video: int = 20) -> List[NormalizedContent]:
         """Convert YouTube videos (and optional comments) into NormalizedContent objects"""
         normalized: List[NormalizedContent] = []
 
@@ -165,6 +165,7 @@ class YouTubeScraper:
                 'comment_count': str(vid.comment_count) if vid.comment_count is not None else ''
             }
 
+            # Mark this item as a video-type content for downstream reporting
             normalized.append(NormalizedContent(
                 content_id=content_id,
                 src='youtube',
@@ -177,7 +178,7 @@ class YouTubeScraper:
                 helpful_count=None,
                 event_ts=event_ts,
                 run_id=run_id,
-                meta=meta
+                meta={**meta, 'content_type': 'video'}
             ))
 
             if include_comments and vid.comment_count and int(vid.comment_count) > 0:
@@ -203,7 +204,7 @@ class YouTubeScraper:
                         helpful_count=None,
                         event_ts=comment_ts,
                         run_id=run_id,
-                        meta=meta_comment
+                        meta={**meta_comment, 'content_type': 'comment'}
                     ))
 
         return normalized

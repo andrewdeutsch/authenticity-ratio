@@ -302,6 +302,32 @@ class ScoringPipeline:
             "sources": brand_config.get('sources') if brand_config.get('sources') else sorted({s.src for s in scores_list}),
             "rubric_version": scores_list[0].rubric_version if scores_list else "unknown"
         }
+
+        # Compute a content-type breakdown (percentage) using meta JSON where available
+        content_type_counts = {}
+        total = 0
+        for s in scores_list:
+            total += 1
+            try:
+                # meta might be a JSON string or dict depending on upstream. Try to parse
+                meta = s.meta
+                if isinstance(meta, str):
+                    import json as _json
+                    meta_obj = _json.loads(meta) if meta else {}
+                elif isinstance(meta, dict):
+                    meta_obj = meta
+                else:
+                    meta_obj = {}
+
+                ctype = meta_obj.get('content_type') or getattr(s, 'content_type', None) or 'unknown'
+            except Exception:
+                ctype = 'unknown'
+
+            content_type_counts[ctype] = content_type_counts.get(ctype, 0) + 1
+
+        # Convert to percentage breakdown
+        content_type_pct = {k: (v / total * 100.0) for k, v in content_type_counts.items()} if total > 0 else {}
+        report['content_type_breakdown_pct'] = content_type_pct
         
         return report
     

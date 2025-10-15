@@ -18,6 +18,7 @@ from utils.helpers import generate_run_id, validate_config
 from ingestion.reddit_crawler import RedditCrawler
 from ingestion.amazon_scraper import AmazonScraper
 from ingestion.youtube_scraper import YouTubeScraper
+from ingestion.brave_search import search_brave, fetch_page
 from ingestion.normalizer import ContentNormalizer
 from scoring.pipeline import ScoringPipeline
 from reporting.pdf_generator import PDFReportGenerator
@@ -42,6 +43,7 @@ def main():
     parser.add_argument('--log-level', default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'])
     parser.add_argument('--dry-run', action='store_true', help='Run without making API calls or uploading data')
     parser.add_argument('--max-content', type=int, default=1000, help='Maximum content items to process')
+    parser.add_argument('--brave-pages', type=int, default=10, help='Number of Brave search results/pages to fetch (default: 10)')
     
     args = parser.parse_args()
     
@@ -178,6 +180,38 @@ def main():
                 logger.info(f"Retrieved {len(youtube_content)} YouTube content items")
             else:
                 logger.info("Dry run: Skipping YouTube ingestion")
+
+        if 'brave' in args.sources:
+            logger.info("Ingesting Brave search results...")
+            if not args.dry_run:
+                query = ' '.join(args.keywords)
+                # Respect the user-provided brave-pages argument (default 10)
+                results = search_brave(query, size=min(args.brave_pages, args.max_content))
+                brave_items = []
+                for i, r in enumerate(results):
+                    page = fetch_page(r.get('url'))
+                    # Build a lightweight NormalizedContent-like dict/object
+                    from data.models import NormalizedContent
+                    content_id = f"brave_{i}_{abs(hash(r.get('url') or ''))}"
+                    nc = NormalizedContent(
+                        content_id=content_id,
+                        src='brave',
+                        platform_id=r.get('url') or '',
+                        author='web',
+                        title=page.get('title', '') or r.get('title', ''),
+                        body=page.get('body', '') or r.get('snippet', ''),
+                        run_id=run_id,
+                        event_ts=datetime.now().isoformat(),
+                        meta={
+                            'source_url': r.get('url') or '',
+                            'content_type': 'web'
+                        }
+                    )
+                    brave_items.append(nc)
+                all_content.extend(brave_items)
+                logger.info(f"Retrieved {len(brave_items)} Brave content items")
+            else:
+                logger.info("Dry run: Skipping Brave ingestion")
         
         if not all_content:
             logger.warning("No content retrieved from any source")
@@ -240,3 +274,78 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def run_pipeline_for_contents(urls: list, output_dir: str = './output', brand_id: str = 'brand'):
+    """Run the pipeline for a set of URLs (used by the Streamlit webapp).
+
+    This helper is intentionally lightweight: it will fetch each URL using
+    the brave_search.fetch_page helper, convert to NormalizedContent objects,
+    call the normalizer and scoring pipeline, and write reports to output_dir.
+    """
+    # Local imports to avoid circular imports when script is used as module
+    from ingestion import brave_search
+    from data.models import NormalizedContent
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Simple run_id generation
+    run_id = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    # Fetch pages
+    fetched = []
+    for i, u in enumerate(urls):
+        page = brave_search.fetch_page(u)
+        content_id = f"web_{i}_{abs(hash(u))}"
+        nc = NormalizedContent(
+            content_id=content_id,
+            src='brave',
+            platform_id=u,
+            author='web',
+            title=page.get('title', '') or '',
+            body=page.get('body', '') or '',
+            run_id=run_id,
+            event_ts=datetime.now().isoformat()
+        )
+        fetched.append(nc)
+
+    if not fetched:
+        raise RuntimeError('No content fetched')
+
+    # Normalize
+    normalizer = ContentNormalizer()
+    normalized = normalizer.normalize_content(fetched)
+
+    # Score
+    scoring_pipeline = ScoringPipeline()
+    pipeline_run = scoring_pipeline.run_scoring_pipeline(normalized, {
+        'brand_id': brand_id,
+        'brand_name': brand_id,
+        'keywords': [brand_id],
+        'sources': ['brave']
+    })
+
+    # Generate reports
+    pdf_generator = PDFReportGenerator()
+    markdown_generator = MarkdownReportGenerator()
+
+    pdf_path = os.path.join(output_dir, f'ar_report_{brand_id}_{run_id}.pdf')
+    md_path = os.path.join(output_dir, f'ar_report_{brand_id}_{run_id}.md')
+
+    scores_list = pipeline_run.classified_scores or []
+    scoring_report = scoring_pipeline.generate_scoring_report(scores_list, {
+        'brand_id': brand_id,
+        'brand_name': brand_id,
+        'keywords': [brand_id],
+        'sources': ['brave']
+    })
+
+    pdf_generator.generate_report(scoring_report, pdf_path)
+    markdown_generator.generate_report(scoring_report, md_path)
+
+    return {
+        'run_id': run_id,
+        'pdf': pdf_path,
+        'md': md_path,
+        'items': len(normalized)
+    }
