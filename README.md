@@ -42,3 +42,47 @@ AR/
 
 ## Database
 Uses AWS Athena with S3 storage for normalized content and scores.
+
+## Brave Search integration
+
+This project includes a Brave Search ingestion module and a small Streamlit web UI for quick runs.
+
+Brave API configuration
+
+- `BRAVE_API_KEY`: Your Brave subscription token or API key. If set, the pipeline will prefer the API.
+- `BRAVE_API_ENDPOINT`: Optional API endpoint (defaults to `https://api.search.brave.com/res/v1/web/search`).
+- `BRAVE_API_AUTH`: Auth style for API calls. Supported values:
+	- `subscription-token` (default) — sends header `X-Subscription-Token: <key>`
+	- `x-api-key` — sends header `x-api-key: <key>`
+	- `bearer` — sends `Authorization: Bearer <key>`
+	- `query-param` — appends `apikey=<key>` to the query string
+- `BRAVE_REQUEST_INTERVAL`: Minimum seconds to wait between outbound Brave requests (default `1.0`)
+- `BRAVE_ALLOW_HTML_FALLBACK`: If set to `1` the client will fall back to HTML scraping when the API returns no results (default: `0` — disabled when API key present)
+- `BRAVE_USE_PLAYWRIGHT`: If set to `1`, the client will attempt a Playwright-rendered fetch when HTML scraping is needed (install Playwright separately)
+
+Quick examples
+
+- Using the API (recommended):
+
+```bash
+export BRAVE_API_KEY="<your_key_here>"
+export BRAVE_API_AUTH="subscription-token"
+export BRAVE_REQUEST_INTERVAL=1.0
+python scripts/debug_brave.py --query "nike" --size 4
+```
+
+- Enable Playwright-based rendering (heavy):
+
+```bash
+pip install playwright
+playwright install
+export BRAVE_USE_PLAYWRIGHT=1
+export BRAVE_ALLOW_HTML_FALLBACK=1
+python scripts/debug_brave.py --query "nike" --size 4
+```
+
+Notes
+
+- When `BRAVE_API_KEY` is present the client prefers API responses and will not fall back to HTML scraping unless `BRAVE_ALLOW_HTML_FALLBACK=1`.
+- Rate limiting is enforced by `BRAVE_REQUEST_INTERVAL` to respect one request per second default.
+
