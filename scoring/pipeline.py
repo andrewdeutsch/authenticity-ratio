@@ -11,6 +11,7 @@ import logging
 from data.models import NormalizedContent, ContentScores, PipelineRun, AuthenticityRatio
 from data.athena_client import AthenaClient
 from .scorer import ContentScorer
+from .triage import triage_filter
 from .classifier import ContentClassifier
 
 logger = logging.getLogger(__name__)
@@ -50,10 +51,40 @@ class ScoringPipeline:
         logger.info(f"Processing {len(content_list)} content items")
         
         try:
-            # Step 1: Score content on 5D dimensions
-            logger.info("Step 1: Scoring content on 5D dimensions")
-            scores_list = self.scorer.batch_score_content(content_list, brand_config)
-            pipeline_run.items_processed += len(scores_list)
+            # Step 1: Triage (cheap) to reduce expensive LLM calls
+            logger.info("Step 1: Running triage filter to reduce expensive scoring")
+            promoted, demoted = triage_filter(content_list, brand_config.get('keywords', []), promote_threshold=0.6)
+
+            # Step 2: Score promoted items with the high-quality LLM scorer
+            logger.info("Step 2: Scoring promoted content on 5D dimensions")
+            high_quality_scores = self.scorer.batch_score_content(promoted, brand_config) if promoted else []
+            pipeline_run.items_processed += len(high_quality_scores)
+
+            # For demoted items, produce neutral/placeholder ContentScores entries
+            # so they are still present in the final upload and reports.
+            neutral_scores = []
+            for c in demoted:
+                # Create a neutral ContentScores record based on the ContentScorer's defaults
+                neutral = ContentScores(
+                    content_id=c.content_id,
+                    brand=brand_config.get('brand_id', 'unknown'),
+                    src=c.src,
+                    event_ts=c.event_ts,
+                    score_provenance=0.5,
+                    score_resonance=0.5,
+                    score_coherence=0.5,
+                    score_transparency=0.5,
+                    score_verification=0.5,
+                    class_label='pending',
+                    is_authentic=False,
+                    rubric_version=self.scorer.rubric_version,
+                    run_id=run_id,
+                    meta='{"triage": "demoted"}'
+                )
+                neutral_scores.append(neutral)
+
+            # Combine high-quality scores with neutral demoted scores for classification/upload
+            scores_list = high_quality_scores + neutral_scores
             
             # Step 2: Classify content (Authentic/Suspect/Inauthentic)
             logger.info("Step 2: Classifying content")

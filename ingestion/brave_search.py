@@ -58,6 +58,8 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
         # Configure via BRAVE_API_AUTH: 'x-api-key' (default), 'bearer', 'both', 'query-param', or 'subscription-token'
         api_auth = os.getenv('BRAVE_API_AUTH', 'subscription-token')
         params = {"q": query, "count": size}
+        # Prepare a results container so we can return it even if the API path fails
+        results = []
         try:
             hdrs = headers.copy()
             if api_auth == 'bearer':
@@ -83,7 +85,8 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
             if resp.status_code == 200:
                 try:
                     body = resp.json()
-                except json.JSONDecodeError:
+                except Exception:
+                    # resp.json() may raise AttributeError if the fake response doesn't implement it
                     logger.warning('Brave API returned non-JSON response; falling back to HTML parsing')
                     body = None
 
@@ -126,7 +129,8 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
                 logger.warning('Brave API request failed: %s %s', resp.status_code, body_text)
         except Exception as e:
             logger.warning('Brave API request error: %s; falling back to HTML scraping', e)
-        # If API key exists, do not fallback to HTML scraping unless explicitly enabled.
+        # If API key exists, do not fallback to HTML scraping unless explicitly enabled
+        # This enforces an API-only flow when a subscription key is configured.
         allow_html = os.getenv('BRAVE_ALLOW_HTML_FALLBACK', '0') == '1'
         if not allow_html:
             # Return whatever results we have (possibly empty) and avoid HTML scraping
