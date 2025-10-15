@@ -86,3 +86,39 @@ Notes
 - When `BRAVE_API_KEY` is present the client prefers API responses and will not fall back to HTML scraping unless `BRAVE_ALLOW_HTML_FALLBACK=1`.
 - Rate limiting is enforced by `BRAVE_REQUEST_INTERVAL` to respect one request per second default.
 
+
+## YouTube Data API integration
+
+This project also includes a YouTube ingestion module that talks to the YouTube Data API v3 for searching videos and fetching comments. The YouTube integration is API-key based and uses the Google API client under the hood.
+
+YouTube configuration
+
+- `YOUTUBE_API_KEY`: Your YouTube Data API v3 developer key (required for video search and comment fetches). If not present, the `YouTubeScraper` will raise a configuration error.
+- `youtube_rate_limit`: Configured in `config/settings.py` (defaults to `60` requests per minute); the scraper will respect this rate by inserting sleeps between calls.
+- `include_comments`: When converting videos to normalized content you can choose to include top-level comments (configurable by the scraper helper functions).
+
+Quick examples
+
+- Basic search with the project's debug runner (recommended for dev):
+
+```bash
+export YOUTUBE_API_KEY="<your_key_here>"
+python -c "from ingestion.youtube_scraper import YouTubeScraper; print(YouTubeScraper().search_videos('nike', max_results=3))"
+```
+
+- Convert found videos (and comments) into normalized content (used by pipeline):
+
+```python
+from ingestion.youtube_scraper import YouTubeScraper
+yt = YouTubeScraper()
+videos = yt.search_videos('nike', max_results=5)
+# Convert videos to NormalizedContent objects (used by the scoring pipeline)
+normalized = yt.convert_videos_to_normalized(videos, brand_id='nike', run_id='localtest', include_comments=True)
+```
+
+Notes
+
+- The `google-api-python-client` package is required (already referenced in the project). Ensure your virtualenv has it installed.
+- Comment fetching is rate-limited by the same `youtube_rate_limit` setting — fetching many comments across many videos may be slow or hit quota limits; consider sampling or limiting comments per video for large runs.
+
+
