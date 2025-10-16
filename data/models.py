@@ -12,6 +12,7 @@ class ContentSource(Enum):
     REDDIT = "reddit"
     AMAZON = "amazon"
     YOUTUBE = "youtube"
+    BRAVE = "brave"
 
 class ContentClass(Enum):
     AUTHENTIC = "authentic"

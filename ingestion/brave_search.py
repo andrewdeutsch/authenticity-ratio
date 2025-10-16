@@ -14,10 +14,12 @@ from urllib.parse import urljoin
 import os
 import json
 import time
+import threading
 
 # Rate limiting: minimum interval (seconds) between outbound Brave requests
-_BRAVE_REQUEST_INTERVAL = float(os.getenv('BRAVE_REQUEST_INTERVAL', '1.0'))
+_BRAVE_REQUEST_INTERVAL = float(os.getenv('BRAVE_REQUEST_INTERVAL', '1.2'))
 _LAST_BRAVE_REQUEST_TS = 0.0
+_BRAVE_RATE_LOCK = threading.Lock()
 
 
 def _wait_for_rate_limit():
@@ -25,12 +27,14 @@ def _wait_for_rate_limit():
     global _LAST_BRAVE_REQUEST_TS
     if _BRAVE_REQUEST_INTERVAL <= 0:
         return
-    now = time.monotonic()
-    elapsed = now - _LAST_BRAVE_REQUEST_TS
-    if elapsed < _BRAVE_REQUEST_INTERVAL:
-        to_sleep = _BRAVE_REQUEST_INTERVAL - elapsed
-        time.sleep(to_sleep)
-    _LAST_BRAVE_REQUEST_TS = time.monotonic()
+    with _BRAVE_RATE_LOCK:
+        now = time.monotonic()
+        elapsed = now - _LAST_BRAVE_REQUEST_TS
+        if elapsed < _BRAVE_REQUEST_INTERVAL:
+            to_sleep = _BRAVE_REQUEST_INTERVAL - elapsed
+            time.sleep(to_sleep)
+        # Update the timestamp to now after sleeping
+        _LAST_BRAVE_REQUEST_TS = time.monotonic()
 
 # Optional Playwright import (used only if the environment opts in)
 try:

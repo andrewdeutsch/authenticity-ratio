@@ -15,15 +15,29 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.logging_config import setup_logging
 from utils.helpers import generate_run_id, validate_config
-from ingestion.reddit_crawler import RedditCrawler
-from ingestion.amazon_scraper import AmazonScraper
-from ingestion.youtube_scraper import YouTubeScraper
+# Optional ingestion modules - import lazily and defensively to avoid hard
+# dependency failures when running partial tool paths (e.g., only Brave + YouTube).
+try:
+    from ingestion.reddit_crawler import RedditCrawler
+except Exception:
+    RedditCrawler = None
+
+try:
+    from ingestion.amazon_scraper import AmazonScraper
+except Exception:
+    AmazonScraper = None
+
+try:
+    from ingestion.youtube_scraper import YouTubeScraper
+except Exception:
+    YouTubeScraper = None
+
 from ingestion.brave_search import search_brave, fetch_page
 from ingestion.normalizer import ContentNormalizer
 from scoring.pipeline import ScoringPipeline
 from reporting.pdf_generator import PDFReportGenerator
 from reporting.markdown_generator import MarkdownReportGenerator
-from data.athena_client import AthenaClient
+# AthenaClient requires boto3 and other AWS deps; import lazily in main()
 from config.settings import APIConfig
 import sys
 
@@ -44,6 +58,7 @@ def main():
     parser.add_argument('--dry-run', action='store_true', help='Run without making API calls or uploading data')
     parser.add_argument('--max-content', type=int, default=1000, help='Maximum content items to process')
     parser.add_argument('--brave-pages', type=int, default=10, help='Number of Brave search results/pages to fetch (default: 10)')
+    parser.add_argument('--include-comments', action='store_true', help='Include comments in analysis (overrides settings include_comments_in_analysis)')
     
     args = parser.parse_args()
     
@@ -106,7 +121,7 @@ def main():
             'sources': args.sources
         }
         
-        # Initialize components
+    # Initialize components
         logger.info("Initializing pipeline components...")
         # Obtain Reddit token early (if reddit is in sources and not a dry run)
         if 'reddit' in args.sources and not args.dry_run:
@@ -119,15 +134,29 @@ def main():
                 logger.error("Reddit authentication failed; aborting pipeline.")
                 sys.exit(3)
         if not args.dry_run:
-            athena_client = AthenaClient()
-            reddit_crawler = RedditCrawler()
-            amazon_scraper = AmazonScraper()
-            youtube_scraper = YouTubeScraper()
+            try:
+                from data.athena_client import AthenaClient
+                athena_client = AthenaClient()
+            except Exception as e:
+                logger.warning(f"AthenaClient not available (will skip uploads): {e}")
+                athena_client = None
         else:
             athena_client = None
-            reddit_crawler = None
-            amazon_scraper = None
-            youtube_scraper = None
+
+        # Initialize source-specific scrapers lazily below when we actually
+        # attempt to ingest from a particular source. This avoids import-time
+        # dependency issues for optional SDKs (e.g., praw for Reddit).
+        reddit_crawler = None
+        amazon_scraper = None
+        youtube_scraper = None
+        # Apply per-run override for including comments if supplied
+        if args.include_comments:
+            try:
+                from config.settings import SETTINGS
+                SETTINGS['include_comments_in_analysis'] = True
+                logger.info('Overriding settings: include_comments_in_analysis = True for this run')
+            except Exception:
+                logger.warning('Could not override include_comments_in_analysis setting; proceeding with configured value')
         
         normalizer = ContentNormalizer()
         scoring_pipeline = ScoringPipeline()
@@ -140,46 +169,67 @@ def main():
         
         if 'reddit' in args.sources:
             logger.info("Ingesting Reddit data...")
-            if not args.dry_run:
-                reddit_posts = reddit_crawler.search_posts(
-                    keywords=args.keywords,
-                    limit=args.max_content // len(args.sources)
-                )
-                reddit_content = reddit_crawler.convert_to_normalized_content(
-                    reddit_posts, args.brand_id, run_id
-                )
-                all_content.extend(reddit_content)
-                logger.info(f"Retrieved {len(reddit_content)} Reddit content items")
-            else:
+            if args.dry_run:
                 logger.info("Dry run: Skipping Reddit ingestion")
+            else:
+                if RedditCrawler is None:
+                    logger.warning("Reddit ingestion unavailable: missing optional dependency (praw). Skipping Reddit.")
+                else:
+                    try:
+                        reddit_crawler = RedditCrawler()
+                        reddit_posts = reddit_crawler.search_posts(
+                            keywords=args.keywords,
+                            limit=args.max_content // len(args.sources)
+                        )
+                        reddit_content = reddit_crawler.convert_to_normalized_content(
+                            reddit_posts, args.brand_id, run_id
+                        )
+                        all_content.extend(reddit_content)
+                        logger.info(f"Retrieved {len(reddit_content)} Reddit content items")
+                    except Exception as e:
+                        logger.warning(f"Skipping Reddit ingestion due to error: {e}")
         
         if 'amazon' in args.sources:
             logger.info("Ingesting Amazon data...")
-            if not args.dry_run:
-                # mock_reviews_for_demo signature = (brand_keywords: List[str], num_reviews: int = 50)
-                amazon_reviews = amazon_scraper.mock_reviews_for_demo(
-                    args.keywords,
-                    num_reviews=args.max_content // len(args.sources)
-                )
-                amazon_content = amazon_scraper.convert_to_normalized_content(
-                    amazon_reviews, args.brand_id, run_id
-                )
-                all_content.extend(amazon_content)
-                logger.info(f"Retrieved {len(amazon_content)} Amazon content items")
-            else:
+            if args.dry_run:
                 logger.info("Dry run: Skipping Amazon ingestion")
+            else:
+                if AmazonScraper is None:
+                    logger.warning("Amazon ingestion unavailable: missing optional dependency. Skipping Amazon.")
+                else:
+                    try:
+                        amazon_scraper = AmazonScraper()
+                        # mock_reviews_for_demo signature = (brand_keywords: List[str], num_reviews: int = 50)
+                        amazon_reviews = amazon_scraper.mock_reviews_for_demo(
+                            args.keywords,
+                            num_reviews=args.max_content // len(args.sources)
+                        )
+                        amazon_content = amazon_scraper.convert_to_normalized_content(
+                            amazon_reviews, args.brand_id, run_id
+                        )
+                        all_content.extend(amazon_content)
+                        logger.info(f"Retrieved {len(amazon_content)} Amazon content items")
+                    except Exception as e:
+                        logger.warning(f"Skipping Amazon ingestion due to error: {e}")
 
         if 'youtube' in args.sources:
             logger.info("Ingesting YouTube data...")
-            if not args.dry_run:
-                # Build a search query from keywords
-                query = ' '.join(args.keywords)
-                videos = youtube_scraper.search_videos(query=query, max_results=args.max_content // len(args.sources))
-                youtube_content = youtube_scraper.convert_videos_to_normalized(videos, args.brand_id, run_id)
-                all_content.extend(youtube_content)
-                logger.info(f"Retrieved {len(youtube_content)} YouTube content items")
-            else:
+            if args.dry_run:
                 logger.info("Dry run: Skipping YouTube ingestion")
+            else:
+                if YouTubeScraper is None:
+                    logger.warning("YouTube ingestion unavailable: missing optional dependency (googleapiclient). Skipping YouTube.")
+                else:
+                    try:
+                        # Build a search query from keywords
+                        youtube_scraper = YouTubeScraper()
+                        query = ' '.join(args.keywords)
+                        videos = youtube_scraper.search_videos(query=query, max_results=args.max_content // len(args.sources))
+                        youtube_content = youtube_scraper.convert_videos_to_normalized(videos, args.brand_id, run_id)
+                        all_content.extend(youtube_content)
+                        logger.info(f"Retrieved {len(youtube_content)} YouTube content items")
+                    except Exception as e:
+                        logger.warning(f"Skipping YouTube ingestion due to error: {e}")
 
         if 'brave' in args.sources:
             logger.info("Ingesting Brave search results...")
@@ -276,7 +326,7 @@ if __name__ == "__main__":
     main()
 
 
-def run_pipeline_for_contents(urls: list, output_dir: str = './output', brand_id: str = 'brand'):
+def run_pipeline_for_contents(urls: list, output_dir: str = './output', brand_id: str = 'brand', sources: list | None = None, keywords: list | None = None, include_comments: bool | None = None, include_items_table: bool = False):
     """Run the pipeline for a set of URLs (used by the Streamlit webapp).
 
     This helper is intentionally lightweight: it will fetch each URL using
@@ -292,22 +342,56 @@ def run_pipeline_for_contents(urls: list, output_dir: str = './output', brand_id
     # Simple run_id generation
     run_id = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-    # Fetch pages
+    # Determine sources and keywords
+    if sources is None:
+        sources = ['brave']
+    if keywords is None:
+        keywords = [brand_id]
+
+    # Fetch pages (Brave) if requested
     fetched = []
-    for i, u in enumerate(urls):
-        page = brave_search.fetch_page(u)
-        content_id = f"web_{i}_{abs(hash(u))}"
-        nc = NormalizedContent(
-            content_id=content_id,
-            src='brave',
-            platform_id=u,
-            author='web',
-            title=page.get('title', '') or '',
-            body=page.get('body', '') or '',
-            run_id=run_id,
-            event_ts=datetime.now().isoformat()
-        )
-        fetched.append(nc)
+    if 'brave' in sources and urls:
+        for i, u in enumerate(urls):
+            page = brave_search.fetch_page(u)
+            content_id = f"web_{i}_{abs(hash(u))}"
+            nc = NormalizedContent(
+                content_id=content_id,
+                src='brave',
+                platform_id=u,
+                author='web',
+                title=page.get('title', '') or '',
+                body=page.get('body', '') or '',
+                run_id=run_id,
+                event_ts=datetime.now().isoformat(),
+                meta={'content_type': 'web', 'source_url': u}
+            )
+            fetched.append(nc)
+
+    # Ingest Reddit if requested
+    if 'reddit' in sources:
+        try:
+            reddit = RedditCrawler()
+            posts = reddit.search_posts(keywords=keywords, limit=10)
+            reddit_norm = reddit.convert_to_normalized_content(posts, brand_id, run_id)
+            fetched.extend(reddit_norm)
+        except Exception as e:
+            logger.warning(f"Skipping Reddit ingestion in programmatic run: {e}")
+
+    # Ingest YouTube if requested
+    if 'youtube' in sources:
+        try:
+            try:
+                yt = YouTubeScraper()
+            except Exception as e:
+                # Missing API key or config
+                raise
+            # Simple query from keywords
+            q = ' '.join(keywords)
+            videos = yt.search_videos(query=q, max_results=5)
+            youtube_norm = yt.convert_videos_to_normalized(videos, brand_id, run_id, include_comments=include_comments)
+            fetched.extend(youtube_norm)
+        except Exception as e:
+            logger.warning(f"Skipping YouTube ingestion in programmatic run: {e}")
 
     if not fetched:
         raise RuntimeError('No content fetched')
@@ -340,7 +424,7 @@ def run_pipeline_for_contents(urls: list, output_dir: str = './output', brand_id
         'sources': ['brave']
     })
 
-    pdf_generator.generate_report(scoring_report, pdf_path)
+    pdf_generator.generate_report(scoring_report, pdf_path, include_items_table=include_items_table)
     markdown_generator.generate_report(scoring_report, md_path)
 
     return {

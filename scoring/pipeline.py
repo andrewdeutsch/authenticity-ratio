@@ -9,7 +9,6 @@ from datetime import datetime
 import logging
 
 from data.models import NormalizedContent, ContentScores, PipelineRun, AuthenticityRatio
-from data.athena_client import AthenaClient
 from .scorer import ContentScorer
 from .triage import triage_filter
 from config.settings import SETTINGS
@@ -23,7 +22,9 @@ class ScoringPipeline:
     def __init__(self):
         self.scorer = ContentScorer()
         self.classifier = ContentClassifier()
-        self.athena_client = AthenaClient()
+        # Athena client is optional at runtime (may require boto3). Initialize
+        # lazily when upload is requested to allow local runs without AWS deps.
+        self.athena_client = None
     
     def run_scoring_pipeline(self, content_list: List[NormalizedContent], 
                            brand_config: Dict[str, Any]) -> PipelineRun:
@@ -143,10 +144,22 @@ class ScoringPipeline:
                 scores_by_source[source] = []
             scores_by_source[source].append(score)
         
-        # Upload each source separately
+        # Upload each source separately. Initialize AthenaClient lazily so
+        # environments without boto3 can still run the pipeline locally.
+        try:
+            if self.athena_client is None:
+                from data.athena_client import AthenaClient
+                self.athena_client = AthenaClient()
+        except Exception as e:
+            logger.warning(f"Athena/S3 upload skipped: could not initialize AthenaClient: {e}")
+            return
+
         for source, source_scores in scores_by_source.items():
             run_id = source_scores[0].run_id
-            self.athena_client.upload_content_scores(source_scores, brand_id, source, run_id)
+            try:
+                self.athena_client.upload_content_scores(source_scores, brand_id, source, run_id)
+            except Exception as e:
+                logger.warning(f"Failed to upload scores for source {source}: {e}")
     
     def _calculate_authenticity_ratio(self, scores_list: List[ContentScores], 
                                     brand_id: str, run_id: str) -> AuthenticityRatio:
@@ -164,14 +177,318 @@ class ScoringPipeline:
                 authenticity_ratio_pct=0.0
             )
 
-        # Count classifications
-        authentic_count = sum(1 for s in scores_list if s.class_label == "authentic")
-        suspect_count = sum(1 for s in scores_list if s.class_label == "suspect")
-        inauthentic_count = sum(1 for s in scores_list if s.class_label == "inauthentic")
+        # Load rubric (weights, thresholds, attributes, defaults)
+        from scoring.rubric import load_rubric
+        rubric = load_rubric()
+        weights = rubric.get('dimension_weights', {})
+        thresholds = rubric.get('thresholds', {'authentic': 75, 'suspect': 40})
+        attributes_cfg = rubric.get('attributes', [])
+        defaults = rubric.get('defaults', {})
+
+        # triage settings
+        max_llm_items = defaults.get('max_llm_items', 5)
+        triage_method = defaults.get('triage_method', 'top_uncertain')
+
+        def _parse_meta(s: ContentScores):
+            meta = {}
+            try:
+                if isinstance(s.meta, str):
+                    import json as _json
+                    meta = _json.loads(s.meta) if s.meta else {}
+                elif isinstance(s.meta, dict):
+                    meta = s.meta
+            except Exception:
+                meta = {}
+            return meta
+
+        authentic_count = 0
+        suspect_count = 0
+        inauthentic_count = 0
         total_count = len(scores_list)
 
-        # Calculate AR percentages
-        core_ar = (authentic_count / total_count * 100) if total_count > 0 else 0.0
+        per_item_breakdowns = []
+        for s in scores_list:
+            # Defensive defaults for missing scores
+            p = getattr(s, 'score_provenance', 0.0) or 0.0
+            r = getattr(s, 'score_resonance', 0.0) or 0.0
+            c = getattr(s, 'score_coherence', 0.0) or 0.0
+            t = getattr(s, 'score_transparency', 0.0) or 0.0
+            v = getattr(s, 'score_verification', 0.0) or 0.0
+
+            # Base weighted score (0-100). Use weights.get to be resilient.
+            base = (
+                p * weights.get('provenance', 0.0) +
+                r * weights.get('resonance', 0.0) +
+                c * weights.get('coherence', 0.0) +
+                t * weights.get('transparency', 0.0) +
+                v * weights.get('verification', 0.0)
+            ) * 100.0
+
+            # Metadata bonuses/penalties applied from attributes_cfg
+            meta = _parse_meta(s)
+            applied_rules = []
+
+            for attr in attributes_cfg:
+                if not attr.get('enabled', True):
+                    continue
+                aid = attr.get('id')
+                effect = attr.get('effect', 'bonus')
+                val = attr.get('value', 0) or 0
+                # condition support: e.g., {op: '>=', threshold: 0.8}
+                condition = attr.get('condition')
+                match_meta_keys = attr.get('match_meta', [])
+
+                triggered = False
+                reason = None
+
+                # If a numeric condition is present, attempt to evaluate against meta
+                if condition and match_meta_keys:
+                    # try to find a numeric field in meta matching any key
+                    for mk in match_meta_keys:
+                        if mk in meta:
+                            try:
+                                mval = float(meta.get(mk))
+                                op = condition.get('op')
+                                th = float(condition.get('threshold'))
+                                if op == '>=' and mval >= th:
+                                    triggered = True
+                                    reason = f"{mk} {mval} {op} {th}"
+                                    break
+                                if op == '<=' and mval <= th:
+                                    triggered = True
+                                    reason = f"{mk} {mval} {op} {th}"
+                                    break
+                                if op == '>' and mval > th:
+                                    triggered = True
+                                    reason = f"{mk} {mval} {op} {th}"
+                                    break
+                                if op == '<' and mval < th:
+                                    triggered = True
+                                    reason = f"{mk} {mval} {op} {th}"
+                                    break
+                            except Exception:
+                                continue
+                else:
+                    # Otherwise, trigger if any of match_meta_keys present and truthy in meta
+                    for mk in match_meta_keys:
+                        if mk in meta and meta.get(mk):
+                            triggered = True
+                            reason = f"meta.{mk} present"
+                            break
+
+                if triggered and val != 0:
+                    applied_rules.append({"id": aid, "effect": effect, "value": val, "reason": reason})
+                    if effect == 'bonus':
+                        base += float(val)
+                    elif effect == 'penalty':
+                        base -= float(abs(val))
+
+            # Clamp
+            item_score = max(0.0, min(100.0, base))
+
+            # Classification thresholds from config
+            auth_th = thresholds.get('authentic', 75.0)
+            susp_th = thresholds.get('suspect', 40.0)
+
+            label = 'inauthentic'
+            if item_score >= auth_th:
+                label = 'authentic'
+            elif item_score >= susp_th:
+                label = 'suspect'
+            else:
+                label = 'inauthentic'
+
+            # Persist classification back to the ContentScores object so
+            # subsequent logic and AR counting use the same final labels.
+            try:
+                s.class_label = label
+                s.is_authentic = True if label == 'authentic' else False
+            except Exception:
+                pass
+
+            per_item_breakdowns.append({
+                'content_id': s.content_id,
+                'base_score': base,
+                'applied_rules': applied_rules,
+                'final_score': item_score,
+                'label': label,
+            })
+
+        # Triage: select items for LLM review based on triage_method
+        try:
+            auth_th = thresholds.get('authentic', 75.0)
+            susp_th = thresholds.get('suspect', 40.0)
+        except Exception:
+            auth_th = 75.0
+            susp_th = 40.0
+
+        triage_candidates = [d for d in per_item_breakdowns if d['label'] == 'suspect']
+        selected_for_llm = []
+        if triage_method == 'top_uncertain' and triage_candidates:
+            mid = (auth_th + susp_th) / 2.0
+            triage_candidates.sort(key=lambda x: abs(x['final_score'] - mid))
+            selected_for_llm = triage_candidates[:max_llm_items]
+
+        # Log triage selection
+        if selected_for_llm:
+            ids = [x['content_id'] for x in selected_for_llm]
+            logger.info(f"Triage selected {len(ids)} items for LLM review (max_llm_items={max_llm_items}): {ids}")
+
+            # Call LLM for selected items and merge results back
+            try:
+                from scoring.llm import LLMClient
+                llm = LLMClient(model=defaults.get('llm_model'))
+                # prepare items
+                batch_items = []
+                for item in selected_for_llm:
+                    batch_items.append({
+                        'content_id': item['content_id'],
+                        'meta': {},
+                        'final_score': item['final_score']
+                    })
+
+                llm_results = llm.classify(batch_items, rubric_version=defaults.get('version', 'unknown'))
+
+                # Merge LLM labels back into scores_list (ContentScores)
+                id_to_score = {s.content_id: s for s in scores_list}
+                for cid, res in llm_results.items():
+                    s = id_to_score.get(cid)
+                    if not s:
+                        continue
+                    label = res.get('label') if isinstance(res, dict) else None
+                    conf = res.get('confidence') if isinstance(res, dict) else None
+                    if label:
+                        s.class_label = label
+                        s.is_authentic = True if label == 'authentic' else False
+                        # attach llm confidence to meta for traceability
+                        try:
+                            import json as _json
+                            meta = _json.loads(s.meta) if isinstance(s.meta, str) and s.meta else (s.meta or {})
+                        except Exception:
+                            meta = {}
+                        meta['_llm_classification'] = {'label': label, 'confidence': conf}
+                        try:
+                            s.meta = _json.dumps(meta)
+                        except Exception:
+                            s.meta = str(meta)
+                # Apply small per-dimension score adjustments based on LLM confidence
+                try:
+                    adj_scale = float(defaults.get('llm_score_adjustment_scale', 20.0))
+                except Exception:
+                    adj_scale = 20.0
+
+                # Build lookup for breakdowns
+                id_to_breakdown = {d['content_id']: d for d in per_item_breakdowns}
+                for cid, res in llm_results.items():
+                    bd = id_to_breakdown.get(cid)
+                    if not bd:
+                        continue
+                    if isinstance(res, dict):
+                        label = res.get('label')
+                        try:
+                            conf = float(res.get('confidence') or 0)
+                        except Exception:
+                            conf = 0.0
+                        # Only adjust when we have a confident auth/inauth result
+                        if label in ('authentic', 'inauthentic') and conf > 0:
+                            # delta in fractional dimension points (0-1)
+                            dim_delta = (conf - 0.5) * adj_scale / 100.0
+
+                            # Update the underlying ContentScores per-dimension
+                            s = id_to_score.get(cid)
+                            if not s:
+                                continue
+                            # capture original per-dimension scores
+                            orig_scores = {
+                                'provenance': getattr(s, 'score_provenance', 0.0) or 0.0,
+                                'resonance': getattr(s, 'score_resonance', 0.0) or 0.0,
+                                'coherence': getattr(s, 'score_coherence', 0.0) or 0.0,
+                                'transparency': getattr(s, 'score_transparency', 0.0) or 0.0,
+                                'verification': getattr(s, 'score_verification', 0.0) or 0.0,
+                            }
+
+                            # compute original weighted (0-100)
+                            orig_weighted = (
+                                orig_scores['provenance'] * weights.get('provenance', 0.0) +
+                                orig_scores['resonance'] * weights.get('resonance', 0.0) +
+                                orig_scores['coherence'] * weights.get('coherence', 0.0) +
+                                orig_scores['transparency'] * weights.get('transparency', 0.0) +
+                                orig_scores['verification'] * weights.get('verification', 0.0)
+                            ) * 100.0
+
+                            # apply delta sign
+                            sign = 1 if label == 'authentic' else -1
+                            new_scores = {}
+                            for dim, orig in orig_scores.items():
+                                ns = max(0.0, min(1.0, orig + sign * dim_delta))
+                                new_scores[dim] = ns
+                                setattr(s, f"score_{dim}", ns)
+
+                            # compute new weighted + preserve attribute additive total
+                            new_weighted = (
+                                new_scores['provenance'] * weights.get('provenance', 0.0) +
+                                new_scores['resonance'] * weights.get('resonance', 0.0) +
+                                new_scores['coherence'] * weights.get('coherence', 0.0) +
+                                new_scores['transparency'] * weights.get('transparency', 0.0) +
+                                new_scores['verification'] * weights.get('verification', 0.0)
+                            ) * 100.0
+
+                            # attribute additive total = bd.base_score - orig_weighted
+                            attribute_total = bd.get('base_score', 0.0) - orig_weighted
+                            new_final = max(0.0, min(100.0, new_weighted + attribute_total))
+                            bd['final_score'] = new_final
+
+                            # annotate meta with details
+                            try:
+                                import json as _json
+                                meta = _json.loads(s.meta) if isinstance(s.meta, str) and s.meta else (s.meta or {})
+                            except Exception:
+                                meta = {}
+                            meta['_llm_adjusted_scores'] = new_scores
+                            meta['_llm_adjusted_score_total'] = new_final
+                            meta['_llm_classification_confidence'] = conf
+                            try:
+                                s.meta = _json.dumps(meta)
+                            except Exception:
+                                s.meta = str(meta)
+            except Exception as e:
+                logger.warning(f"LLM classification failed or not available: {e}")
+
+        # After potential LLM adjustments, recompute authentic/suspect/inauthentic
+        # counts from the (possibly) updated ContentScores so the AR reflects
+        # the final labels returned to callers and uploaded to Athena.
+        try:
+            authentic_count = sum(1 for sc in scores_list if getattr(sc, 'class_label', None) == 'authentic')
+            suspect_count = sum(1 for sc in scores_list if getattr(sc, 'class_label', None) == 'suspect')
+            inauthentic_count = sum(1 for sc in scores_list if getattr(sc, 'class_label', None) == 'inauthentic')
+        except Exception:
+            # Fallback to zeros if something unexpected happens
+            authentic_count = 0
+            suspect_count = 0
+            inauthentic_count = 0
+
+        # Sync per_item_breakdowns labels with any final class_label present on
+        # the ContentScores to keep per-item diagnostics consistent.
+        try:
+            id_to_score = {s.content_id: s for s in scores_list}
+            for bd in per_item_breakdowns:
+                s_obj = id_to_score.get(bd.get('content_id'))
+                if s_obj and getattr(s_obj, 'class_label', None):
+                    bd['label'] = getattr(s_obj, 'class_label')
+                    # If LLM adjusted a final score, prefer that
+                    try:
+                        import json as _json
+                        meta = _json.loads(s_obj.meta) if isinstance(s_obj.meta, str) and s_obj.meta else (s_obj.meta or {})
+                    except Exception:
+                        meta = {}
+                    if isinstance(meta, dict) and meta.get('_llm_adjusted_score_total'):
+                        bd['final_score'] = float(meta.get('_llm_adjusted_score_total'))
+        except Exception:
+            # Non-fatal; per-item diagnostics are best-effort
+            pass
+
+        # Calculate Core AR percentage (authentic items / total *100)
+        core_ar = (authentic_count / total_count * 100.0) if total_count > 0 else 0.0
 
         # Build source string from unique sources in the scores list
         sources = sorted({s.src for s in scores_list})
@@ -255,12 +572,35 @@ class ScoringPipeline:
         # Get classification analysis
         analysis = self.classifier.analyze_dimension_performance(scores_list)
         
-        # Calculate AR
-        ar_result = self._calculate_authenticity_ratio(
-            scores_list, 
-            brand_config.get('brand_id', 'unknown'),
-            scores_list[0].run_id if scores_list else 'unknown'
-        )
+        # Calculate AR. If the provided scores_list appears to be pre-classified
+        # (i.e., class_label values are set to authentic/suspect/inauthentic),
+        # derive AR from those labels so callers that pass in pre-classified
+        # scores get consistent reporting. Otherwise, compute AR using the
+        # rubric-based calculator (_calculate_authenticity_ratio).
+        preclassified = any(getattr(s, 'class_label', None) not in (None, 'pending') for s in scores_list)
+        if preclassified:
+            authentic_count = sum(1 for s in scores_list if s.class_label == 'authentic')
+            suspect_count = sum(1 for s in scores_list if s.class_label == 'suspect')
+            inauthentic_count = sum(1 for s in scores_list if s.class_label == 'inauthentic')
+            total_count = len(scores_list)
+            core_pct = (authentic_count / total_count * 100.0) if total_count > 0 else 0.0
+            from data.models import AuthenticityRatio as ARModel
+            ar_result = ARModel(
+                brand_id=brand_config.get('brand_id', 'unknown'),
+                source=','.join(sorted({s.src for s in scores_list})),
+                run_id=scores_list[0].run_id if scores_list else 'unknown',
+                total_items=total_count,
+                authentic_items=authentic_count,
+                suspect_items=suspect_count,
+                inauthentic_items=inauthentic_count,
+                authenticity_ratio_pct=core_pct
+            )
+        else:
+            ar_result = self._calculate_authenticity_ratio(
+                scores_list,
+                brand_config.get('brand_id', 'unknown'),
+                scores_list[0].run_id if scores_list else 'unknown'
+            )
 
         # Reporting expects a dict-like structure (with .get). If we returned
         # an AuthenticityRatio dataclass, convert it to a dict with the
@@ -328,6 +668,61 @@ class ScoringPipeline:
         # Convert to percentage breakdown
         content_type_pct = {k: (v / total * 100.0) for k, v in content_type_counts.items()} if total > 0 else {}
         report['content_type_breakdown_pct'] = content_type_pct
+        # Build a per-item summary for reporting (title/url, per-dimension scores, final score, label)
+        per_items = []
+        for s in scores_list:
+            try:
+                meta = s.meta
+                if isinstance(meta, str):
+                    import json as _json
+                    meta_obj = _json.loads(meta) if meta else {}
+                elif isinstance(meta, dict):
+                    meta_obj = meta
+                else:
+                    meta_obj = {}
+            except Exception:
+                meta_obj = {}
+
+            # compute a simple final score from per-dimension scores and SETTINGS weights
+            from config.settings import SETTINGS
+            w = SETTINGS.get('scoring_weights')
+            try:
+                final_score = (
+                    getattr(s, 'score_provenance', 0.0) * w.provenance +
+                    getattr(s, 'score_resonance', 0.0) * w.resonance +
+                    getattr(s, 'score_coherence', 0.0) * w.coherence +
+                    getattr(s, 'score_transparency', 0.0) * w.transparency +
+                    getattr(s, 'score_verification', 0.0) * w.verification
+                ) * 100.0
+            except Exception:
+                final_score = 0.0
+
+            # Prefer LLM-adjusted final score if present in meta
+            try:
+                if isinstance(meta_obj, dict) and meta_obj.get('_llm_adjusted_score_total'):
+                    final_score = float(meta_obj.get('_llm_adjusted_score_total'))
+            except Exception:
+                pass
+
+            per_items.append({
+                'content_id': s.content_id,
+                'source': getattr(s, 'src', ''),
+                'final_score': final_score,
+                'label': getattr(s, 'class_label', '') or '',
+                'meta': meta_obj
+            })
+
+        report['items'] = per_items
+
+        # Score-based AR: mean of per-item final scores (0-100) converted to percentage
+        try:
+            if per_items:
+                score_mean = sum([it.get('final_score', 0.0) for it in per_items]) / len(per_items)
+            else:
+                score_mean = 0.0
+        except Exception:
+            score_mean = 0.0
+        report['score_based_ar_pct'] = float(score_mean)
         
         return report
     

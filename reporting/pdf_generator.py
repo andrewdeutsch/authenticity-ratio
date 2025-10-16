@@ -58,7 +58,7 @@ class PDFReportGenerator:
             textColor=colors.darkgreen
         ))
     
-    def generate_report(self, report_data: Dict[str, Any], output_path: str) -> str:
+    def generate_report(self, report_data: Dict[str, Any], output_path: str, include_items_table: bool = False) -> str:
         """
         Generate PDF report from report data
         
@@ -85,9 +85,9 @@ class PDFReportGenerator:
         # Title page
         story.extend(self._create_title_page(report_data))
         story.append(PageBreak())
-        
+
         # Executive Summary
-        story.extend(self._create_executive_summary(report_data))
+        story.extend(self._create_executive_summary(report_data, include_items_table=include_items_table))
         story.append(PageBreak())
         
         # Authenticity Ratio Analysis
@@ -162,7 +162,7 @@ class PDFReportGenerator:
 
         return story
     
-    def _create_executive_summary(self, report_data: Dict[str, Any]) -> List:
+    def _create_executive_summary(self, report_data: Dict[str, Any], include_items_table: bool = False) -> List:
         """Create executive summary section"""
         story = []
         story.append(Paragraph("Executive Summary", self.styles['SectionHeader']))
@@ -181,6 +181,91 @@ class PDFReportGenerator:
         )
 
         story.append(Paragraph(interp, self.styles['Normal']))
+
+        # Include score-based AR if present
+        score_based = report_data.get('score_based_ar_pct')
+        if score_based is not None:
+            story.append(Spacer(1, 6))
+            story.append(Paragraph(f"Score-based Authenticity Ratio (mean 5D score): {score_based:.1f}%", self.styles['Normal']))
+
+        # Add explicit definitions for Core vs Extended AR to reduce confusion
+        story.append(Spacer(1, 8))
+        defs_lines = [
+            "Definitions:",
+            "- Core AR (classification): Percentage of items explicitly classified as 'Authentic' (Authentic / Total * 100).",
+            "- Score-based AR (mean 5D score): The arithmetic mean of per-item 5D composite scores (0-100).",
+            "- Extended AR: A rubric-blended metric combining classification labels and score-based signals; see AR Analysis for formula details."
+        ]
+        for ln in defs_lines:
+            story.append(Paragraph(ln, self.styles['Normal']))
+
+        # Examples section (up to 5 items) for quick review
+        items = report_data.get('items', []) or report_data.get('items', [])
+        if items:
+            story.append(Spacer(1, 8))
+            story.append(Paragraph("Examples from this run:", self.styles['Heading3']))
+            example_rows = []
+            max_examples = 5
+
+            preferred_sources = report_data.get('sources') or sorted({it.get('source') for it in items if it.get('source')})
+            selected = []
+            for src in preferred_sources:
+                if len(selected) >= max_examples:
+                    break
+                for it in items:
+                    if it.get('source') == src and it not in selected:
+                        selected.append(it)
+                        break
+            if len(selected) < max_examples:
+                for it in items:
+                    if len(selected) >= max_examples:
+                        break
+                    if it not in selected:
+                        selected.append(it)
+
+            # Render each example as a small block with Title, Label, Score, Description, URL
+            for ex in selected[:max_examples]:
+                meta = ex.get('meta') or {}
+                title = meta.get('title') or meta.get('source_url') or ex.get('content_id')
+                score = ex.get('final_score', 0.0)
+                label = ex.get('label', '')
+                desc = meta.get('description') or meta.get('snippet') or meta.get('summary') or ''
+                url = meta.get('source_url') or meta.get('url') or ''
+
+                # Title row
+                story.append(Paragraph(f"<b>{title}</b> — {label.title()} ({score:.1f})", self.styles['Normal']))
+                if desc:
+                    if len(desc) > 300:
+                        desc = desc[:297].rstrip() + '...'
+                    story.append(Paragraph(desc, self.styles['Normal']))
+                if url:
+                    story.append(Paragraph(f"URL: {url}", self.styles['Normal']))
+                story.append(Spacer(1, 6))
+
+        # Optionally include the full per-item table when requested (programmatic runs)
+        if include_items_table:
+            all_items = report_data.get('items', [])
+            if all_items:
+                story.append(PageBreak())
+                story.append(Paragraph('Per-item Scoring Table', self.styles['SectionHeader']))
+                table_rows = [['Content ID', 'Source', 'Label', 'Score', 'URL']]
+                for it in all_items:
+                    url = ''
+                    try:
+                        url = it.get('meta', {}).get('source_url') or ''
+                    except Exception:
+                        url = ''
+                    table_rows.append([it.get('content_id'), it.get('source'), it.get('label'), f"{it.get('final_score', 0.0):.1f}", url])
+                per_table = Table(table_rows, colWidths=[1.5*inch, 1*inch, 1*inch, 0.8*inch, 2.0*inch])
+                per_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ]))
+                story.append(per_table)
         
         return story
     
@@ -218,6 +303,20 @@ class PDFReportGenerator:
 
         story.append(ar_table)
         story.append(Spacer(1, 20))
+
+        # Add a small explanatory paragraph showing the simple Core AR formula and why Extended AR can differ
+        try:
+            total = ar_data.get('total_items', 0)
+            auth = ar_data.get('authentic_items', 0)
+            ext = ar_data.get('extended_ar_pct', 0.0)
+            core_pct = ar_data.get('authenticity_ratio_pct', 0.0)
+            expl = (
+                f"Core AR (simple): Authentic / Total * 100 = {auth} / {total} * 100 = {core_pct:.1f}%\n"
+                f"Extended AR: {ext:.1f}% — this is a rubric-adjusted blend that can pull items toward authenticity or inauthenticity based on 5D scores and attribute rules."
+            )
+            story.append(Paragraph(expl, self.styles['Normal']))
+        except Exception:
+            pass
 
         # Dimension sections
         dimension_data = report_data.get('dimension_breakdown', {})
@@ -302,14 +401,27 @@ class PDFReportGenerator:
         heatmap = os.path.join(out_dir, f"heatmap_{run_id}.png")
         trend = os.path.join(out_dir, f"ar_trend_{run_id}.png")
         channel = os.path.join(out_dir, f"channel_breakdown_{run_id}.png")
+        # Content-type visuals (created by MarkdownReportGenerator)
+        ctype_pie = os.path.join(out_dir, f"content_type_pie_{run_id}.png")
+        ctype_bar = os.path.join(out_dir, f"content_type_bar_{run_id}.png")
 
-        for img_path in (heatmap, trend, channel):
+        for img_path in (heatmap, trend, channel, ctype_pie, ctype_bar):
+            if not img_path:
+                continue
             if os.path.exists(img_path):
                 try:
                     story.append(Spacer(1, 12))
-                    story.append(Image(img_path, width=6*inch, height=3*inch))
-                except Exception:
-                    logger.debug(f"Could not embed image {img_path}")
+                    # For pie charts, prefer a square-ish box; for bars/trend use a wider box
+                    basename = os.path.basename(img_path).lower()
+                    if 'pie' in basename:
+                        story.append(Image(img_path, width=5*inch, height=4*inch))
+                    elif 'dim' in basename or 'dimension' in basename:
+                        story.append(Image(img_path, width=6*inch, height=4*inch))
+                    else:
+                        # default sizing for other charts
+                        story.append(Image(img_path, width=6*inch, height=3*inch))
+                except Exception as e:
+                    logger.debug(f"Could not embed image {img_path}: {e}")
         
         return story
     

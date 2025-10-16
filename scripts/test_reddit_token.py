@@ -71,18 +71,23 @@ def attempt_password_grant():
         return False
 
 # Try password grant first (preferred for script apps), then fall back to client_credentials
-ok = False
-if username and password:
-    ok = attempt_password_grant()
-    if not ok:
-        print('Password grant failed; trying client_credentials as fallback...')
+def main() -> int:
+    ok = False
+    if username and password:
+        ok = attempt_password_grant()
+        if not ok:
+            print('Password grant failed; trying client_credentials as fallback...')
+            ok = attempt_client_credentials()
+    else:
         ok = attempt_client_credentials()
-else:
-    ok = attempt_client_credentials()
 
-if ok:
-    print('\nSUCCESS: obtained token (masked above)')
-    sys.exit(0)
-else:
-    print('\nFAILED: could not obtain token with available methods')
-    sys.exit(1)
+    if ok:
+        print('\nSUCCESS: obtained token (masked above)')
+        return 0
+    else:
+        print('\nFAILED: could not obtain token with available methods')
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

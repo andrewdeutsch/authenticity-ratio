@@ -14,32 +14,37 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.settings import APIConfig
 
-try:
-    import praw
-except Exception as e:
-    print("ERROR: PRAW not installed in the active environment.")
-    sys.exit(2)
+def main() -> int:
+    try:
+        import praw
+    except Exception:
+        print("ERROR: PRAW not installed in the active environment.")
+        return 2
 
-cfg = APIConfig()
+    cfg = APIConfig()
 
-if not cfg.reddit_client_id or not cfg.reddit_client_secret:
-    print("MISSING: Reddit client_id or client_secret not provided in environment.")
-    sys.exit(3)
+    if not cfg.reddit_client_id or not cfg.reddit_client_secret:
+        print("MISSING: Reddit client_id or client_secret not provided in environment.")
+        return 3
 
-try:
-    reddit = praw.Reddit(
-        client_id=cfg.reddit_client_id,
-        client_secret=cfg.reddit_client_secret,
-        user_agent=cfg.reddit_user_agent
-    )
+    try:
+        reddit = praw.Reddit(
+            client_id=cfg.reddit_client_id,
+            client_secret=cfg.reddit_client_secret,
+            user_agent=cfg.reddit_user_agent
+        )
 
-    # Try a simple read-only call
-    subreddit = reddit.subreddit('all')
-    post = next(subreddit.hot(limit=1))
-    print(f"OK: fetched post id={post.id!s} title={post.title!s}")
-    sys.exit(0)
+        # Try a simple read-only call
+        subreddit = reddit.subreddit('all')
+        post = next(subreddit.hot(limit=1))
+        print(f"OK: fetched post id={post.id!s} title={post.title!s}")
+        return 0
 
-except Exception as e:
-    print("ERROR: Exception while connecting to Reddit API:")
-    traceback.print_exc()
-    sys.exit(1)
+    except Exception:
+        print("ERROR: Exception while connecting to Reddit API:")
+        traceback.print_exc()
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

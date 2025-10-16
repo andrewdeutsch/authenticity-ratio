@@ -137,16 +137,96 @@ class MarkdownReportGenerator:
 
         visuals_block = "\n\n".join(visuals_md)
 
+        # Include a short list of example items (up to 3) for the executive.
+        # Select examples to represent all sources when possible and include a short description and URL.
+        examples_md = ''
+        items = report_data.get('items', [])
+        if items:
+            max_examples = 3
+            # Determine available sources in order of report 'sources' preference or by items
+            preferred_sources = report_data.get('sources') or sorted({it.get('source') for it in items if it.get('source')})
+
+            selected = []
+            # Try to pick at least one example per source (up to max_examples)
+            for src in preferred_sources:
+                if len(selected) >= max_examples:
+                    break
+                for it in items:
+                    if it.get('source') == src and it not in selected:
+                        selected.append(it)
+                        break
+
+            # Fill remaining slots with top-scoring items
+            if len(selected) < max_examples:
+                for it in items:
+                    if len(selected) >= max_examples:
+                        break
+                    if it not in selected:
+                        selected.append(it)
+
+            example_lines = []
+            for ex in selected:
+                meta = ex.get('meta') or {}
+                title = meta.get('title') or meta.get('source_url') or ex.get('content_id')
+                score = ex.get('final_score', 0.0)
+                label = ex.get('label', '')
+                # short description/snippet if available
+                desc = meta.get('description') or meta.get('snippet') or meta.get('summary') or ''
+                if desc:
+                    desc = desc.strip()
+                    if len(desc) > 240:
+                        desc = desc[:237].rstrip() + '...'
+                url = meta.get('source_url') or meta.get('url') or ''
+
+                line = f"- {title} — {label.title()} ({score:.1f})"
+                if desc:
+                    line += f"\n  \n  Description: {desc}"
+                if url:
+                    line += f"\n  \n  URL: {url}"
+
+                example_lines.append(line)
+
+            examples_md = "\n\n**Examples from this run:**\n" + "\n\n".join(example_lines) + "\n"
+
+        score_based = report_data.get('score_based_ar_pct')
+
+        # Add a short definitions block to explain Core vs Extended AR
+        defs_block = (
+            "**Definitions:**\n\n"
+            "- Core AR (classification): Percentage of items explicitly classified as 'Authentic' by the classifier (count of Authentic / total * 100).\n"
+            "- Score-based AR (mean 5D score): The arithmetic mean of the per-item 5D composite scores (0-100). Useful as a continuous measure.\n"
+            "- Extended AR: A blended metric that combines classification counts and score-based signals (rubric-dependent adjustments).\n"
+        )
+
+        # Small computation table to show the numbers used to form Core/Extended AR
+        computation_table = (
+            "\n**Computation (values used):**\n\n"
+            f"- Total items = {total_items}\n"
+            f"- Authentic = {authentic_items}\n"
+            f"- Suspect = {suspect_items}\n"
+            f"- Inauthentic = {inauthentic_items}\n"
+            f"- Core AR = Authentic / Total * 100 = {ar_pct:.1f}%\n"
+            f"- Score-based AR (mean 5D) = {score_based:.1f}%\n"
+            f"- Extended AR = rubric-adjusted blend (see AR Analysis section) = {extended_ar:.1f}%\n"
+        )
+
         return f"""## Summary
 
-**Core Authenticity Ratio:** {ar_pct:.1f}%  
+**Core Authenticity Ratio (classification):** {ar_pct:.1f}%  
+**Score-based Authenticity Ratio (mean 5D score):** {score_based:.1f}%  
 **Extended Authenticity Ratio:** {extended_ar:.1f}%  
 **Total content analyzed:** {total_items:,}  
 **Distribution:** Authentic: {authentic_items:,} | Suspect: {suspect_items:,} | Inauthentic: {inauthentic_items:,}
 
+{defs_block}
+
+{computation_table}
+
 {interp}
 
 **Executive (one-liner):** {executive_one_liner}
+
+{examples_md}
 
 {visuals_block}
 
@@ -408,9 +488,8 @@ This report analyzes content using the 5D Trust Dimensions framework:
 
 ### Data Sources
 
-- Reddit: Community discussions and brand mentions
-- Amazon: Product reviews and brand-related content
-- Additional sources: [To be expanded in future versions]
+This run used the following data sources: {', '.join(report_data.get('sources', [])) if report_data.get('sources') else 'Unknown'}.\
+The tool supports additional sources (Reddit, Amazon, YouTube, Yelp) in other runs; this section is populated per-run.
 
 ### Report Generation
 

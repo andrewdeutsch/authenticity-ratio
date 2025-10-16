@@ -29,7 +29,10 @@ black>=23.0.0
 flake8>=6.0.0
 
 # Optional (for enhanced functionality)
-# beautifulsoup4>=4.12.0  # Web scraping
+# beautifulsoup4 is required for Brave HTML parsing
+beautifulsoup4>=4.12.0  # Web scraping
+# Playwright for optional JS-rendered page fetching
+playwright>=1.35.0
 # selenium>=4.11.0        # Browser automation
 # scrapy>=2.10.0          # Web crawling framework
 google-api-python-client>=2.80.0
