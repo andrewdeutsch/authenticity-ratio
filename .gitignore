@@ -58,3 +58,10 @@ output/
 
 # Keep optional local config out
 config/local_settings.py
+
+# ignore cache folders
+.cache/
+
+#ignore temporary folders
+tmp_smoke/
+tmp_smoke_multi/
