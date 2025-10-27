@@ -25,9 +25,10 @@ logger = logging.getLogger(__name__)
 
 # Optional: reuse markdown generator's LLM helper if available
 try:
-    from reporting.markdown_generator import _llm_summarize, clean_text_for_llm
+    from reporting.markdown_generator import _llm_summarize, clean_text_for_llm, add_llm_provenance
 except Exception:
     _llm_summarize = None
+    add_llm_provenance = None
     def clean_text_for_llm(meta):
         try:
             return '\n\n'.join([str(meta.get(k)) for k in ('title', 'description', 'snippet', 'body') if meta.get(k)])
@@ -246,8 +247,11 @@ class PDFReportGenerator:
                 if use_llm and _llm_summarize is not None:
                     try:
                         desc_llm = _llm_summarize(desc or clean_text_for_llm(meta), model=report_data.get('llm_model', 'gpt-3.5-turbo'), max_words=120)
-                        if desc_llm:
-                            desc = desc_llm.strip() + f" ({report_data.get('llm_model', 'gpt-3.5-turbo')})"
+                        if desc_llm and add_llm_provenance is not None:
+                            desc = add_llm_provenance(desc_llm, report_data.get('llm_model', 'gpt-3.5-turbo'))
+                        elif desc_llm:
+                            # Fallback if helper not available
+                            desc = desc_llm.strip()
                     except Exception:
                         # fall back to original desc
                         pass
