@@ -8,12 +8,22 @@ Usage:
     # Set your OpenAI API key
     export OPENAI_API_KEY=sk-...
 
+    # Or use .env file (recommended)
+    # Create .env with: OPENAI_API_KEY=sk-...
+
     # Run the test
     python scripts/test_llm_standalone.py
 """
 
 import os
 import sys
+
+# Load .env file if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not required if using environment variables
 
 
 def test_provenance_helper():
