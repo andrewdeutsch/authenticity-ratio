@@ -32,7 +32,7 @@ try:
 except Exception:
     YouTubeScraper = None
 
-from ingestion.brave_search import search_brave, fetch_page
+from ingestion.brave_search import search_brave, fetch_page, collect_brave_pages
 from ingestion.normalizer import ContentNormalizer
 from scoring.pipeline import ScoringPipeline
 from reporting.pdf_generator import PDFReportGenerator
@@ -59,8 +59,12 @@ def main():
     parser.add_argument('--max-content', type=int, default=1000, help='Maximum content items to process')
     parser.add_argument('--brave-pages', type=int, default=10, help='Number of Brave search results/pages to fetch (default: 10)')
     parser.add_argument('--include-comments', action='store_true', help='Include comments in analysis (overrides settings include_comments_in_analysis)')
+    parser.add_argument('--use-llm-examples', action='store_true', help='Use LLM (gpt-3.5-turbo by default) to produce abstractive summaries for executive examples')
+    parser.add_argument('--llm-model', default='gpt-3.5-turbo', help='LLM model to use for executive summaries (default: gpt-3.5-turbo)')
     
     args = parser.parse_args()
+    # Normalize sources to lowercase to be case-insensitive (users may pass 'Brave' or 'Youtube')
+    args.sources = [s.lower() for s in args.sources]
     
     # Setup logging
     log_file = os.path.join(args.output_dir, 'logs', f'ar_pipeline_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
@@ -235,31 +239,46 @@ def main():
             logger.info("Ingesting Brave search results...")
             if not args.dry_run:
                 query = ' '.join(args.keywords)
-                # Respect the user-provided brave-pages argument (default 10)
-                results = search_brave(query, size=min(args.brave_pages, args.max_content))
+                # Use the new collect_brave_pages helper to gather N successful pages
+                target = min(args.brave_pages, args.max_content)
+                try:
+                    collected = collect_brave_pages(query, target_count=target)
+                except Exception as e:
+                    logger.warning(f"Brave collection failed: {e}")
+                    collected = []
+
                 brave_items = []
-                for i, r in enumerate(results):
-                    page = fetch_page(r.get('url'))
-                    # Build a lightweight NormalizedContent-like dict/object
-                    from data.models import NormalizedContent
-                    content_id = f"brave_{i}_{abs(hash(r.get('url') or ''))}"
+                from data.models import NormalizedContent
+                for i, c in enumerate(collected):
+                    url = c.get('url')
+                    content_id = f"brave_{i}_{abs(hash(url or ''))}"
+                    meta = {
+                        'source_url': url or '',
+                        'content_type': 'web'
+                    }
+                    # Include footer-extracted links when available
+                    if isinstance(c, dict):
+                        terms = c.get('terms')
+                        privacy = c.get('privacy')
+                        if terms:
+                            meta['terms'] = terms
+                        if privacy:
+                            meta['privacy'] = privacy
+
                     nc = NormalizedContent(
                         content_id=content_id,
                         src='brave',
-                        platform_id=r.get('url') or '',
+                        platform_id=url or '',
                         author='web',
-                        title=page.get('title', '') or r.get('title', ''),
-                        body=page.get('body', '') or r.get('snippet', ''),
+                        title=c.get('title', '') or '',
+                        body=c.get('body', '') or '',
                         run_id=run_id,
                         event_ts=datetime.now().isoformat(),
-                        meta={
-                            'source_url': r.get('url') or '',
-                            'content_type': 'web'
-                        }
+                        meta=meta
                     )
                     brave_items.append(nc)
                 all_content.extend(brave_items)
-                logger.info(f"Retrieved {len(brave_items)} Brave content items")
+                logger.info(f"Retrieved {len(brave_items)} Brave content items (successful fetches)")
             else:
                 logger.info("Dry run: Skipping Brave ingestion")
         
@@ -298,26 +317,30 @@ def main():
 
         # Generate scoring report
         scoring_report = scoring_pipeline.generate_scoring_report(scores_list, brand_config)
-        
+
         # Generate PDF report
         pdf_path = os.path.join(args.output_dir, f'ar_report_{args.brand_id}_{run_id}.pdf')
         pdf_generator.generate_report(scoring_report, pdf_path)
         logger.info(f"Generated PDF report: {pdf_path}")
-        
+
+        # Optionally inject LLM flags into the report generator data
+        scoring_report['use_llm_for_examples'] = bool(args.use_llm_examples)
+        scoring_report['llm_model'] = args.llm_model
+
         # Generate Markdown report
         md_path = os.path.join(args.output_dir, f'ar_report_{args.brand_id}_{run_id}.md')
         markdown_generator.generate_report(scoring_report, md_path)
         logger.info(f"Generated Markdown report: {md_path}")
-        
+
         # Pipeline completion
         logger.info("Pipeline completed successfully!")
         logger.info(f"Run ID: {run_id}")
         logger.info(f"Total content processed: {len(normalized_content)}")
         logger.info(f"Reports generated in: {args.output_dir}")
-        
+
         if not args.dry_run:
             logger.info(f"Data uploaded to S3/Athena for brand: {args.brand_id}")
-        
+
     except Exception as e:
         logger.error(f"Pipeline failed: {e}")
         raise
@@ -363,7 +386,7 @@ def run_pipeline_for_contents(urls: list, output_dir: str = './output', brand_id
                 body=page.get('body', '') or '',
                 run_id=run_id,
                 event_ts=datetime.now().isoformat(),
-                meta={'content_type': 'web', 'source_url': u}
+                meta={'content_type': 'web', 'source_url': u, 'terms': page.get('terms',''), 'privacy': page.get('privacy','')}
             )
             fetched.append(nc)
 

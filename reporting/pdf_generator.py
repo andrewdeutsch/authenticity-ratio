@@ -23,6 +23,17 @@ from config.settings import SETTINGS
 
 logger = logging.getLogger(__name__)
 
+# Optional: reuse markdown generator's LLM helper if available
+try:
+    from reporting.markdown_generator import _llm_summarize, clean_text_for_llm
+except Exception:
+    _llm_summarize = None
+    def clean_text_for_llm(meta):
+        try:
+            return '\n\n'.join([str(meta.get(k)) for k in ('title', 'description', 'snippet', 'body') if meta.get(k)])
+        except Exception:
+            return ''
+
 class PDFReportGenerator:
     """Generates PDF reports for AR analysis"""
     
@@ -230,6 +241,16 @@ class PDFReportGenerator:
                 score = ex.get('final_score', 0.0)
                 label = ex.get('label', '')
                 desc = meta.get('description') or meta.get('snippet') or meta.get('summary') or ''
+                # Optionally use LLM to produce a concise description for PDF examples
+                use_llm = bool(report_data.get('use_llm_for_examples') or report_data.get('use_llm_for_descriptions'))
+                if use_llm and _llm_summarize is not None:
+                    try:
+                        desc_llm = _llm_summarize(desc or clean_text_for_llm(meta), model=report_data.get('llm_model', 'gpt-3.5-turbo'), max_words=120)
+                        if desc_llm:
+                            desc = desc_llm.strip() + f" ({report_data.get('llm_model', 'gpt-3.5-turbo')})"
+                    except Exception:
+                        # fall back to original desc
+                        pass
                 url = meta.get('source_url') or meta.get('url') or ''
 
                 # Title row

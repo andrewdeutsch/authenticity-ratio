@@ -296,10 +296,23 @@ class ContentScorer:
                 is_authentic=False,     # Will be set by classifier
                 rubric_version=self.rubric_version,
                 run_id=content.run_id,
-                meta=json.dumps({
-                    "scoring_timestamp": content.event_ts,
-                    "brand_context": brand_context
-                })
+                meta=json.dumps(
+                    # Build a meta dict that includes scoring info and preserves key content metadata
+                    (lambda cm: {
+                        "scoring_timestamp": content.event_ts,
+                        "brand_context": brand_context,
+                        "title": getattr(content, 'title', '') or None,
+                        "description": getattr(content, 'body', '') or None,
+                        "source_url": (cm.get('source_url') if isinstance(cm, dict) else None) or getattr(content, 'platform_id', None),
+                        # preserve any existing content.meta under orig_meta
+                        "orig_meta": cm if isinstance(cm, dict) else None,
+                        # propagate explicit footer links if present so downstream reporting can use them
+                        **({
+                            'terms': cm.get('terms'),
+                            'privacy': cm.get('privacy')
+                        } if isinstance(cm, dict) and (cm.get('terms') or cm.get('privacy')) else {})
+                    })(content.meta if hasattr(content, 'meta') else {})
+                )
             )
             
             scores_list.append(content_scores)

@@ -1,0 +1,90 @@
+{
+  "version": "1.0",
+  "source": "imported_from_github_csv",
+  "dimension_weights": {
+    "provenance": 0.14705882352941177,
+    "resonance": 0.17647058823529413,
+    "coherence": 0.2647058823529412,
+    "transparency": 0.16176470588235295,
+    "verification": 0.25
+  },
+  "thresholds": {
+    "authentic": 75,
+    "suspect": 40
+  },
+  "attributes": [
+    {
+      "id": "c2pa_manifest",
+      "label": "C2PA / manifest present",
+      "match_meta": ["c2pa", "manifest"],
+      "effect": "bonus",
+      "value": 12,
+      "enabled": true,
+      "note": "Positive signal when a provenance manifest or C2PA assertion is present"
+    },
+    {
+      "id": "watermark",
+      "label": "Visible watermark",
+      "match_meta": ["watermark"],
+      "effect": "bonus",
+      "value": 10,
+      "enabled": true,
+      "note": "Presence of a watermark that indicates origin or ownership"
+    },
+    {
+      "id": "author_verified",
+      "label": "Author verified / known brand",
+      "match_meta": ["author", "author_verified", "brand"],
+      "effect": "bonus",
+      "value": 8,
+      "enabled": true,
+      "note": "Author or publisher is verified or matches known brand identity"
+    },
+    {
+      "id": "canonical_ok",
+      "label": "Canonical / canonical URL matches",
+      "match_meta": ["canonical", "canonical_url"],
+      "effect": "bonus",
+      "value": 6,
+      "enabled": true
+    },
+    {
+      "id": "disclosure",
+      "label": "Disclosure / sponsorship",
+      "match_meta": ["disclosure", "sponsored"],
+      "effect": "bonus",
+      "value": 5,
+      "enabled": true
+    },
+    {
+      "id": "citations",
+      "label": "Citations / references",
+      "match_meta": ["citation", "references", "sources"],
+      "effect": "bonus",
+      "value": 5,
+      "enabled": true
+    },
+    {
+      "id": "dup_similarity",
+      "label": "Duplicate similarity >= 0.8",
+      "match_meta": ["dup_similarity", "duplicate_similarity", "phash_similarity"],
+      "effect": "penalty",
+      "value": -10,
+      "condition": { "op": ">=", "threshold": 0.8 },
+      "enabled": true
+    },
+    {
+      "id": "exif_spoofed",
+      "label": "EXIF metadata spoofed",
+      "match_meta": ["exif_spoofed", "exif_signed", "exif"],
+      "effect": "penalty",
+      "value": -12,
+      "enabled": true
+    }
+  ],
+  "defaults": {
+    "max_total_bonus": 50,
+    "max_total_penalty": -50,
+    "normalize_weights": true
+  }
+}

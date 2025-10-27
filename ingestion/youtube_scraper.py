@@ -72,9 +72,26 @@ class YouTubeScraper:
             )
             response = request.execute()
 
-            video_ids = [item['id']['videoId'] for item in response.get('items', [])]
+            items = response.get('items', [])
+            video_ids = []
+            for item in items:
+                # Defensive: some items may not be videos (e.g., channels/playlists) or may lack videoId
+                vid = None
+                try:
+                    vid = item.get('id', {}).get('videoId') if isinstance(item.get('id'), dict) else None
+                except Exception:
+                    vid = None
+                if vid:
+                    video_ids.append(vid)
 
             if not video_ids:
+                # Log a trimmed diagnostic of the raw response to help debugging
+                try:
+                    import json as _json
+                    snippet = _json.dumps({'items': items[:5]}, default=str)[:2000]
+                except Exception:
+                    snippet = str(items)[:2000]
+                logger.error(f"YouTube search returned no videoIds for query '{query}'. Response snippet: {snippet}")
                 return []
 
             # Fetch video statistics/details in a second call

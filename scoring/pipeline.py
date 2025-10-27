@@ -108,7 +108,13 @@ class ScoringPipeline:
             
             # Step 4: Calculate and log Authenticity Ratio
             logger.info("Step 4: Calculating Authenticity Ratio")
-            ar_result = self._calculate_authenticity_ratio(classified_scores, brand_id, run_id)
+            ar_calc = self._calculate_authenticity_ratio(classified_scores, brand_id, run_id, include_appendix=True)
+            # _calculate_authenticity_ratio may return (AuthenticityRatio, per_item_breakdowns)
+            if isinstance(ar_calc, tuple) and len(ar_calc) == 2:
+                ar_result, per_item_breakdowns = ar_calc
+            else:
+                ar_result = ar_calc
+                per_item_breakdowns = []
             
             # Attach classified scores to the pipeline run so callers can use
             # the exact objects that were uploaded to S3/Athena.
@@ -119,7 +125,18 @@ class ScoringPipeline:
             pipeline_run.status = "completed"
             
             logger.info(f"Scoring pipeline {run_id} completed successfully")
-            logger.info(f"Authenticity Ratio: {ar_result.authenticity_ratio_pct:.2f}%")
+            try:
+                logger.info(f"Authenticity Ratio: {ar_result.authenticity_ratio_pct:.2f}%")
+            except Exception:
+                logger.info(f"Authenticity Ratio computed")
+
+            # Attach per-item appendix to the pipeline run for callers that
+            # want to render a detailed appendix in reports or UIs.
+            try:
+                pipeline_run.appendix = per_item_breakdowns
+            except Exception:
+                # Non-fatal if PipelineRun dataclass doesn't accept arbitrary attrs
+                pass
             
         except Exception as e:
             pipeline_run.end_time = datetime.now()
@@ -162,11 +179,17 @@ class ScoringPipeline:
                 logger.warning(f"Failed to upload scores for source {source}: {e}")
     
     def _calculate_authenticity_ratio(self, scores_list: List[ContentScores], 
-                                    brand_id: str, run_id: str) -> AuthenticityRatio:
-        """Calculate Authenticity Ratio from scores and return an AuthenticityRatio dataclass"""
+                                    brand_id: str, run_id: str,
+                                    include_appendix: bool = False) -> AuthenticityRatio:
+        """Calculate Authenticity Ratio from scores.
+
+        By default this function returns an AuthenticityRatio dataclass. If
+        include_appendix=True it returns a tuple: (AuthenticityRatio, per_item_breakdowns).
+        """
         if not scores_list:
             logger.info(f"AR Calculation for {brand_id}: no scores")
-            return AuthenticityRatio(
+            return (
+                AuthenticityRatio(
                 brand_id=brand_id,
                 source=",",
                 run_id=run_id,
@@ -175,6 +198,7 @@ class ScoringPipeline:
                 suspect_items=0,
                 inauthentic_items=0,
                 authenticity_ratio_pct=0.0
+                ), []
             )
 
         # Load rubric (weights, thresholds, attributes, defaults)
@@ -226,6 +250,23 @@ class ScoringPipeline:
 
             # Metadata bonuses/penalties applied from attributes_cfg
             meta = _parse_meta(s)
+            # Normalize/enrich meta so reporting can rely on common keys
+            try:
+                # prefer existing keys but fall back to content fields on the score
+                if isinstance(meta, dict):
+                    meta_title = meta.get('title') or getattr(s, 'title', None) or meta.get('name')
+                    meta_desc = meta.get('description') or meta.get('snippet') or getattr(s, 'body', None)
+                    meta_url = meta.get('source_url') or meta.get('url') or getattr(s, 'platform_id', None)
+                    if meta_title:
+                        meta['title'] = meta_title
+                    if meta_desc:
+                        meta['description'] = meta_desc
+                    if meta_url:
+                        meta['source_url'] = meta_url
+                else:
+                    meta = {}
+            except Exception:
+                meta = {}
             applied_rules = []
 
             for attr in attributes_cfg:
@@ -277,7 +318,14 @@ class ScoringPipeline:
                             break
 
                 if triggered and val != 0:
-                    applied_rules.append({"id": aid, "effect": effect, "value": val, "reason": reason})
+                    applied_rules.append({
+                        "id": aid,
+                        "effect": effect,
+                        "value": val,
+                        "reason": reason,
+                        # attempt to record which dimension this attribute targets
+                        "dimension": attr.get('dimension') or attr.get('applies_to') or None
+                    })
                     if effect == 'bonus':
                         base += float(val)
                     elif effect == 'penalty':
@@ -308,10 +356,20 @@ class ScoringPipeline:
 
             per_item_breakdowns.append({
                 'content_id': s.content_id,
+                'source': getattr(s, 'src', ''),
+                'event_ts': getattr(s, 'event_ts', ''),
+                'dimension_scores': {
+                    'provenance': p,
+                    'resonance': r,
+                    'coherence': c,
+                    'transparency': t,
+                    'verification': v,
+                },
                 'base_score': base,
                 'applied_rules': applied_rules,
                 'final_score': item_score,
                 'label': label,
+                'meta': meta,
             })
 
         # Triage: select items for LLM review based on triage_method
@@ -501,16 +559,19 @@ class ScoringPipeline:
         logger.info(f"  Inauthentic: {inauthentic_count} ({(inauthentic_count/total_count*100) if total_count else 0:.1f}%)")
         logger.info(f"  Core AR: {core_ar:.2f}%")
 
-        return AuthenticityRatio(
-            brand_id=brand_id,
-            source=source_str,
-            run_id=run_id,
-            total_items=total_count,
-            authentic_items=authentic_count,
-            suspect_items=suspect_count,
-            inauthentic_items=inauthentic_count,
-            authenticity_ratio_pct=core_ar
-        )
+        ar = AuthenticityRatio(
+                brand_id=brand_id,
+                source=source_str,
+                run_id=run_id,
+                total_items=total_count,
+                authentic_items=authentic_count,
+                suspect_items=suspect_count,
+                inauthentic_items=inauthentic_count,
+                authenticity_ratio_pct=core_ar
+            )
+        if include_appendix:
+            return (ar, per_item_breakdowns)
+        return ar
     
     def get_pipeline_status(self, run_id: str) -> Optional[PipelineRun]:
         """Get status of a pipeline run"""
@@ -596,11 +657,17 @@ class ScoringPipeline:
                 authenticity_ratio_pct=core_pct
             )
         else:
-            ar_result = self._calculate_authenticity_ratio(
+            ar_calc = self._calculate_authenticity_ratio(
                 scores_list,
                 brand_config.get('brand_id', 'unknown'),
-                scores_list[0].run_id if scores_list else 'unknown'
+                scores_list[0].run_id if scores_list else 'unknown',
+                include_appendix=True
             )
+            if isinstance(ar_calc, tuple) and len(ar_calc) == 2:
+                ar_result, per_item_breakdowns = ar_calc
+            else:
+                ar_result = ar_calc
+                per_item_breakdowns = []
 
         # Reporting expects a dict-like structure (with .get). If we returned
         # an AuthenticityRatio dataclass, convert it to a dict with the
@@ -642,6 +709,72 @@ class ScoringPipeline:
             "sources": brand_config.get('sources') if brand_config.get('sources') else sorted({s.src for s in scores_list}),
             "rubric_version": scores_list[0].rubric_version if scores_list else "unknown"
         }
+
+        # Include per-item appendix if available
+        report['appendix'] = per_item_breakdowns if 'per_item_breakdowns' in locals() else []
+
+        # Ensure appendix entries include the original/meta fields from the ContentScores
+        # Build an enriched appendix from scores_list and merge any existing breakdowns
+        enriched = []
+        try:
+            import json as _json
+            id_to_bd = {d.get('content_id'): d for d in (per_item_breakdowns if 'per_item_breakdowns' in locals() else [])}
+            for s in scores_list:
+                try:
+                    meta = s.meta
+                    if isinstance(meta, str):
+                        meta_obj = _json.loads(meta) if meta else {}
+                    elif isinstance(meta, dict):
+                        meta_obj = meta
+                    else:
+                        meta_obj = {}
+                except Exception:
+                    meta_obj = {}
+
+                dims = {
+                    'provenance': getattr(s, 'score_provenance', None),
+                    'resonance': getattr(s, 'score_resonance', None),
+                    'coherence': getattr(s, 'score_coherence', None),
+                    'transparency': getattr(s, 'score_transparency', None),
+                    'verification': getattr(s, 'score_verification', None),
+                }
+
+                # Compute a simple mean-based final score when rubric weights are not available here
+                try:
+                    vals = [
+                        float(getattr(s, 'score_provenance', 0.0) or 0.0),
+                        float(getattr(s, 'score_resonance', 0.0) or 0.0),
+                        float(getattr(s, 'score_coherence', 0.0) or 0.0),
+                        float(getattr(s, 'score_transparency', 0.0) or 0.0),
+                        float(getattr(s, 'score_verification', 0.0) or 0.0),
+                    ]
+                    from statistics import mean as _mean
+                    final_score = float(_mean(vals) * 100.0)
+                except Exception:
+                    final_score = None
+
+                bd = {
+                    'content_id': getattr(s, 'content_id', None),
+                    'source': getattr(s, 'src', None),
+                    'final_score': final_score,
+                    'label': getattr(s, 'class_label', None) or '',
+                    'meta': meta_obj,
+                    'dimension_scores': dims,
+                }
+
+                # If a breakdown exists from the AR calc, merge its richer fields
+                existing = id_to_bd.get(bd.get('content_id'))
+                if existing and isinstance(existing, dict):
+                    # overlay keys like 'applied_rules', 'rationale', etc.
+                    for k, v in existing.items():
+                        if k not in bd or not bd.get(k):
+                            bd[k] = v
+
+                enriched.append(bd)
+        except Exception:
+            enriched = per_item_breakdowns if 'per_item_breakdowns' in locals() else []
+
+        report['appendix'] = enriched
 
         # Compute a content-type breakdown (percentage) using meta JSON where available
         content_type_counts = {}

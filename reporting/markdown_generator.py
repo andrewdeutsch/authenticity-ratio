@@ -3,7 +3,8 @@ Markdown report generator for AR tool
 Creates markdown reports for easy sharing and documentation
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+import math
 import logging
 from datetime import datetime
 import os
@@ -17,6 +18,185 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+try:
+    # Optional: use scikit-learn TF-IDF if installed for better scoring
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    _HAVE_SKLEARN = True
+except Exception:
+    TfidfVectorizer = None
+    _HAVE_SKLEARN = False
+
+
+def _summarize_text(text: str, max_lines: int = 2, max_chars: int = 240, meta_desc: str = None) -> str:
+    """Produce a short summary for text.
+
+    Strategy:
+      - Prefer meta/OG description when available and sufficiently long.
+      - Clean boilerplate/UI fragments.
+      - Extract 1-2 representative sentences using TF-IDF/TextRank-style scoring.
+      - Enforce max_chars safely.
+    """
+    if not text:
+        return ''
+
+    # 1) Prefer meta description if provided
+    if meta_desc:
+        md = meta_desc.strip()
+        if len(md) >= 30:
+            return _trim_summary(md, max_chars)
+
+    # 2) Clean input text
+    clean = _clean_text(text)
+    if not clean:
+        return ''
+    if len(clean) <= max_chars:
+        return clean
+
+    # 3) Split into candidate sentences
+    sentences = _split_sentences(clean)
+    if not sentences:
+        return _trim_summary(clean, max_chars)
+    if len(sentences) <= max_lines:
+        joined = ' '.join(sentences)
+        return _trim_summary(joined, max_chars)
+
+    # 4) Score and select best sentences
+    chosen = _score_and_select(sentences, max_lines=max_lines)
+
+    # Preserve original order
+    ordered = [s for s in sentences if s in chosen]
+    out = ' '.join(ordered[:max_lines])
+    return _trim_summary(out, max_chars)
+
+
+def _clean_text(text: str) -> str:
+    s = html_unescape(text)
+    s = re.sub(r"\s+", ' ', s).strip()
+    # remove common UI/boilerplate fragments
+    stop_phrases = [
+        'Learn more', 'Read more', 'Close', 'Cookie settings', 'Subscribe',
+        'Sign in', 'Log in', 'What can I help with', 'Show more'
+    ]
+    for p in stop_phrases:
+        s = s.replace(p, '')
+    # Drop very short fragments and multilingual short UI snippets often scraped from interactive widgets
+    # e.g., small phrases or single-word bullets
+    s = re.sub(r"(?:\b[A-Za-z]{1,3}\b\s*){1,4}", '', s)
+    # Remove leftover sequences of non-word punctuation often found in nav bars
+    s = re.sub(r"[\-_=]{2,}", ' ', s)
+    s = s.strip(' \t\n\r\u200b\ufeff')
+    return s
+
+
+def html_unescape(text: str) -> str:
+    try:
+        import html
+        return html.unescape(text)
+    except Exception:
+        return text
+
+
+def _split_sentences(text: str) -> List[str]:
+    # Simple but pragmatic sentence splitter
+    parts = re.split(r'(?<=[\.\!\?])\s+', text)
+    parts = [p.strip() for p in parts if len(p.strip()) > 10]
+    return parts
+
+
+def clean_text_for_llm(meta: Dict[str, Any]) -> str:
+    """Build a reasonable text blob for LLM summarization from metadata dict."""
+    parts = []
+    if not isinstance(meta, dict):
+        return ''
+    for key in ('title', 'name', 'headline'):
+        v = meta.get(key)
+        if v:
+            parts.append(str(v))
+    for key in ('description', 'snippet', 'summary', 'body'):
+        v = meta.get(key)
+        if v:
+            parts.append(str(v))
+    # fallback to URL if nothing else
+    url = meta.get('source_url') or meta.get('url')
+    if url:
+        parts.append(url)
+    return '\n\n'.join(parts)
+
+
+def _score_and_select(sentences: List[str], max_lines: int = 2) -> List[str]:
+    # Use sklearn TF-IDF if available, otherwise a simple heuristic
+    scores = []
+    if _HAVE_SKLEARN and len(sentences) > 0:
+        try:
+            vec = TfidfVectorizer(stop_words='english')
+            X = vec.fit_transform(sentences)
+            scores = X.sum(axis=1).A1.tolist()
+        except Exception:
+            scores = [_simple_score(s) for s in sentences]
+    else:
+        scores = [_simple_score(s) for s in sentences]
+
+    ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+    selected = [sentences[i] for i in ranked[: max_lines * 3]]
+    # dedupe and keep up to max_lines
+    out = []
+    seen = set()
+    for s in selected:
+        key = s.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(s)
+        if len(out) >= max_lines:
+            break
+    return out
+
+
+def _simple_score(s: str) -> float:
+    words = re.findall(r"\w+", s.lower())
+    if not words:
+        return 0.0
+    freq = {}
+    for w in words:
+        freq[w] = freq.get(w, 0) + 1
+    score = sum(1.0 / math.sqrt(v) for v in freq.values())
+    score *= min(1.5, len(words) / 10)
+    return score
+
+
+def _trim_summary(text: str, max_chars: int) -> str:
+    t = text.strip()
+    if len(t) <= max_chars:
+        return t
+    cut = t[: max_chars]
+    # try to end at sentence boundary
+    idx = cut.rfind('.')
+    if idx > int(max_chars * 0.5):
+        return cut[: idx + 1].strip() + '…'
+    # else cut on word boundary
+    safe = cut.rsplit(' ', 1)[0].rstrip('.,;:')
+    return safe + '…'
+
+
+def _llm_summarize(text: str, *, model: str = 'gpt-3.5-turbo', max_words: int = 120) -> Optional[str]:
+    """Optional abstractive summarizer using internal ChatClient wrapper.
+
+    Returns None if LLM client is not available/configured.
+    """
+    try:
+        # Lazy import to avoid hard dependency
+        from scoring.llm_client import ChatClient
+    except Exception:
+        return None
+    prompt = (
+        f"Write a concise {max_words}-word human-readable summary (1-2 lines) of the following content.\n\nContent:\n{text}\n\nSummary:")
+    client = ChatClient()
+    try:
+        resp = client.chat(model=model, messages=[{"role": "user", "content": prompt}], max_tokens=300)
+        return resp.get('text') or resp.get('content') or None
+    except Exception:
+        return None
 
 class MarkdownReportGenerator:
     """Generates Markdown reports for AR analysis"""
@@ -64,10 +244,13 @@ class MarkdownReportGenerator:
         
         # Recommendations
         content.append(self._create_recommendations(report_data))
-        
+
+        # Appendix (per-item diagnostics)
+        content.append(self._create_appendix(report_data))
+
         # Footer
         content.append(self._create_footer(report_data))
-        
+
         return "\n\n".join(content)
     
     def _create_header(self, report_data: Dict[str, Any]) -> str:
@@ -138,51 +321,119 @@ class MarkdownReportGenerator:
         visuals_block = "\n\n".join(visuals_md)
 
         # Include a short list of example items (up to 3) for the executive.
-        # Select examples to represent all sources when possible and include a short description and URL.
+        # Prefer the detailed per-item diagnostics from the appendix when available
+        # so we can show title, description, short analysis, and link.
         examples_md = ''
+        appendix = report_data.get('appendix') or []
         items = report_data.get('items', [])
-        if items:
-            max_examples = 3
-            # Determine available sources in order of report 'sources' preference or by items
-            preferred_sources = report_data.get('sources') or sorted({it.get('source') for it in items if it.get('source')})
+        max_examples = 3
+
+        def _get_meta_from_item(it):
+            meta = it.get('meta') or {}
+            # meta may be a JSON string in some cases
+            if isinstance(meta, str):
+                try:
+                    import json as _json
+                    meta = _json.loads(meta) if meta else {}
+                except Exception:
+                    meta = {}
+            return meta if isinstance(meta, dict) else {}
+
+        # Choose candidate pool: prefer appendix (richer), fallback to items
+        pool = appendix if appendix else items
+        if pool:
+            # Build a mapping of sources in preferred order
+            preferred_sources = report_data.get('sources') or sorted({it.get('source') for it in pool if it.get('source')})
 
             selected = []
             # Try to pick at least one example per source (up to max_examples)
             for src in preferred_sources:
                 if len(selected) >= max_examples:
                     break
-                for it in items:
+                for it in pool:
                     if it.get('source') == src and it not in selected:
                         selected.append(it)
                         break
 
-            # Fill remaining slots with top-scoring items
+            # Fill remaining slots with top-scoring items (highest final_score)
             if len(selected) < max_examples:
-                for it in items:
+                remaining = [it for it in pool if it not in selected]
+                try:
+                    remaining.sort(key=lambda x: float(x.get('final_score') or 0.0), reverse=True)
+                except Exception:
+                    pass
+                for it in remaining:
                     if len(selected) >= max_examples:
                         break
-                    if it not in selected:
-                        selected.append(it)
+                    selected.append(it)
 
             example_lines = []
             for ex in selected:
-                meta = ex.get('meta') or {}
-                title = meta.get('title') or meta.get('source_url') or ex.get('content_id')
-                score = ex.get('final_score', 0.0)
-                label = ex.get('label', '')
-                # short description/snippet if available
-                desc = meta.get('description') or meta.get('snippet') or meta.get('summary') or ''
-                if desc:
-                    desc = desc.strip()
-                    if len(desc) > 240:
-                        desc = desc[:237].rstrip() + '...'
-                url = meta.get('source_url') or meta.get('url') or ''
+                meta = _get_meta_from_item(ex)
+                # Robust title fallback: meta title/name/og/headline, then first words of body, then content_id
+                title = (
+                    meta.get('title') or meta.get('name') or meta.get('headline') or meta.get('og:title')
+                    or (meta.get('source_url') if meta.get('source_url') and isinstance(meta.get('source_url'), str) else None)
+                )
+                if not title:
+                    # Try to derive from body/snippet
+                    body_text = (meta.get('body') or meta.get('description') or meta.get('snippet') or ex.get('body') or '')
+                    if body_text:
+                        title = ' '.join(body_text.strip().split()[:7]) + ('...' if len(body_text.split()) > 7 else '')
+                    else:
+                        title = ex.get('content_id')
+                score = float(ex.get('final_score', 0.0) or 0.0)
+                label = (ex.get('label') or '').title()
+                # description/snippet
+                raw_desc = meta.get('description') or meta.get('snippet') or meta.get('summary') or ''
+                # Optionally use LLM for executive examples (small curated set)
+                use_llm = bool(report_data.get('use_llm_for_examples') or report_data.get('use_llm_for_descriptions'))
+                desc = None
+                if use_llm:
+                    # prefer LLM abstractive summary for the executive example
+                    try:
+                        desc_llm = _llm_summarize(raw_desc or clean_text_for_llm(meta), model=report_data.get('llm_model', 'gpt-3.5-turbo'), max_words=120)
+                        if desc_llm:
+                            # Append an explicit provenance label for clarity
+                            desc = desc_llm.strip()
+                            desc += f" (Generated by {report_data.get('llm_model', 'gpt-3.5-turbo')})"
+                    except Exception:
+                        desc = None
+                if not desc:
+                    # fallback to extractive summarizer
+                    # Prefer body when snippet is thin/noisy
+                    body_text = meta.get('body') or ex.get('body') or ''
+                    desc = _summarize_text(raw_desc or body_text, max_lines=2, max_chars=240)
 
-                line = f"- {title} — {label.title()} ({score:.1f})"
+                # Short analysis: list top 2 dimension signals
+                dims = ex.get('dimension_scores') or {}
+                dims_parsed = {}
+                if isinstance(dims, dict):
+                    for k, v in dims.items():
+                        try:
+                            dims_parsed[k] = float(v)
+                        except Exception:
+                            pass
+                top_dims = sorted(dims_parsed.items(), key=lambda x: x[1], reverse=True)[:2]
+                top_dims_str = ', '.join([f"{k.title()}: {v:.2f}" for k, v in top_dims]) if top_dims else ''
+                analysis = f"Label: {label} ({score:.1f})"
+                if top_dims_str:
+                    analysis += f" — Key signals: {top_dims_str}"
+
+                # Ensure we expose some useful URL when available (terms/privacy may indicate domain)
+                url = meta.get('source_url') or meta.get('url') or meta.get('source_link') or ''
+                if not url:
+                    # Try platform id or fall back to terms/privacy links if they point to same site
+                    url = meta.get('platform_id') or ''
+                    if not url:
+                        # prefer privacy/terms as a last-resort visited URL
+                        url = meta.get('privacy') or meta.get('terms') or ''
+
+                line = f"- **{title}**\n\n  {analysis}"
                 if desc:
-                    line += f"\n  \n  Description: {desc}"
+                    line += f"\n\n  Description: {desc}"
                 if url:
-                    line += f"\n  \n  URL: {url}"
+                    line += f"\n\n  Link: {url}"
 
                 example_lines.append(line)
 
@@ -500,6 +751,271 @@ The tool supports additional sources (Reddit, Amazon, YouTube, Yelp) in other ru
 ---
 
 *This report is confidential and proprietary. For questions or additional analysis, contact the Authenticity Ratio team.*"""
+
+    def _create_appendix(self, report_data: Dict[str, Any]) -> str:
+        """Render an appendix with per-item diagnostics if available"""
+        appendix = report_data.get('appendix', []) or []
+
+        # If pipeline didn't attach a rich appendix, fall back to the items list
+        # which contains the minimal per-item summaries (meta, final_score, label).
+        items_fallback = report_data.get('items', []) or []
+        if not appendix and not items_fallback:
+            return "## Appendix: Per-item Diagnostics\n\n*No per-item diagnostics available for this run.*"
+
+    # Support a mode where only the most egregious examples are shown.
+        egregious_only = bool(report_data.get('appendix_egregious_only') or report_data.get('appendix_mode') == 'egregious')
+        limit = int(report_data.get('appendix_limit', 10) or 10)
+        if egregious_only:
+            # Define egregious as items labeled 'inauthentic' or with very low final_score
+            def is_egregious(it: Dict[str, Any]) -> bool:
+                lbl = (it.get('label') or '').lower()
+                final = float(it.get('final_score') or 0.0)
+                return lbl == 'inauthentic' or final <= 40.0
+
+            filtered = [it for it in appendix if is_egregious(it)]
+            # Sort by ascending final score (worst first)
+            filtered.sort(key=lambda x: float(x.get('final_score') or 0.0))
+            appendix = filtered[:limit]
+
+        lines = ["## Appendix: Per-item Diagnostics\n\nThis appendix lists every analyzed item with a concise per-item diagnostic including title, description, visited URL, final score, and rationale.\n"]
+
+        # Choose which source to iterate: prefer full appendix entries, otherwise fall back to items.
+        render_source = appendix if appendix else items_fallback
+
+        for item in render_source:
+            # Normalize access to fields whether item came from appendix or items list
+            cid = item.get('content_id') or item.get('content_id') or item.get('id') or 'unknown'
+            meta = item.get('meta') or {}
+            # meta might be a JSON string in some cases
+            if isinstance(meta, str):
+                try:
+                    import json as _json
+                    meta = _json.loads(meta) if meta else {}
+                except Exception:
+                    meta = {}
+
+            # If scorer attached an 'orig_meta' wrapper (preserved original fetch meta),
+            # prefer values from there when top-level meta fields are missing.
+            try:
+                orig_meta = meta.get('orig_meta') if isinstance(meta, dict) else None
+                if isinstance(orig_meta, str):
+                    try:
+                        import json as _json
+                        orig_meta = _json.loads(orig_meta)
+                    except Exception:
+                        orig_meta = None
+            except Exception:
+                orig_meta = None
+
+            if isinstance(orig_meta, dict):
+                # backfill common fields from orig_meta if missing
+                for k in ('title', 'name', 'description', 'snippet', 'body', 'source_url', 'url', 'terms', 'privacy'):
+                    if k not in meta or not meta.get(k):
+                        try:
+                            if orig_meta.get(k):
+                                meta[k] = orig_meta.get(k)
+                        except Exception:
+                            continue
+
+            title = meta.get('title') or meta.get('name') or meta.get('headline') or meta.get('og:title') or (item.get('source') or '') + ' - ' + (cid or '')
+
+            # Prefer body content for description when snippet appears noisy (multiple short fragments/menus)
+            raw_desc = meta.get('description') or meta.get('snippet') or meta.get('summary') or ''
+            body_candidate = meta.get('body') or item.get('body') or ''
+
+            def _is_noisy_snippet(s: str) -> bool:
+                if not s:
+                    return False
+                # Split on common separators; if many short fragments exist, it's noisy
+                parts = re.split(r'[\n\r\t\-•,;…]+', s)
+                parts = [p.strip() for p in parts if p.strip()]
+                short_fragments = sum(1 for p in parts if len(p) < 40)
+                if len(parts) >= 4 and short_fragments >= 4:
+                    return True
+                # also consider many languages / emoji-like tokens as noisy
+                non_alpha = sum(1 for ch in s if not (ch.isalnum() or ch.isspace()))
+                if non_alpha > max(10, len(s) * 0.05):
+                    return True
+                return False
+
+            desc_source = raw_desc
+            if raw_desc and _is_noisy_snippet(raw_desc) and body_candidate:
+                desc_source = body_candidate
+
+            # Allow LLM-generated descriptions when requested in report_data
+            use_llm = bool(report_data.get('use_llm_for_descriptions') or report_data.get('use_llm_for_examples'))
+            description = None
+            if use_llm:
+                try:
+                    desc_llm = _llm_summarize(desc_source or clean_text_for_llm(meta), model=report_data.get('llm_model', 'gpt-3.5-turbo'), max_words=80)
+                    if desc_llm:
+                        description = desc_llm.strip() + f" (Generated by {report_data.get('llm_model', 'gpt-3.5-turbo')})"
+                except Exception:
+                    description = None
+            if not description:
+                # Try to produce a summary from body/snippet, and if still empty, synthesize a minimal description
+                description = _summarize_text(desc_source or body_candidate or meta.get('snippet') or '', max_lines=2, max_chars=240)
+                if not description:
+                    # Synthesize a short description using available metadata
+                    parts = []
+                    domain = ''
+                    try:
+                        from urllib.parse import urlparse
+                        vurl = meta.get('source_url') or meta.get('url') or meta.get('privacy') or meta.get('terms') or ''
+                        if vurl:
+                            domain = urlparse(vurl).netloc
+                    except Exception:
+                        domain = ''
+                    if domain:
+                        parts.append(f"Page on {domain}")
+                    if meta.get('privacy'):
+                        parts.append('Privacy policy found')
+                    if meta.get('terms'):
+                        parts.append('Terms of service found')
+                    if meta.get('content_type'):
+                        parts.append(f"Content type: {meta.get('content_type')}")
+                    description = ("; ".join(parts)) if parts else ''
+            visited_url = meta.get('source_url') or meta.get('url') or meta.get('source_link') or ''
+            # Robust visited URL fallback: platform_id, terms/privacy, or try to pull from item-level fields
+            if not visited_url:
+                visited_url = meta.get('platform_id') or item.get('platform_id') or item.get('url') or ''
+                if not visited_url:
+                    visited_url = meta.get('privacy') or meta.get('terms') or ''
+            # Last-resort: scan any meta/body text for the first http(s) URL and use it
+            if not visited_url:
+                try:
+                    import json as _json
+                    combined = ''
+                    try:
+                        combined = _json.dumps(meta) if meta else ''
+                    except Exception:
+                        combined = str(meta)
+                    if not combined and body_candidate:
+                        combined = body_candidate
+                    # look for http(s) links, avoiding common trailing punctuation
+                    m = re.search(r"https?://[^\s\)\]\'>]+", combined or '')
+                    if m:
+                        visited_url = m.group(0)
+                except Exception:
+                    pass
+            score = item.get('final_score') if item.get('final_score') is not None else item.get('final', None) or 0.0
+            label = (item.get('label') or item.get('class_label') or '').title()
+
+            # Build a natural-language rationale using dimension signals, applied rules, and metadata cues
+            rationale_sentences = []
+            dims = item.get('dimension_scores') or {}
+            if isinstance(dims, dict) and dims:
+                # Identify weakest dimensions
+                try:
+                    dim_items = [(k, float(v)) for k, v in dims.items() if v is not None]
+                    dim_items.sort(key=lambda x: x[1])
+                    weakest = dim_items[:2]
+                    best = dim_items[-1] if dim_items else None
+                    if weakest:
+                        w_names = ', '.join([f"{n.title()} ({v:.2f})" for n, v in weakest])
+                        rationale_sentences.append(f"Low signals in {w_names} contributed to the lower score.")
+                    if best and best[1] >= 0.8:
+                        rationale_sentences.append(f"Strong {best[0].title()} signal ({best[1]:.2f}) partially offset weaknesses.")
+                except Exception:
+                    pass
+
+            # Meta-based cues (missing Terms/Privacy or missing meta tags)
+            try:
+                if isinstance(meta, dict):
+                    # Check for presence of common site metadata
+                    has_terms = bool(meta.get('terms') or meta.get('terms_url'))
+                    has_privacy = bool(meta.get('privacy') or meta.get('privacy_url'))
+                    has_og = bool(meta.get('og:title') or meta.get('og:description') or meta.get('og'))
+                    # If explicit meta flags are missing, scan the body text for common footer links/phrases
+                    if not has_terms or not has_privacy:
+                        body_text = ''
+                        try:
+                            body_text = (meta.get('body') or item.get('body') or '')
+                        except Exception:
+                            body_text = ''
+                        if body_text:
+                            lowered = body_text.lower()
+                            # Common English phrases
+                            if not has_terms and ('terms of service' in lowered or 'terms & conditions' in lowered or 'terms and conditions' in lowered or '/terms' in lowered or 'terms' in lowered):
+                                has_terms = True
+                            if not has_privacy and ('privacy policy' in lowered or 'privacy' in lowered or '/privacy' in lowered or 'politique de confidentialité' in lowered):
+                                has_privacy = True
+                    if not has_terms and not has_privacy:
+                        rationale_sentences.append('The site lacks visible Terms/Privacy links which reduces trust signals.')
+                    if not has_og:
+                        rationale_sentences.append('Missing open-graph metadata reduced the detectable content richness.')
+            except Exception:
+                pass
+
+            # Applied rules and reasons
+            rules = item.get('applied_rules') or []
+            if rules:
+                try:
+                    rule_msgs = []
+                    for r in rules:
+                        rid = r.get('id') or r.get('rule') or 'rule'
+                        eff = r.get('effect', '')
+                        reason = r.get('reason') or ''
+                        rule_msgs.append(f"{rid} {eff}{(': ' + reason) if reason else ''}")
+                    if rule_msgs:
+                        rationale_sentences.append('Applied rules: ' + '; '.join(rule_msgs))
+                except Exception:
+                    pass
+
+            # LLM annotations if present
+            try:
+                if isinstance(meta, dict) and meta.get('_llm_classification'):
+                    llm = meta.get('_llm_classification')
+                    lab = llm.get('label') or ''
+                    conf = llm.get('confidence')
+                    rationale_sentences.append(f"LLM classified this item as {lab} (conf={conf}).")
+            except Exception:
+                pass
+
+            rationale = ' '.join(rationale_sentences) if rationale_sentences else ''
+
+            # Render item block with explicit Title bullet
+            # Provide more informative fallbacks for description/visited URL
+            desc_display = description if description else ''
+            if not desc_display:
+                terms_link = meta.get('terms') or meta.get('terms_url')
+                priv_link = meta.get('privacy') or meta.get('privacy_url')
+                if terms_link or priv_link:
+                    parts = []
+                    if terms_link:
+                        parts.append(f"Terms: {terms_link}")
+                    if priv_link:
+                        parts.append(f"Privacy: {priv_link}")
+                    desc_display = "Page content was thin; found: " + "; ".join(parts)
+                else:
+                    desc_display = '*No description available*'
+
+            if visited_url:
+                visited_display = visited_url
+            else:
+                # show any footer links when the main visited URL is unavailable
+                terms_link = meta.get('terms') or meta.get('terms_url')
+                priv_link = meta.get('privacy') or meta.get('privacy_url')
+                if terms_link or priv_link:
+                    parts = []
+                    if terms_link:
+                        parts.append(f"Terms: {terms_link}")
+                    if priv_link:
+                        parts.append(f"Privacy: {priv_link}")
+                    visited_display = "; ".join(parts)
+                else:
+                    visited_display = '*N/A*'
+
+            lines.append(
+                f"### {title}\n\n"
+                f"- Title: {title}\n"
+                f"- Description: {desc_display}\n"
+                f"- Visited URL: {visited_display}\n"
+                f"- Score: {float(score):.2f} | Label: **{label}**\n"
+                f"- Rationale:\n  {rationale if rationale else 'No detailed rationale available.'}\n\n---\n"
+            )
+
+        return "\n".join(lines)
 
     # --- Visual helpers -------------------------------------------------
     def _ensure_output_dir(self, report_data: Dict[str, Any]) -> str:

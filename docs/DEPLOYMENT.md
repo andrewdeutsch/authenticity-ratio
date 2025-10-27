@@ -322,6 +322,46 @@ aws logs describe-log-streams --log-group-name /ar-tool
 aws logs get-log-events --log-group-name /ar-tool --log-stream-name STREAM_NAME
 ```
 
+## Playwright (optional) and Crawling considerations
+
+Some websites use JavaScript-driven rendering, bot-challenges, or require executing client-side code to produce meaningful article text. The AR pipeline includes an optional Playwright fallback that will render pages in a headless browser when a normal HTTP fetch returns non-200 or yields thin content.
+
+Key points:
+- The Playwright fallback is opt-in. Enable it by setting env var `BRAVE_USE_PLAYWRIGHT=1`.
+- Playwright must be installed and browsers must be provisioned in the runtime environment. Example install steps:
+
+```bash
+pip install playwright
+playwright install
+```
+
+- The fallback always respects robots.txt. Before attempting any headful render, the pipeline fetches and parses `https://<host>/robots.txt` for the configured `AR_USER_AGENT` (defaults to `Mozilla/5.0 (compatible; ar-bot/1.0)`). If a URL is disallowed for that user-agent, the Playwright renderer will not be used for that URL.
+- If robots.txt cannot be fetched or parsed (timeouts, network errors), the pipeline defaults to permissive behavior and will attempt rendering. If you prefer conservative behavior (deny on robots fetch failure), set `AR_ROBOTS_FAIL_PERMISSIVE=0` in your environment and we can wire that logic in.
+
+CI and production notes:
+- Playwright adds native browser dependencies; for CI pipelines you can either:
+    - Install Playwright and browser binaries in the CI image (recommended), or
+    - Keep Playwright disabled in CI and enable it only for ad-hoc or scheduled runs that need rendering.
+- Example GitHub Actions step to install Playwright:
+
+```yaml
+- name: Install Playwright
+    run: |
+        pip install playwright
+        playwright install --with-deps
+```
+
+- Running Playwright in containerized or serverless environments may require elevated capabilities (e.g., shared memory settings or additional libraries). If you see rendering failures or crashes, consult Playwright's docs for platform-specific runtime requirements.
+
+Environment variables of interest:
+- `BRAVE_USE_PLAYWRIGHT` — Set to `1` to enable the Playwright fallback. Defaults to `0`.
+- `AR_USER_AGENT` — User agent string used for robots checks and requests. Defaults to `Mozilla/5.0 (compatible; ar-bot/1.0)`.
+- `AR_FETCH_RETRIES`, `AR_FETCH_BACKOFF` — Configure HTTP fetch retry behavior.
+- `AR_FETCH_DEBUG_DIR` — Directory to write raw fetch debug dumps (default `/tmp/ar_fetch_debug`).
+
+Security and compliance:
+- Respecting robots.txt is a safety measure but not a substitute for legal review. For large-scale crawling or commercial use, consult the target site's terms of service and consider contacting site owners for permission.
+
 ## Backup and Recovery
 
 ### 1. Data Backup
