@@ -794,7 +794,11 @@ The tool supports additional sources (Reddit, Amazon, YouTube, Yelp) in other ru
 
     # Support a mode where only the most egregious examples are shown.
         egregious_only = bool(report_data.get('appendix_egregious_only') or report_data.get('appendix_mode') == 'egregious')
-        limit = int(report_data.get('appendix_limit', 10) or 10)
+        # Default to showing ALL items (None = no limit), but allow override
+        limit = report_data.get('appendix_limit', None)
+        if limit is not None:
+            limit = int(limit)
+
         if egregious_only:
             # Define egregious as items labeled 'inauthentic' or with very low final_score
             def is_egregious(it: Dict[str, Any]) -> bool:
@@ -805,16 +809,21 @@ The tool supports additional sources (Reddit, Amazon, YouTube, Yelp) in other ru
             filtered = [it for it in appendix if is_egregious(it)]
             # Sort by ascending final score (worst first)
             filtered.sort(key=lambda x: float(x.get('final_score') or 0.0))
-            appendix = filtered[:limit]
-
-        lines = ["## Appendix: Per-item Diagnostics\n\nThis appendix lists every analyzed item with a concise per-item diagnostic including title, description, visited URL, final score, and rationale.\n"]
+            appendix = filtered[:limit] if limit else filtered
+        elif limit:
+            # Apply limit if specified
+            appendix = appendix[:limit] if appendix else items_fallback[:limit]
 
         # Choose which source to iterate: prefer full appendix entries, otherwise fall back to items.
         render_source = appendix if appendix else items_fallback
 
+        total_count = len(render_source)
+        lines = [f"## Appendix: Per-item Diagnostics\n\nThis appendix lists all {total_count} analyzed items with detailed diagnostics including source, title, description, visited URL, final score, and rationale.\n"]
+
         for item in render_source:
             # Normalize access to fields whether item came from appendix or items list
             cid = item.get('content_id') or item.get('content_id') or item.get('id') or 'unknown'
+            source = item.get('source') or item.get('src') or 'unknown'
             meta = item.get('meta') or {}
             # meta might be a JSON string in some cases
             if isinstance(meta, str):
@@ -1038,11 +1047,12 @@ The tool supports additional sources (Reddit, Amazon, YouTube, Yelp) in other ru
 
             lines.append(
                 f"### {title}\n\n"
-                f"- Title: {title}\n"
-                f"- Description: {desc_display}\n"
-                f"- Visited URL: {visited_display}\n"
-                f"- Score: {float(score):.2f} | Label: **{label}**\n"
-                f"- Rationale:\n  {rationale if rationale else 'No detailed rationale available.'}\n\n---\n"
+                f"- **Source**: {source.title()}\n"
+                f"- **Title**: {title}\n"
+                f"- **Description**: {desc_display}\n"
+                f"- **Visited URL**: {visited_display}\n"
+                f"- **Score**: {float(score):.2f} | **Label**: {label}\n"
+                f"- **Rationale**: {rationale if rationale else 'No detailed rationale available.'}\n\n---\n"
             )
 
         return "\n".join(lines)
