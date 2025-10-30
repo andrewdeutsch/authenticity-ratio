@@ -777,7 +777,8 @@ This report provides actionable insights for brand health and content strategy b
 
 ---
 
-*This report is confidential and proprietary. For questions or additional analysis, contact the Authenticity Ratio team.*
+*This report is confidential and proprietary. For questions or additional analysis, contact the Authenticity Ratio team.*"""
+
 
     def _create_appendix(self, report_data: Dict[str, Any]) -> str:
         """Render an appendix with per-item diagnostics if available"""
