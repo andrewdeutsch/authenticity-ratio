@@ -256,23 +256,25 @@ class MarkdownReportGenerator:
     def _build_markdown_content(self, report_data: Dict[str, Any]) -> str:
         """Build the complete markdown content"""
         content = []
-        
-        # Title and metadata
+
+        # Title
         content.append(self._create_header(report_data))
-        content.append(self._create_metadata(report_data))
-        
-        # Executive summary
+
+        # Executive summary FIRST (most important - leads with key insights)
         content.append(self._create_executive_summary(report_data))
-        
+
+        # Metadata SECOND (collapsible reference details)
+        content.append(self._create_metadata(report_data))
+
         # Authenticity Ratio analysis
         content.append(self._create_ar_analysis(report_data))
-        
+
         # Dimension breakdown
         content.append(self._create_dimension_breakdown(report_data))
-        
+
         # Classification analysis
         content.append(self._create_classification_analysis(report_data))
-        
+
         # Recommendations
         content.append(self._create_recommendations(report_data))
 
@@ -287,25 +289,32 @@ class MarkdownReportGenerator:
     def _create_header(self, report_data: Dict[str, Any]) -> str:
         """Create report header"""
         brand_id = report_data.get('brand_id', 'Unknown Brand')
-        run_id = report_data.get('run_id', 'unknown')
-        generated_at = report_data.get('generated_at', datetime.now().isoformat())
-        return f"# Authenticity Ratio™ Report\n\n## Brand: {brand_id}\n\n*Run ID:* `{run_id}`  \n*Generated:* {generated_at}"
+        return f"# Authenticity Ratio™ Report\n\n## Brand: {brand_id}"
     
     def _create_metadata(self, report_data: Dict[str, Any]) -> str:
-        """Create metadata section"""
+        """Create metadata section (collapsible)"""
         run_id = report_data.get('run_id', 'Unknown')
         generated_at = report_data.get('generated_at', datetime.now().isoformat())
         rubric_version = report_data.get('rubric_version', 'v1.0')
-        
-        return f"""## Report Metadata
+        total_items = report_data.get('authenticity_ratio', {}).get('total_items', 0)
+
+        return f"""---
+
+<details>
+<summary><b>📋 Report Metadata</b> (click to expand)</summary>
 
 | Field | Value |
 |-------|-------|
-| Report ID | `{run_id}` |
-| Generated | {generated_at} |
-| Analysis Period | Current Run |
-| Data Sources | {', '.join(report_data.get('sources', [])) if report_data.get('sources') else 'Unknown'} |
-| Rubric Version | {rubric_version} |"""
+| **Run ID** | `{run_id}` |
+| **Generated** | {generated_at} |
+| **Items Analyzed** | {total_items:,} |
+| **Data Sources** | {', '.join(report_data.get('sources', [])) if report_data.get('sources') else 'Unknown'} |
+| **Rubric Version** | {rubric_version} |
+| **Methodology** | See [AR_METHODOLOGY.md](../docs/AR_METHODOLOGY.md) |
+
+</details>
+
+---"""
     
     def _create_executive_summary(self, report_data: Dict[str, Any]) -> str:
         """Create executive summary section"""
@@ -751,36 +760,24 @@ The overall Authenticity Ratio is calculated as a weighted average of all five d
         """Create report footer"""
         generated_at = report_data.get('generated_at', datetime.now().isoformat())
         brand_id = report_data.get('brand_id', 'Unknown Brand')
-        
+
         return f"""---
 
 ## About This Report
 
-**Authenticity Ratio™** is a proprietary KPI that measures authentic vs. inauthentic brand-linked content across channels. This analysis provides actionable insights for brand health and content strategy.
+**Authenticity Ratio™** is a proprietary KPI that measures authentic vs. inauthentic brand-linked content across digital channels.
 
-### Methodology
+This report provides actionable insights for brand health and content strategy based on the **5D Trust Dimensions** framework.
 
-This report analyzes content using the 5D Trust Dimensions framework:
-- **Provenance**: Origin clarity and traceability
-- **Verification**: Factual accuracy and consistency  
-- **Transparency**: Clear disclosures and honesty
-- **Coherence**: Consistency with brand messaging
-- **Resonance**: Cultural fit and authentic engagement
+### Learn More
 
-### Data Sources
-
-This run used the following data sources: {', '.join(report_data.get('sources', [])) if report_data.get('sources') else 'Unknown'}.\
-The tool supports additional sources (Reddit, Amazon, YouTube, Yelp) in other runs; this section is populated per-run.
-
-### Report Generation
-
+- **[AR Methodology & Technical Details](../docs/AR_METHODOLOGY.md)** - Complete methodology, formulas, and scoring criteria
+- **Tool Version**: v1.0
 - **Generated**: {generated_at}
-- **Brand**: {brand_id}
-- **Version**: Authenticity Ratio Tool v1.0
 
 ---
 
-*This report is confidential and proprietary. For questions or additional analysis, contact the Authenticity Ratio team.*"""
+*This report is confidential and proprietary. For questions or additional analysis, contact the Authenticity Ratio team.*
 
     def _create_appendix(self, report_data: Dict[str, Any]) -> str:
         """Render an appendix with per-item diagnostics if available"""
