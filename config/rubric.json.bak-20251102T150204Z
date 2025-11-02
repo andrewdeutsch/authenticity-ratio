@@ -1,0 +1,1861 @@
+{
+  "version": "1.0",
+  "source": "imported_from_github_csv",
+  "dimension_weights": {
+    "provenance": 0.14705882352941177,
+    "resonance": 0.17647058823529413,
+    "coherence": 0.2647058823529412,
+    "transparency": 0.16176470588235295,
+    "verification": 0.25
+  },
+  "thresholds": {
+    "authentic": 75,
+    "suspect": 40
+  },
+  "attributes": [
+    {
+      "id": "ai_vs_human_labeling_clarity",
+      "label": "AI vs Human Labeling Clarity",
+      "match_meta": [
+        "human",
+        "labeling",
+        "clarity"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "AI vs Human Labeling Clarity",
+        "How to Collect (API/Scrape)": "Scrape for meta tags or labels ('AI-generated', 'human-created')",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if clearly labeled; 5 if ambiguous; 1 if missing",
+        "Thresholds / Flags": "Flag: missing label",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "C2PA metadata, HTML schema",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "ai_generated_media_label_check",
+      "label": "AI-Generated Media Label Check",
+      "match_meta": [
+        "generated",
+        "media",
+        "label",
+        "check"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "AI-Generated Media Label Check",
+        "How to Collect (API/Scrape)": "Detect C2PA/watermark/source chain on images, video, and audio",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if verified; 1 if absent",
+        "Thresholds / Flags": "Flag: no provenance",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "C2PA verifiers, watermark detectors",
+        "Modality": "Image/Video/Audio",
+        "Channel/ Platform": "All social + web",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned/Social/Marketplace/Email"
+      }
+    },
+    {
+      "id": "author_brand_identity_verified",
+      "label": "Author/brand identity verified",
+      "match_meta": [
+        "author",
+        "brand",
+        "identity",
+        "verified"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "Author/brand identity verified",
+        "How to Collect (API/Scrape)": "Extract byline; cross-check against verified accounts",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if verified; 3 if unknown",
+        "Thresholds / Flags": "Flag: unknown author",
+        "Frequency": "per article",
+        "Notes / Example Tools": "Twitter/X, LinkedIn, site schema.org/Person",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "c2pa_cai_manifest_present",
+      "label": "C2PA/CAI manifest present",
+      "match_meta": [
+        "c2pa",
+        "cai",
+        "manifest",
+        "present"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "C2PA/CAI manifest present",
+        "How to Collect (API/Scrape)": "HTTP HEAD/GET; parse content-type & manifest; CAI verify API",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if present & valid; 5 if present but invalid; 1 if missing",
+        "Thresholds / Flags": "Flag: missing or invalid manifest",
+        "Frequency": "per fetch",
+        "Notes / Example Tools": "Adobe CAI, C2PA parsers",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "canonical_url_matches_declared_source",
+      "label": "Canonical URL matches declared source",
+      "match_meta": [
+        "canonical",
+        "url",
+        "matches",
+        "declared",
+        "source"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "Canonical URL matches declared source",
+        "How to Collect (API/Scrape)": "Scrape <link rel='canonical'> and compare",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if exact match; 5 if partial; 1 if mismatch",
+        "Thresholds / Flags": "Flag: mismatch",
+        "Frequency": "per page",
+        "Notes / Example Tools": "Standard HTML parse",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "creator_brand_disclosure_match",
+      "label": "Creator-Brand Disclosure Match",
+      "match_meta": [
+        "creator",
+        "brand",
+        "disclosure",
+        "match"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "Creator-Brand Disclosure Match",
+        "How to Collect (API/Scrape)": "Cross-verify paid partnership or sponsorship labels with creator & brand disclosures (incl. AI assistance)",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if disclosures match; 1 if missing/mismatch",
+        "Thresholds / Flags": "Flag: missing or mismatched disclosure",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "Platform labels, C2PA, influencer registry",
+        "Modality": "Text/Image/Video",
+        "Channel/ Platform": "Instagram, TikTok, YouTube",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
+      }
+    },
+    {
+      "id": "digital_watermark_fingerprint_detected",
+      "label": "Digital watermark/fingerprint detected",
+      "match_meta": [
+        "digital",
+        "watermark",
+        "fingerprint",
+        "detected"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "Digital watermark/fingerprint detected",
+        "How to Collect (API/Scrape)": "Download asset; run watermark detector",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if strong match; 1 if none",
+        "Thresholds / Flags": "Flag: weak/forged watermark",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "Digimarc, Truepic-like APIs",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "duplicate_perceptual_hash_match_rate",
+      "label": "Duplicate/perceptual hash match rate",
+      "match_meta": [
+        "duplicate",
+        "perceptual",
+        "hash",
+        "match",
+        "rate"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "Duplicate/perceptual hash match rate",
+        "How to Collect (API/Scrape)": "Compute pHash; compare to corpus",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if unique; lower as dup rate rises",
+        "Thresholds / Flags": "Flag: >0.8 similarity",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "OpenCV, imagehash",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "exif_metadata_integrity",
+      "label": "EXIF/metadata integrity",
+      "match_meta": [
+        "exif",
+        "metadata",
+        "integrity"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "EXIF/metadata integrity",
+        "How to Collect (API/Scrape)": "Read EXIF; check editing history",
+        "Field Type": "categorical",
+        "Scoring Rule (1–10)": "10 if intact; 5 if stripped; 1 if spoofed",
+        "Thresholds / Flags": "Flag: spoofed EXIF",
+        "Frequency": "per image/video",
+        "Notes / Example Tools": "exiftool-like libs",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "first_seen_timestamp_crawl",
+      "label": "First-seen timestamp (crawl)",
+      "match_meta": [
+        "first",
+        "seen",
+        "timestamp",
+        "crawl"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "First-seen timestamp (crawl)",
+        "How to Collect (API/Scrape)": "Index with first_crawl_time",
+        "Field Type": "datetime",
+        "Scoring Rule (1–10)": "Higher score for older original; lower if younger than duplicates",
+        "Thresholds / Flags": "Flag: younger than duplicates",
+        "Frequency": "daily",
+        "Notes / Example Tools": "Custom crawler index",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "modification_timestamp_trail",
+      "label": "Modification Timestamp Trail",
+      "match_meta": [
+        "modification",
+        "timestamp",
+        "trail"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "Modification Timestamp Trail",
+        "How to Collect (API/Scrape)": "Scrape for last modified or published timestamp",
+        "Field Type": "datetime",
+        "Scoring Rule (1–10)": "10 if visible; 1 if missing",
+        "Thresholds / Flags": "Flag: missing or hidden timestamp",
+        "Frequency": "per fetch",
+        "Notes / Example Tools": "Sitemap, metadata",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "source_domain_trust_baseline",
+      "label": "Source domain trust baseline",
+      "match_meta": [
+        "source",
+        "domain",
+        "trust",
+        "baseline"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "Source domain trust baseline",
+        "How to Collect (API/Scrape)": "Resolve domain score from curated list",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "Map domain score 1–10",
+        "Thresholds / Flags": "Flag: domains below 4",
+        "Frequency": "monthly",
+        "Notes / Example Tools": "NewsGuard-style lists (internal)",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "accessibility_compliance_wcag",
+      "label": "Accessibility compliance (WCAG)",
+      "match_meta": [
+        "accessibility",
+        "compliance",
+        "wcag"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Accessibility compliance (WCAG)",
+        "How to Collect (API/Scrape)": "Run automated a11y audit",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if AA+; 7 if A; 3 if fails",
+        "Thresholds / Flags": "Flag: fails key WCAG checkpoints",
+        "Frequency": "quarterly",
+        "Notes / Example Tools": "axe-core API",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "choice_accessibility_settings",
+      "label": "Choice & Accessibility Settings",
+      "match_meta": [
+        "choice",
+        "accessibility",
+        "settings"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Choice & Accessibility Settings",
+        "How to Collect (API/Scrape)": "Detect presence of accessibility toggles, personalization controls",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if present; 1 if absent",
+        "Thresholds / Flags": "Flag: no controls",
+        "Frequency": "quarterly",
+        "Notes / Example Tools": "WCAG + UI scraper",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "community_alignment_index",
+      "label": "Community Alignment Index",
+      "match_meta": [
+        "community",
+        "alignment",
+        "index"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Community Alignment Index",
+        "How to Collect (API/Scrape)": "Graph-community overlap between content values and engaged audience (hashtags, mentions)",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if high alignment; 1 if misaligned",
+        "Thresholds / Flags": "Flag: low alignment",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "Hashtag graph clustering, embeddings",
+        "Modality": "Text/Image/Video",
+        "Channel/ Platform": "TikTok, Instagram, YouTube, Reddit",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
+      }
+    },
+    {
+      "id": "creative_recency_vs_trend",
+      "label": "Creative recency vs trend",
+      "match_meta": [
+        "creative",
+        "recency",
+        "trend"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Creative recency vs trend",
+        "How to Collect (API/Scrape)": "Compare against trending topics list",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if aligned; 5 neutral; 1 tone-deaf",
+        "Thresholds / Flags": "Flag: negative trend collision",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "Trend APIs (internal)",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "cultural_context_alignment",
+      "label": "Cultural Context Alignment",
+      "match_meta": [
+        "cultural",
+        "context",
+        "alignment"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Cultural Context Alignment",
+        "How to Collect (API/Scrape)": "Detect mentions of local events, holidays, cultural references",
+        "Field Type": "categorical",
+        "Scoring Rule (1–10)": "10 if aligned; 1 if irrelevant",
+        "Thresholds / Flags": "Flag: mismatch cultural context",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "NER + trend APIs",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "cultural_reference_safety_check",
+      "label": "Cultural reference safety check",
+      "match_meta": [
+        "cultural",
+        "reference",
+        "safety",
+        "check"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Cultural reference safety check",
+        "How to Collect (API/Scrape)": "NER & knowledge base cross-check",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if safe; 1 if risky reference",
+        "Thresholds / Flags": "Flag: flagged entities",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "Custom KB checks",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "language_locale_match",
+      "label": "Language/locale match",
+      "match_meta": [
+        "language",
+        "locale",
+        "match"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Language/locale match",
+        "How to Collect (API/Scrape)": "Detect language; compare to user/market",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if match; 5 if multilingual supported; 1 if mismatch",
+        "Thresholds / Flags": "Flag: mismatch language",
+        "Frequency": "per fetch",
+        "Notes / Example Tools": "langdetect, fastText",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "modality_continuity_multichannel",
+      "label": "Modality continuity (multichannel)",
+      "match_meta": [
+        "modality",
+        "continuity",
+        "multichannel"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Modality continuity (multichannel)",
+        "How to Collect (API/Scrape)": "Track asset variants across channels",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if consistent copy/visual across channels",
+        "Thresholds / Flags": "Flag: breaks in sequence",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "UTM/ID stitching",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "mood_context_adaptation",
+      "label": "Mood & Context Adaptation",
+      "match_meta": [
+        "mood",
+        "context",
+        "adaptation"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Mood & Context Adaptation",
+        "How to Collect (API/Scrape)": "Compare sentiment and time-of-day with content tone",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if adaptive; 1 if static",
+        "Thresholds / Flags": "Flag: tone-time mismatch",
+        "Frequency": "daily",
+        "Notes / Example Tools": "Sentiment model + timestamp",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "personalization_relevance_embedding_similarity",
+      "label": "Personalization relevance (embedding similarity)",
+      "match_meta": [
+        "personalization",
+        "relevance",
+        "embedding",
+        "similarity"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Personalization relevance (embedding similarity)",
+        "How to Collect (API/Scrape)": "Embed user/context & content; cosine sim",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "Map sim to 1–10 scale",
+        "Thresholds / Flags": "Flag: sim < 0.3",
+        "Frequency": "per impression",
+        "Notes / Example Tools": "sentence-transformers",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "readability_grade_level_fit",
+      "label": "Readability grade level fit",
+      "match_meta": [
+        "readability",
+        "grade",
+        "level",
+        "fit"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Readability grade level fit",
+        "How to Collect (API/Scrape)": "Compute FKGL/SMOG vs audience",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if within target; 1 if off",
+        "Thresholds / Flags": "Flag: out-of-band",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "textstat",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "tone_sentiment_appropriateness",
+      "label": "Tone & sentiment appropriateness",
+      "match_meta": [
+        "tone",
+        "sentiment",
+        "appropriateness"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Tone & sentiment appropriateness",
+        "How to Collect (API/Scrape)": "Classifier vs brand tone guide",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if within band; 5 borderline; 1 off-tone",
+        "Thresholds / Flags": "Flag: off-tone",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "Text classification models",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "voice_sentiment_alignment",
+      "label": "Voice & Sentiment Alignment",
+      "match_meta": [
+        "voice",
+        "sentiment",
+        "alignment"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Resonance",
+        "Attribute (Objective Signal)": "Voice & Sentiment Alignment",
+        "How to Collect (API/Scrape)": "Ensure tone/emotion aligns with brand guidelines and context (time, topic, audience)",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if within tone band; 1 if off-band",
+        "Thresholds / Flags": "Flag: off-tone",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "Sentiment + prosody analysis",
+        "Modality": "Audio/Video",
+        "Channel/ Platform": "YouTube, TikTok, IVR/Voice bots",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned/Social"
+      }
+    },
+    {
+      "id": "brand_voice_consistency_score",
+      "label": "Brand voice consistency score",
+      "match_meta": [
+        "brand",
+        "voice",
+        "consistency",
+        "score"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Brand voice consistency score",
+        "How to Collect (API/Scrape)": "N-gram/embedding vs style corpus",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if z-score within band",
+        "Thresholds / Flags": "Flag: outlier",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "Embedding similarity",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "broken_link_rate",
+      "label": "Broken link rate",
+      "match_meta": [
+        "broken",
+        "link",
+        "rate"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Broken link rate",
+        "How to Collect (API/Scrape)": "Crawl & check HTTP codes",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if <1%; 1 if >10%",
+        "Thresholds / Flags": "Flag: >5% broken",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "Link checker",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "chatbot_vs_faq_answer_match",
+      "label": "Chatbot vs FAQ answer match",
+      "match_meta": [
+        "chatbot",
+        "faq",
+        "answer",
+        "match"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Chatbot vs FAQ answer match",
+        "How to Collect (API/Scrape)": "Compare LLM output to canonical answers",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if semantically equivalent",
+        "Thresholds / Flags": "Flag: divergence > threshold",
+        "Frequency": "daily",
+        "Notes / Example Tools": "RAG eval metrics",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "claim_consistency_across_pages",
+      "label": "Claim consistency across pages",
+      "match_meta": [
+        "claim",
+        "consistency",
+        "across",
+        "pages"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Claim consistency across pages",
+        "How to Collect (API/Scrape)": "Extract claims; fuzzy match & check contradictions",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if no contradictions; lower if found",
+        "Thresholds / Flags": "Flag: contradictions",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "NLI/contradiction models",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "design_system_token_usage",
+      "label": "Design system token usage",
+      "match_meta": [
+        "design",
+        "system",
+        "token",
+        "usage"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Design system token usage",
+        "How to Collect (API/Scrape)": "Parse CSS/JSON tokens; compare to registry",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if tokens >=90% match",
+        "Thresholds / Flags": "Flag: <70% match",
+        "Frequency": "monthly",
+        "Notes / Example Tools": "Design token registry",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "email_asset_consistency_check",
+      "label": "Email-Asset Consistency Check",
+      "match_meta": [
+        "email",
+        "asset",
+        "consistency",
+        "check"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Email-Asset Consistency Check",
+        "How to Collect (API/Scrape)": "Validate that email claims/pricing/creative match landing page and site at click-through time",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if consistent; 1 if contradictory",
+        "Thresholds / Flags": "Flag: contradiction or price mismatch",
+        "Frequency": "per campaign",
+        "Notes / Example Tools": "Link checker + semantic diff",
+        "Modality": "Text/Image",
+        "Channel/ Platform": "Email, Mobile inboxes",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Email"
+      }
+    },
+    {
+      "id": "engagement_to_trust_correlation",
+      "label": "Engagement-to-Trust Correlation",
+      "match_meta": [
+        "engagement",
+        "trust",
+        "correlation"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Engagement-to-Trust Correlation",
+        "How to Collect (API/Scrape)": "Ingest engagement metrics (CTR, dwell time, conversion)",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if high positive correlation; 1 if negative",
+        "Thresholds / Flags": "Flag: correlation < 0.3",
+        "Frequency": "monthly",
+        "Notes / Example Tools": "Analytics APIs (GA4, Mixpanel)",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "hesitation_moments",
+      "label": "Hesitation Moments",
+      "match_meta": [
+        "hesitation",
+        "moments"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Hesitation Moments",
+        "How to Collect (API/Scrape)": "Detect dwell/hover delay, back button or abandon rate",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if low hesitation; 1 if high",
+        "Thresholds / Flags": "Flag: >2s hover-before-click",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "UX session replay, heatmaps",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "human_escalation_path",
+      "label": "Human Escalation Path",
+      "match_meta": [
+        "human",
+        "escalation",
+        "path"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Human Escalation Path",
+        "How to Collect (API/Scrape)": "Detect live agent escalation paths or visible support options",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if available; 1 if absent",
+        "Thresholds / Flags": "Flag: no escalation",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "Support widget scraper",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "multimodal_consistency_score",
+      "label": "Multimodal Consistency Score",
+      "match_meta": [
+        "multimodal",
+        "consistency",
+        "score"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Multimodal Consistency Score",
+        "How to Collect (API/Scrape)": "Compare captions/titles vs transcript/voiceover vs on-screen text for semantic agreement",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if >0.9 semantic match; 1 if <0.5",
+        "Thresholds / Flags": "Flag: mismatch",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "ASR + embeddings (cosine)",
+        "Modality": "Video/Audio",
+        "Channel/ Platform": "TikTok, YouTube, Reels, Shorts",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
+      }
+    },
+    {
+      "id": "persistent_identifier_consistency",
+      "label": "Persistent Identifier Consistency",
+      "match_meta": [
+        "persistent",
+        "identifier",
+        "consistency"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Persistent Identifier Consistency",
+        "How to Collect (API/Scrape)": "Check continuity of IDs across content, domains, and time",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if consistent; 1 if broken",
+        "Thresholds / Flags": "Flag: missing IDs",
+        "Frequency": "monthly",
+        "Notes / Example Tools": "CMS metadata inspection",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "re_engagement_frequency",
+      "label": "Re-Engagement Frequency",
+      "match_meta": [
+        "engagement",
+        "frequency"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Re-Engagement Frequency",
+        "How to Collect (API/Scrape)": "Analyze user return rate and retention cohorts",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if high retention; 1 if low",
+        "Thresholds / Flags": "Flag: <10% returning users",
+        "Frequency": "monthly",
+        "Notes / Example Tools": "Cohort analysis via CRM/analytics",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "system_status_visibility",
+      "label": "System Status Visibility",
+      "match_meta": [
+        "system",
+        "status",
+        "visibility"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "System Status Visibility",
+        "How to Collect (API/Scrape)": "Scrape for 'status' page link or live system indicators",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if present; 1 if absent",
+        "Thresholds / Flags": "Flag: missing",
+        "Frequency": "monthly",
+        "Notes / Example Tools": "statuspage.io, system API",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "taxonomy_ontology_alignment",
+      "label": "Taxonomy/ontology alignment",
+      "match_meta": [
+        "taxonomy",
+        "ontology",
+        "alignment"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Taxonomy/ontology alignment",
+        "How to Collect (API/Scrape)": "Map categories to controlled vocab",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if 100% mapped; lower otherwise",
+        "Thresholds / Flags": "Flag: unmapped nodes",
+        "Frequency": "monthly",
+        "Notes / Example Tools": "Schema registry",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "temporal_continuity_versions",
+      "label": "Temporal continuity (versions)",
+      "match_meta": [
+        "temporal",
+        "continuity",
+        "versions"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Temporal continuity (versions)",
+        "How to Collect (API/Scrape)": "Track content version history",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if change log present & consistent",
+        "Thresholds / Flags": "Flag: missing change log",
+        "Frequency": "monthly",
+        "Notes / Example Tools": "CMS API",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "trust_fluctuation_index",
+      "label": "Trust Fluctuation Index",
+      "match_meta": [
+        "trust",
+        "fluctuation",
+        "index"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Trust Fluctuation Index",
+        "How to Collect (API/Scrape)": "Time-series sentiment volatility after content drops or controversies",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if low volatility post-event; 1 if high sustained volatility",
+        "Thresholds / Flags": "Flag: volatility spike",
+        "Frequency": "daily",
+        "Notes / Example Tools": "Social listening + sentiment time series",
+        "Modality": "Text/Image/Video",
+        "Channel/ Platform": "TikTok, Instagram, YouTube, Reddit, X",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
+      }
+    },
+    {
+      "id": "trust_score_delta_tracking",
+      "label": "Trust Score Delta Tracking",
+      "match_meta": [
+        "trust",
+        "score",
+        "delta",
+        "tracking"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Trust Score Delta Tracking",
+        "How to Collect (API/Scrape)": "Compare trust scores month-over-month",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if improvement; 1 if decline",
+        "Thresholds / Flags": "Flag: >10% drop",
+        "Frequency": "monthly",
+        "Notes / Example Tools": "Internal scoring database",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "version_history_completeness",
+      "label": "Version History Completeness",
+      "match_meta": [
+        "version",
+        "history",
+        "completeness"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Coherence",
+        "Attribute (Objective Signal)": "Version History Completeness",
+        "How to Collect (API/Scrape)": "Detect existence of change logs, prior versions, or archives",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if available; 1 if missing",
+        "Thresholds / Flags": "Flag: no version history",
+        "Frequency": "quarterly",
+        "Notes / Example Tools": "CMS/Repository APIs",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "ai_explainability_disclosure",
+      "label": "AI Explainability Disclosure",
+      "match_meta": [
+        "explainability",
+        "disclosure"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Transparency",
+        "Attribute (Objective Signal)": "AI Explainability Disclosure",
+        "How to Collect (API/Scrape)": "Detect 'why you're seeing this' or 'powered by' explanations",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if visible; 1 if absent",
+        "Thresholds / Flags": "Flag: missing explainability",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "schema.org + content parser",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "ai_generated_assisted_disclosure_present",
+      "label": "AI-generated/assisted disclosure present",
+      "match_meta": [
+        "generated",
+        "assisted",
+        "disclosure",
+        "present"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Transparency",
+        "Attribute (Objective Signal)": "AI-generated/assisted disclosure present",
+        "How to Collect (API/Scrape)": "Detect disclosure label/schema",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if present & clear; 1 if absent",
+        "Thresholds / Flags": "Flag: absent",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "schema.org/CreativeWork + custom",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "bot_disclosure_response_audit",
+      "label": "Bot Disclosure + Response Audit",
+      "match_meta": [
+        "bot",
+        "disclosure",
+        "response",
+        "audit"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Transparency",
+        "Attribute (Objective Signal)": "Bot Disclosure + Response Audit",
+        "How to Collect (API/Scrape)": "Evaluate whether AI/chatbots self-identify, cite sources, and provide recourse to a human",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if all three present; 1 if none",
+        "Thresholds / Flags": "Flag: missing disclosure or human path",
+        "Frequency": "per interaction",
+        "Notes / Example Tools": "LLM logs/UI inspection",
+        "Modality": "Agent/Text/Voice",
+        "Channel/ Platform": "Websites, Apps, Support, WhatsApp, Messenger",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned/Email/Social"
+      }
+    },
+    {
+      "id": "caption_subtitle_availability_accuracy",
+      "label": "Caption/Subtitle Availability & Accuracy",
+      "match_meta": [
+        "caption",
+        "subtitle",
+        "availability",
+        "accuracy"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Transparency",
+        "Attribute (Objective Signal)": "Caption/Subtitle Availability & Accuracy",
+        "How to Collect (API/Scrape)": "Check availability of captions/subtitles and alignment with ASR transcript",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if available & accurate; 1 if absent/inaccurate",
+        "Thresholds / Flags": "Flag: missing captions",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "ASR vs caption diff",
+        "Modality": "Video",
+        "Channel/ Platform": "YouTube, TikTok, Instagram Reels/Stories",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
+      }
+    },
+    {
+      "id": "consent_string_validity_iab_tcf",
+      "label": "Consent string validity (IAB TCF)",
+      "match_meta": [
+        "consent",
+        "string",
+        "validity",
+        "iab",
+        "tcf"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Transparency",
+        "Attribute (Objective Signal)": "Consent string validity (IAB TCF)",
+        "How to Collect (API/Scrape)": "Check CMP API for valid string",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if valid; 1 if invalid/missing",
+        "Thresholds / Flags": "Flag: invalid consent",
+        "Frequency": "per session",
+        "Notes / Example Tools": "CMP APIs",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "data_source_citations_for_claims",
+      "label": "Data source citations for claims",
+      "match_meta": [
+        "data",
+        "source",
+        "citations",
+        "for",
+        "claims"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Transparency",
+        "Attribute (Objective Signal)": "Data source citations for claims",
+        "How to Collect (API/Scrape)": "Parse footnotes/citations",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if cites verified sources",
+        "Thresholds / Flags": "Flag: no citations",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "Citation parser",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "ethical_position_visibility",
+      "label": "Ethical Position Visibility",
+      "match_meta": [
+        "ethical",
+        "position",
+        "visibility"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Transparency",
+        "Attribute (Objective Signal)": "Ethical Position Visibility",
+        "How to Collect (API/Scrape)": "Scrape for statements on ethics, fairness, sustainability",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if present; 1 if absent",
+        "Thresholds / Flags": "Flag: missing",
+        "Frequency": "quarterly",
+        "Notes / Example Tools": "Company about/policy pages",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "feed_explainability_indicator",
+      "label": "Feed Explainability Indicator",
+      "match_meta": [
+        "feed",
+        "explainability",
+        "indicator"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Transparency",
+        "Attribute (Objective Signal)": "Feed Explainability Indicator",
+        "How to Collect (API/Scrape)": "Detect presence of 'Why you're seeing this' or ranking explanation on posts/ads",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if present; 1 if absent",
+        "Thresholds / Flags": "Flag: missing explainability",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "UI scrape/API, schema.org",
+        "Modality": "Text/Image/Video",
+        "Channel/ Platform": "TikTok, Instagram, YouTube, Facebook",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
+      }
+    },
+    {
+      "id": "model_identification_version",
+      "label": "Model identification & version",
+      "match_meta": [
+        "model",
+        "identification",
+        "version"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Transparency",
+        "Attribute (Objective Signal)": "Model identification & version",
+        "How to Collect (API/Scrape)": "Check for model card/ref",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if cited; 1 if absent",
+        "Thresholds / Flags": "Flag: absent",
+        "Frequency": "per feature",
+        "Notes / Example Tools": "Model cards",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "privacy_policy_link_availability_clarity",
+      "label": "Privacy policy link availability & clarity",
+      "match_meta": [
+        "privacy",
+        "policy",
+        "link",
+        "availability",
+        "clarity"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Transparency",
+        "Attribute (Objective Signal)": "Privacy policy link availability & clarity",
+        "How to Collect (API/Scrape)": "Scrape presence; readability test",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if clear and accessible",
+        "Thresholds / Flags": "Flag: missing/unclear",
+        "Frequency": "monthly",
+        "Notes / Example Tools": "Scraper + textstat",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "why_am_i_seeing_this_ad_rec",
+      "label": "Why-am-I-seeing-this (ad/rec)",
+      "match_meta": [
+        "why",
+        "seeing",
+        "this",
+        "rec"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Transparency",
+        "Attribute (Objective Signal)": "Why-am-I-seeing-this (ad/rec)",
+        "How to Collect (API/Scrape)": "Detect explanation UI/API",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if present; 1 if absent",
+        "Thresholds / Flags": "Flag: absent",
+        "Frequency": "per module",
+        "Notes / Example Tools": "Ad/rec explainability APIs",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "ad_sponsored_label_consistency",
+      "label": "Ad/Sponsored Label Consistency",
+      "match_meta": [
+        "sponsored",
+        "label",
+        "consistency"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Ad/Sponsored Label Consistency",
+        "How to Collect (API/Scrape)": "Detect and cross-check 'ad/sponsored' labels across ad, post, and landing page",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if consistent; 1 if missing on any surface",
+        "Thresholds / Flags": "Flag: missing label",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "Ad library APIs + scraper",
+        "Modality": "Text/Image/Video",
+        "Channel/ Platform": "TikTok, Instagram, YouTube, X, Facebook, Web",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned/Social"
+      }
+    },
+    {
+      "id": "agent_safety_guardrail_presence",
+      "label": "Agent Safety Guardrail Presence",
+      "match_meta": [
+        "agent",
+        "safety",
+        "guardrail",
+        "presence"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Agent Safety Guardrail Presence",
+        "How to Collect (API/Scrape)": "Detect safety guardrails (policy prompts, red-team tests, refusal logic) for bots",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if present & effective; 1 if absent",
+        "Thresholds / Flags": "Flag: no guardrails",
+        "Frequency": "per model",
+        "Notes / Example Tools": "LLM config audits",
+        "Modality": "Agent",
+        "Channel/ Platform": "Web/App/Chat integrations",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned/Social"
+      }
+    },
+    {
+      "id": "channel_account_security_posture",
+      "label": "Channel/account security posture",
+      "match_meta": [
+        "channel",
+        "account",
+        "security",
+        "posture"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Channel/account security posture",
+        "How to Collect (API/Scrape)": "Check DMARC/SPF, 2FA on admin",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if all enabled",
+        "Thresholds / Flags": "Flag: missing controls",
+        "Frequency": "quarterly",
+        "Notes / Example Tools": "Security checks",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "claim_to_source_traceability",
+      "label": "Claim-to-source traceability",
+      "match_meta": [
+        "claim",
+        "source",
+        "traceability"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Claim-to-source traceability",
+        "How to Collect (API/Scrape)": "Link each claim to source URL/doc",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if all claims traced",
+        "Thresholds / Flags": "Flag: untraceable claim",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "Trace map",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "engagement_authenticity_ratio",
+      "label": "Engagement Authenticity Ratio",
+      "match_meta": [
+        "engagement",
+        "authenticity",
+        "ratio"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Engagement Authenticity Ratio",
+        "How to Collect (API/Scrape)": "Ingest engagement metrics and run bot/sybil detection on likes, comments, followers",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if >90% authentic; 1 if <50%",
+        "Thresholds / Flags": "Flag: authenticity <70%",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "Cyabra/Graphika-style APIs, in-house bot models",
+        "Modality": "Video/Image/Text",
+        "Channel/ Platform": "TikTok, Instagram, YouTube, X",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
+      }
+    },
+    {
+      "id": "influencer_partner_identity_verified",
+      "label": "Influencer/partner identity verified",
+      "match_meta": [
+        "influencer",
+        "partner",
+        "identity",
+        "verified"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Influencer/partner identity verified",
+        "How to Collect (API/Scrape)": "Cross-check handle KYC/blue checks",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if verified; 1 if not",
+        "Thresholds / Flags": "Flag: unverified partner",
+        "Frequency": "per partner",
+        "Notes / Example Tools": "Platform APIs",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "llm_hallucination_consistency_audit",
+      "label": "LLM Hallucination Consistency Audit",
+      "match_meta": [
+        "llm",
+        "hallucination",
+        "consistency",
+        "audit"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "LLM Hallucination Consistency Audit",
+        "How to Collect (API/Scrape)": "Run semantic consistency checks vs source corpus",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if <2% hallucination rate; 1 if >10%",
+        "Thresholds / Flags": "Flag: >5% inconsistencies",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "LLM audit pipeline",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "model_lineage_verification",
+      "label": "Model Lineage Verification",
+      "match_meta": [
+        "model",
+        "lineage",
+        "verification"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Model Lineage Verification",
+        "How to Collect (API/Scrape)": "Check model metadata and card version consistency",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if present & valid; 1 if absent",
+        "Thresholds / Flags": "Flag: missing model version",
+        "Frequency": "per model",
+        "Notes / Example Tools": "Model cards API, HuggingFace, internal registry",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "moderation_transparency_log",
+      "label": "Moderation transparency log",
+      "match_meta": [
+        "moderation",
+        "transparency",
+        "log"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Moderation transparency log",
+        "How to Collect (API/Scrape)": "Existence of visible moderation actions",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if log present",
+        "Thresholds / Flags": "Flag: absent",
+        "Frequency": "monthly",
+        "Notes / Example Tools": "Platform transparency report",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "prompt_disclosure_visibility",
+      "label": "Prompt Disclosure Visibility",
+      "match_meta": [
+        "prompt",
+        "disclosure",
+        "visibility"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Prompt Disclosure Visibility",
+        "How to Collect (API/Scrape)": "Detect whether AI prompt origin or user query context is displayed",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if visible; 1 if hidden",
+        "Thresholds / Flags": "Flag: missing disclosure",
+        "Frequency": "per interaction",
+        "Notes / Example Tools": "LLM chat interface inspection",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "real_time_security_alerts",
+      "label": "Real-time Security Alerts",
+      "match_meta": [
+        "real",
+        "time",
+        "security",
+        "alerts"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Real-time Security Alerts",
+        "How to Collect (API/Scrape)": "Check for visible login alerts, 2FA or session activity feeds",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if present; 1 if absent",
+        "Thresholds / Flags": "Flag: missing alerts",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "Security API / UI pattern detection",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "review_authenticity_confidence",
+      "label": "Review Authenticity Confidence",
+      "match_meta": [
+        "review",
+        "authenticity",
+        "confidence"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Review Authenticity Confidence",
+        "How to Collect (API/Scrape)": "Classify review set for bots/incentivized/fake patterns; compute authenticity score",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if >90% authentic; 1 if <60%",
+        "Thresholds / Flags": "Flag: <75% authentic",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "Review graph analysis + NLP",
+        "Modality": "Text",
+        "Channel/ Platform": "Amazon/E-commerce",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Marketplace/Owned"
+      }
+    },
+    {
+      "id": "sku_gtin_upc_match",
+      "label": "SKU→GTIN/UPC match",
+      "match_meta": [
+        "skugtin",
+        "upc",
+        "match"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "SKU→GTIN/UPC match",
+        "How to Collect (API/Scrape)": "Check product IDs via catalog API",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if match; 1 if mismatch",
+        "Thresholds / Flags": "Flag: mismatch",
+        "Frequency": "per SKU",
+        "Notes / Example Tools": "GS1/retailer APIs",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "seller_product_verification_rate",
+      "label": "Seller & Product Verification Rate",
+      "match_meta": [
+        "seller",
+        "product",
+        "verification",
+        "rate"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Seller & Product Verification Rate",
+        "How to Collect (API/Scrape)": "Measure % listings with verified sellers, verified reviews, and product provenance (GTIN/UPC)",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if >90% verified; 1 if <40%",
+        "Thresholds / Flags": "Flag: <60% verified",
+        "Frequency": "monthly",
+        "Notes / Example Tools": "Marketplace APIs, GS1, review authenticity",
+        "Modality": "Text/Image",
+        "Channel/ Platform": "Amazon, Etsy, eBay, Walmart",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Marketplace"
+      }
+    },
+    {
+      "id": "sponsored_content_labeling",
+      "label": "Sponsored Content Labeling",
+      "match_meta": [
+        "sponsored",
+        "content",
+        "labeling"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Sponsored Content Labeling",
+        "How to Collect (API/Scrape)": "Detect sponsored, paid, or promoted markers",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if clear; 1 if missing",
+        "Thresholds / Flags": "Flag: missing label",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "Ad disclosure detection",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "synthetic_media_traceability",
+      "label": "Synthetic Media Traceability",
+      "match_meta": [
+        "synthetic",
+        "media",
+        "traceability"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Synthetic Media Traceability",
+        "How to Collect (API/Scrape)": "Detect C2PA, CAI, or watermark integrity for generated content",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if verified; 1 if absent",
+        "Thresholds / Flags": "Flag: no watermark",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "CAI verification, Digimarc",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "third_party_certifications_present",
+      "label": "Third-party certifications present",
+      "match_meta": [
+        "third",
+        "party",
+        "certifications",
+        "present"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Third-party certifications present",
+        "How to Collect (API/Scrape)": "Scrape badges; validate via API",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if valid & current",
+        "Thresholds / Flags": "Flag: expired",
+        "Frequency": "quarterly",
+        "Notes / Example Tools": "BBB/ISO/FDA etc.",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    },
+    {
+      "id": "verified_purchaser_review_rate",
+      "label": "Verified purchaser review rate",
+      "match_meta": [
+        "verified",
+        "purchaser",
+        "review",
+        "rate"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Verification",
+        "Attribute (Objective Signal)": "Verified purchaser review rate",
+        "How to Collect (API/Scrape)": "Pull reviews; check 'verified purchase'",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "Map % to 1–10",
+        "Thresholds / Flags": "Flag: <30% verified",
+        "Frequency": "weekly",
+        "Notes / Example Tools": "Retailer APIs",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      }
+    }
+  ],
+  "defaults": {
+    "max_total_bonus": 50,
+    "max_total_penalty": -50,
+    "normalize_weights": true,
+    "max_llm_items": 10,
+    "llm_model": "gpt-3.5-turbo",
+    "triage_method": "top_uncertain",
+    "max_llm_cost_per_run": null
+  }
+}
