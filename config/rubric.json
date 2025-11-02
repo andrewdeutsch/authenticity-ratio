@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "2.0-trust-stack",
   "source": "imported_from_github_csv",
   "dimension_weights": {
     "provenance": 0.14705882352941177,
@@ -36,7 +36,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "provenance",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if clearly labeled; 5 if ambiguous; 1 if missing"
+      },
+      "detection_method": "Scrape for meta tags or labels ('AI-generated', 'human-created')"
     },
     {
       "id": "ai_generated_media_label_check",
@@ -49,7 +57,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Provenance",
         "Attribute (Objective Signal)": "AI-Generated Media Label Check",
@@ -62,7 +70,8 @@
         "Modality": "Image/Video/Audio",
         "Channel/ Platform": "All social + web",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Owned/Social/Marketplace/Email"
-      }
+      },
+      "dimension": "provenance"
     },
     {
       "id": "author_brand_identity_verified",
@@ -88,7 +97,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "provenance",
+      "scoring_rule_parsed": {
+        "type": "categorical",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "10 if verified; 3 if unknown"
+      },
+      "detection_method": "Extract byline; cross-check against verified accounts"
     },
     {
       "id": "c2pa_cai_manifest_present",
@@ -114,7 +131,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "provenance",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if present & valid; 5 if present but invalid; 1 if missing"
+      },
+      "detection_method": "HTTP HEAD/GET; parse content-type & manifest; CAI verify API"
     },
     {
       "id": "canonical_url_matches_declared_source",
@@ -141,7 +166,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "provenance",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if exact match; 5 if partial; 1 if mismatch"
+      },
+      "detection_method": "Scrape <link rel='canonical'> and compare"
     },
     {
       "id": "creator_brand_disclosure_match",
@@ -154,7 +187,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Provenance",
         "Attribute (Objective Signal)": "Creator-Brand Disclosure Match",
@@ -167,7 +200,8 @@
         "Modality": "Text/Image/Video",
         "Channel/ Platform": "Instagram, TikTok, YouTube",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
-      }
+      },
+      "dimension": "provenance"
     },
     {
       "id": "digital_watermark_fingerprint_detected",
@@ -193,7 +227,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "provenance",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if strong match; 1 if none"
+      },
+      "detection_method": "Download asset; run watermark detector"
     },
     {
       "id": "duplicate_perceptual_hash_match_rate",
@@ -207,7 +249,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Provenance",
         "Attribute (Objective Signal)": "Duplicate/perceptual hash match rate",
@@ -220,7 +262,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "provenance"
     },
     {
       "id": "exif_metadata_integrity",
@@ -245,7 +288,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "provenance",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if intact; 5 if stripped; 1 if spoofed"
+      },
+      "detection_method": "Read EXIF; check editing history"
     },
     {
       "id": "first_seen_timestamp_crawl",
@@ -258,7 +309,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Provenance",
         "Attribute (Objective Signal)": "First-seen timestamp (crawl)",
@@ -271,7 +322,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "provenance"
     },
     {
       "id": "modification_timestamp_trail",
@@ -283,7 +335,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Provenance",
         "Attribute (Objective Signal)": "Modification Timestamp Trail",
@@ -296,7 +348,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "provenance"
     },
     {
       "id": "source_domain_trust_baseline",
@@ -322,7 +375,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "provenance",
+      "scoring_rule_parsed": {
+        "type": "continuous",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "map domain score 1–10"
+      },
+      "detection_method": "Resolve domain score from curated list"
     },
     {
       "id": "accessibility_compliance_wcag",
@@ -334,7 +395,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Resonance",
         "Attribute (Objective Signal)": "Accessibility compliance (WCAG)",
@@ -347,7 +408,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "resonance"
     },
     {
       "id": "choice_accessibility_settings",
@@ -359,7 +421,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Resonance",
         "Attribute (Objective Signal)": "Choice & Accessibility Settings",
@@ -372,7 +434,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "resonance"
     },
     {
       "id": "community_alignment_index",
@@ -397,7 +460,15 @@
         "Modality": "Text/Image/Video",
         "Channel/ Platform": "TikTok, Instagram, YouTube, Reddit",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
-      }
+      },
+      "dimension": "resonance",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if high alignment; 1 if misaligned"
+      },
+      "detection_method": "Graph-community overlap between content values and engaged audience (hashtags, mentions)"
     },
     {
       "id": "creative_recency_vs_trend",
@@ -422,7 +493,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "resonance",
+      "scoring_rule_parsed": {
+        "type": "categorical",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "10 if aligned; 5 neutral; 1 tone-deaf"
+      },
+      "detection_method": "Compare against trending topics list"
     },
     {
       "id": "cultural_context_alignment",
@@ -447,7 +526,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "resonance",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if aligned; 1 if irrelevant"
+      },
+      "detection_method": "Detect mentions of local events, holidays, cultural references"
     },
     {
       "id": "cultural_reference_safety_check",
@@ -460,7 +547,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Resonance",
         "Attribute (Objective Signal)": "Cultural reference safety check",
@@ -473,7 +560,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "resonance"
     },
     {
       "id": "language_locale_match",
@@ -498,7 +586,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "resonance",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if match; 5 if multilingual supported; 1 if mismatch"
+      },
+      "detection_method": "Detect language; compare to user/market"
     },
     {
       "id": "modality_continuity_multichannel",
@@ -510,7 +606,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Resonance",
         "Attribute (Objective Signal)": "Modality continuity (multichannel)",
@@ -523,7 +619,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "resonance"
     },
     {
       "id": "mood_context_adaptation",
@@ -535,7 +632,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Resonance",
         "Attribute (Objective Signal)": "Mood & Context Adaptation",
@@ -548,7 +645,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "resonance"
     },
     {
       "id": "personalization_relevance_embedding_similarity",
@@ -574,7 +672,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "resonance",
+      "scoring_rule_parsed": {
+        "type": "continuous",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "map sim to 1–10 scale"
+      },
+      "detection_method": "Embed user/context & content; cosine sim"
     },
     {
       "id": "readability_grade_level_fit",
@@ -600,7 +706,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "resonance",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if within target; 1 if off"
+      },
+      "detection_method": "Compute FKGL/SMOG vs audience"
     },
     {
       "id": "tone_sentiment_appropriateness",
@@ -625,7 +739,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "resonance",
+      "scoring_rule_parsed": {
+        "type": "categorical",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "10 if within band; 5 borderline; 1 off-tone"
+      },
+      "detection_method": "Classifier vs brand tone guide"
     },
     {
       "id": "voice_sentiment_alignment",
@@ -637,7 +759,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Resonance",
         "Attribute (Objective Signal)": "Voice & Sentiment Alignment",
@@ -650,7 +772,8 @@
         "Modality": "Audio/Video",
         "Channel/ Platform": "YouTube, TikTok, IVR/Voice bots",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Owned/Social"
-      }
+      },
+      "dimension": "resonance"
     },
     {
       "id": "brand_voice_consistency_score",
@@ -676,7 +799,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence",
+      "scoring_rule_parsed": {
+        "type": "categorical",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "10 if z-score within band"
+      },
+      "detection_method": "N-gram/embedding vs style corpus"
     },
     {
       "id": "broken_link_rate",
@@ -701,7 +832,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if <1%; 1 if >10%"
+      },
+      "detection_method": "Crawl & check HTTP codes"
     },
     {
       "id": "chatbot_vs_faq_answer_match",
@@ -714,7 +853,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Coherence",
         "Attribute (Objective Signal)": "Chatbot vs FAQ answer match",
@@ -727,7 +866,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence"
     },
     {
       "id": "claim_consistency_across_pages",
@@ -753,7 +893,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence",
+      "scoring_rule_parsed": {
+        "type": "categorical",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "10 if no contradictions; lower if found"
+      },
+      "detection_method": "Extract claims; fuzzy match & check contradictions"
     },
     {
       "id": "design_system_token_usage",
@@ -766,7 +914,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Coherence",
         "Attribute (Objective Signal)": "Design system token usage",
@@ -779,7 +927,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence"
     },
     {
       "id": "email_asset_consistency_check",
@@ -805,7 +954,15 @@
         "Modality": "Text/Image",
         "Channel/ Platform": "Email, Mobile inboxes",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Email"
-      }
+      },
+      "dimension": "coherence",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if consistent; 1 if contradictory"
+      },
+      "detection_method": "Validate that email claims/pricing/creative match landing page and site at click-through time"
     },
     {
       "id": "engagement_to_trust_correlation",
@@ -830,7 +987,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if high positive correlation; 1 if negative"
+      },
+      "detection_method": "Ingest engagement metrics (CTR, dwell time, conversion)"
     },
     {
       "id": "hesitation_moments",
@@ -841,7 +1006,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Coherence",
         "Attribute (Objective Signal)": "Hesitation Moments",
@@ -854,7 +1019,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence"
     },
     {
       "id": "human_escalation_path",
@@ -866,7 +1032,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Coherence",
         "Attribute (Objective Signal)": "Human Escalation Path",
@@ -879,7 +1045,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence"
     },
     {
       "id": "multimodal_consistency_score",
@@ -904,7 +1071,15 @@
         "Modality": "Video/Audio",
         "Channel/ Platform": "TikTok, YouTube, Reels, Shorts",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
-      }
+      },
+      "dimension": "coherence",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if >0.9 semantic match; 1 if <0.5"
+      },
+      "detection_method": "Compare captions/titles vs transcript/voiceover vs on-screen text for semantic agreement"
     },
     {
       "id": "persistent_identifier_consistency",
@@ -916,7 +1091,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Coherence",
         "Attribute (Objective Signal)": "Persistent Identifier Consistency",
@@ -929,7 +1104,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence"
     },
     {
       "id": "re_engagement_frequency",
@@ -940,7 +1116,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Coherence",
         "Attribute (Objective Signal)": "Re-Engagement Frequency",
@@ -953,7 +1129,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence"
     },
     {
       "id": "system_status_visibility",
@@ -965,7 +1142,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Coherence",
         "Attribute (Objective Signal)": "System Status Visibility",
@@ -978,7 +1155,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence"
     },
     {
       "id": "taxonomy_ontology_alignment",
@@ -990,7 +1168,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Coherence",
         "Attribute (Objective Signal)": "Taxonomy/ontology alignment",
@@ -1003,7 +1181,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence"
     },
     {
       "id": "temporal_continuity_versions",
@@ -1028,7 +1207,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence",
+      "scoring_rule_parsed": {
+        "type": "categorical",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "10 if change log present & consistent"
+      },
+      "detection_method": "Track content version history"
     },
     {
       "id": "trust_fluctuation_index",
@@ -1053,7 +1240,15 @@
         "Modality": "Text/Image/Video",
         "Channel/ Platform": "TikTok, Instagram, YouTube, Reddit, X",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
-      }
+      },
+      "dimension": "coherence",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if low volatility post-event; 1 if high sustained volatility"
+      },
+      "detection_method": "Time-series sentiment volatility after content drops or controversies"
     },
     {
       "id": "trust_score_delta_tracking",
@@ -1066,7 +1261,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Coherence",
         "Attribute (Objective Signal)": "Trust Score Delta Tracking",
@@ -1079,7 +1274,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence"
     },
     {
       "id": "version_history_completeness",
@@ -1091,7 +1287,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Coherence",
         "Attribute (Objective Signal)": "Version History Completeness",
@@ -1104,7 +1300,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "coherence"
     },
     {
       "id": "ai_explainability_disclosure",
@@ -1128,7 +1325,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "transparency",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if visible; 1 if absent"
+      },
+      "detection_method": "Detect 'why you're seeing this' or 'powered by' explanations"
     },
     {
       "id": "ai_generated_assisted_disclosure_present",
@@ -1154,7 +1359,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "transparency",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if present & clear; 1 if absent"
+      },
+      "detection_method": "Detect disclosure label/schema"
     },
     {
       "id": "bot_disclosure_response_audit",
@@ -1180,7 +1393,15 @@
         "Modality": "Agent/Text/Voice",
         "Channel/ Platform": "Websites, Apps, Support, WhatsApp, Messenger",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Owned/Email/Social"
-      }
+      },
+      "dimension": "transparency",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if all three present; 1 if none"
+      },
+      "detection_method": "Evaluate whether AI/chatbots self-identify, cite sources, and provide recourse to a human"
     },
     {
       "id": "caption_subtitle_availability_accuracy",
@@ -1206,7 +1427,15 @@
         "Modality": "Video",
         "Channel/ Platform": "YouTube, TikTok, Instagram Reels/Stories",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
-      }
+      },
+      "dimension": "transparency",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if available & accurate; 1 if absent/inaccurate"
+      },
+      "detection_method": "Check availability of captions/subtitles and alignment with ASR transcript"
     },
     {
       "id": "consent_string_validity_iab_tcf",
@@ -1220,7 +1449,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Transparency",
         "Attribute (Objective Signal)": "Consent string validity (IAB TCF)",
@@ -1233,7 +1462,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "transparency"
     },
     {
       "id": "data_source_citations_for_claims",
@@ -1260,7 +1490,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "transparency",
+      "scoring_rule_parsed": {
+        "type": "categorical",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "10 if cites verified sources"
+      },
+      "detection_method": "Parse footnotes/citations"
     },
     {
       "id": "ethical_position_visibility",
@@ -1272,7 +1510,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Transparency",
         "Attribute (Objective Signal)": "Ethical Position Visibility",
@@ -1285,7 +1523,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "transparency"
     },
     {
       "id": "feed_explainability_indicator",
@@ -1297,7 +1536,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Transparency",
         "Attribute (Objective Signal)": "Feed Explainability Indicator",
@@ -1310,7 +1549,8 @@
         "Modality": "Text/Image/Video",
         "Channel/ Platform": "TikTok, Instagram, YouTube, Facebook",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
-      }
+      },
+      "dimension": "transparency"
     },
     {
       "id": "model_identification_version",
@@ -1322,7 +1562,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Transparency",
         "Attribute (Objective Signal)": "Model identification & version",
@@ -1335,7 +1575,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "transparency"
     },
     {
       "id": "privacy_policy_link_availability_clarity",
@@ -1362,7 +1603,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "transparency",
+      "scoring_rule_parsed": {
+        "type": "categorical",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "10 if clear and accessible"
+      },
+      "detection_method": "Scrape presence; readability test"
     },
     {
       "id": "why_am_i_seeing_this_ad_rec",
@@ -1375,7 +1624,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Transparency",
         "Attribute (Objective Signal)": "Why-am-I-seeing-this (ad/rec)",
@@ -1388,7 +1637,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "transparency"
     },
     {
       "id": "ad_sponsored_label_consistency",
@@ -1413,7 +1663,15 @@
         "Modality": "Text/Image/Video",
         "Channel/ Platform": "TikTok, Instagram, YouTube, X, Facebook, Web",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Owned/Social"
-      }
+      },
+      "dimension": "verification",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if consistent; 1 if missing on any surface"
+      },
+      "detection_method": "Detect and cross-check 'ad/sponsored' labels across ad, post, and landing page"
     },
     {
       "id": "agent_safety_guardrail_presence",
@@ -1439,7 +1697,15 @@
         "Modality": "Agent",
         "Channel/ Platform": "Web/App/Chat integrations",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Owned/Social"
-      }
+      },
+      "dimension": "verification",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if present & effective; 1 if absent"
+      },
+      "detection_method": "Detect safety guardrails (policy prompts, red-team tests, refusal logic) for bots"
     },
     {
       "id": "channel_account_security_posture",
@@ -1452,7 +1718,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Verification",
         "Attribute (Objective Signal)": "Channel/account security posture",
@@ -1465,7 +1731,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification"
     },
     {
       "id": "claim_to_source_traceability",
@@ -1490,7 +1757,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification",
+      "scoring_rule_parsed": {
+        "type": "categorical",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "10 if all claims traced"
+      },
+      "detection_method": "Link each claim to source URL/doc"
     },
     {
       "id": "engagement_authenticity_ratio",
@@ -1515,7 +1790,15 @@
         "Modality": "Video/Image/Text",
         "Channel/ Platform": "TikTok, Instagram, YouTube, X",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
-      }
+      },
+      "dimension": "verification",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if >90% authentic; 1 if <50%"
+      },
+      "detection_method": "Ingest engagement metrics and run bot/sybil detection on likes, comments, followers"
     },
     {
       "id": "influencer_partner_identity_verified",
@@ -1541,7 +1824,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if verified; 1 if not"
+      },
+      "detection_method": "Cross-check handle KYC/blue checks"
     },
     {
       "id": "llm_hallucination_consistency_audit",
@@ -1554,7 +1845,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Verification",
         "Attribute (Objective Signal)": "LLM Hallucination Consistency Audit",
@@ -1567,7 +1858,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification"
     },
     {
       "id": "model_lineage_verification",
@@ -1579,7 +1871,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Verification",
         "Attribute (Objective Signal)": "Model Lineage Verification",
@@ -1592,7 +1884,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification"
     },
     {
       "id": "moderation_transparency_log",
@@ -1604,7 +1897,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Verification",
         "Attribute (Objective Signal)": "Moderation transparency log",
@@ -1617,7 +1910,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification"
     },
     {
       "id": "prompt_disclosure_visibility",
@@ -1629,7 +1923,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Verification",
         "Attribute (Objective Signal)": "Prompt Disclosure Visibility",
@@ -1642,7 +1936,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification"
     },
     {
       "id": "real_time_security_alerts",
@@ -1655,7 +1950,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Verification",
         "Attribute (Objective Signal)": "Real-time Security Alerts",
@@ -1668,7 +1963,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification"
     },
     {
       "id": "review_authenticity_confidence",
@@ -1693,7 +1989,15 @@
         "Modality": "Text",
         "Channel/ Platform": "Amazon/E-commerce",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Marketplace/Owned"
-      }
+      },
+      "dimension": "verification",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if >90% authentic; 1 if <60%"
+      },
+      "detection_method": "Classify review set for bots/incentivized/fake patterns; compute authenticity score"
     },
     {
       "id": "sku_gtin_upc_match",
@@ -1705,7 +2009,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Verification",
         "Attribute (Objective Signal)": "SKU→GTIN/UPC match",
@@ -1718,7 +2022,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification"
     },
     {
       "id": "seller_product_verification_rate",
@@ -1744,7 +2049,15 @@
         "Modality": "Text/Image",
         "Channel/ Platform": "Amazon, Etsy, eBay, Walmart",
         "Ecosystem (Owned/Social/Marketplace/Email)": "Marketplace"
-      }
+      },
+      "dimension": "verification",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if >90% verified; 1 if <40%"
+      },
+      "detection_method": "Measure % listings with verified sellers, verified reviews, and product provenance (GTIN/UPC)"
     },
     {
       "id": "sponsored_content_labeling",
@@ -1756,7 +2069,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Verification",
         "Attribute (Objective Signal)": "Sponsored Content Labeling",
@@ -1769,7 +2082,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification"
     },
     {
       "id": "synthetic_media_traceability",
@@ -1781,7 +2095,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Verification",
         "Attribute (Objective Signal)": "Synthetic Media Traceability",
@@ -1794,7 +2108,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification"
     },
     {
       "id": "third_party_certifications_present",
@@ -1807,7 +2122,7 @@
       ],
       "effect": "bonus",
       "value": 0,
-      "enabled": true,
+      "enabled": false,
       "source_row": {
         "Unified Dimension": "Verification",
         "Attribute (Objective Signal)": "Third-party certifications present",
@@ -1820,7 +2135,8 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification"
     },
     {
       "id": "verified_purchaser_review_rate",
@@ -1846,7 +2162,15 @@
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
-      }
+      },
+      "dimension": "verification",
+      "scoring_rule_parsed": {
+        "type": "continuous",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "map % to 1–10"
+      },
+      "detection_method": "Pull reviews; check 'verified purchase'"
     }
   ],
   "defaults": {
@@ -1857,5 +2181,7 @@
     "llm_model": "gpt-3.5-turbo",
     "triage_method": "top_uncertain",
     "max_llm_cost_per_run": null
-  }
+  },
+  "updated_at": "2025-11-02T15:02:04.549304Z",
+  "selected_attributes_count": 36
 }
