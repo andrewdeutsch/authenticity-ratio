@@ -1,6 +1,7 @@
 """
-5D Trust Dimensions scorer for AR tool
+5D Trust Dimensions scorer for Trust Stack Rating tool
 Scores content on Provenance, Verification, Transparency, Coherence, Resonance
+Integrates with TrustStackAttributeDetector for comprehensive ratings
 """
 
 from openai import OpenAI
@@ -10,7 +11,8 @@ import json
 from dataclasses import dataclass
 
 from config.settings import SETTINGS, APIConfig
-from data.models import NormalizedContent, ContentScores
+from data.models import NormalizedContent, ContentScores, DetectedAttribute
+from scoring.attribute_detector import TrustStackAttributeDetector
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +26,35 @@ class DimensionScores:
     resonance: float
 
 class ContentScorer:
-    """Scores content on 5D Trust Dimensions"""
-    
-    def __init__(self):
+    """
+    Scores content on 5D Trust Dimensions
+    Combines LLM-based scoring with Trust Stack attribute detection
+    """
+
+    def __init__(self, use_attribute_detection: bool = True):
+        """
+        Initialize scorer
+
+        Args:
+            use_attribute_detection: If True, combine LLM scores with attribute detection
+        """
         # Use the new OpenAI client (openai>=1.0.0)
         # If API key is None or empty, the client will fall back to environment variables.
         self.client = OpenAI(api_key=APIConfig.openai_api_key)
         self.rubric_version = SETTINGS['rubric_version']
+        self.use_attribute_detection = use_attribute_detection
+
+        # Initialize attribute detector if enabled
+        if self.use_attribute_detection:
+            try:
+                self.attribute_detector = TrustStackAttributeDetector()
+                logger.info(f"Attribute detector initialized with {len(self.attribute_detector.attributes)} attributes")
+            except Exception as e:
+                logger.warning(f"Could not initialize attribute detector: {e}. Falling back to LLM-only scoring.")
+                self.use_attribute_detection = False
+                self.attribute_detector = None
+        else:
+            self.attribute_detector = None
     
     def score_content(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> DimensionScores:
         """
@@ -212,7 +236,7 @@ class ContentScorer:
     def _calculate_engagement_resonance(self, content: NormalizedContent) -> float:
         """Calculate engagement-based resonance score"""
         score = 0.5  # Default neutral score
-        
+
         # Rating-based scoring (0-1 scale)
         if content.rating is not None:
             if content.src == "amazon":
@@ -221,20 +245,92 @@ class ContentScorer:
             elif content.src == "reddit":
                 # Reddit upvote ratio is 0-1, use directly
                 score += (content.rating - 0.5) * 0.2
-        
+
         # Upvotes-based scoring
         if content.upvotes is not None:
             # Normalize upvotes (log scale to prevent outliers from dominating)
             import math
             normalized_upvotes = math.log10(max(1, content.upvotes)) / 3  # Log base 10, max ~3
             score += normalized_upvotes * 0.1
-        
+
         # Helpful count scoring (Amazon reviews)
         if content.helpful_count is not None:
             normalized_helpful = min(content.helpful_count / 20, 1.0)  # Cap at 20 helpful votes
             score += normalized_helpful * 0.1
-        
+
         return min(1.0, max(0.0, score))
+
+    def _adjust_scores_with_attributes(self, llm_scores: DimensionScores,
+                                      detected_attrs: List[DetectedAttribute]) -> DimensionScores:
+        """
+        Adjust LLM-based dimension scores using detected Trust Stack attributes
+
+        Args:
+            llm_scores: Base scores from LLM (0.0-1.0 scale)
+            detected_attrs: List of detected attributes from TrustStackAttributeDetector
+
+        Returns:
+            Adjusted dimension scores (0.0-1.0 scale)
+        """
+        # Start with LLM scores (convert to 0-100 for adjustment calculation)
+        adjusted = {
+            'provenance': llm_scores.provenance * 100,
+            'resonance': llm_scores.resonance * 100,
+            'coherence': llm_scores.coherence * 100,
+            'transparency': llm_scores.transparency * 100,
+            'verification': llm_scores.verification * 100
+        }
+
+        # Group attributes by dimension
+        attrs_by_dimension = {}
+        for attr in detected_attrs:
+            if attr.dimension not in attrs_by_dimension:
+                attrs_by_dimension[attr.dimension] = []
+            attrs_by_dimension[attr.dimension].append(attr)
+
+        # Adjust each dimension based on its detected attributes
+        for dimension, attrs in attrs_by_dimension.items():
+            if dimension not in adjusted:
+                continue
+
+            # Calculate adjustment from attributes (1-10 scale → adjustment)
+            # Strategy: Blend attribute signals with LLM baseline
+            # Attributes with high confidence and extreme values have more impact
+            total_adjustment = 0.0
+            total_weight = 0.0
+
+            for attr in attrs:
+                # Map 1-10 scale to adjustment (-50 to +50)
+                # 1 = -45, 5.5 = 0, 10 = +45
+                attr_adjustment = (attr.value - 5.5) * 9
+
+                # Weight by confidence
+                weight = attr.confidence
+                total_adjustment += attr_adjustment * weight
+                total_weight += weight
+
+            if total_weight > 0:
+                # Average weighted adjustment
+                avg_adjustment = total_adjustment / total_weight
+
+                # Apply adjustment with dampening (70% LLM, 30% attributes)
+                # This ensures LLM baseline is respected while attributes provide nuance
+                adjusted[dimension] = (
+                    0.7 * adjusted[dimension] +
+                    0.3 * max(0, min(100, adjusted[dimension] + avg_adjustment))
+                )
+
+                # Clamp to valid range
+                adjusted[dimension] = max(0, min(100, adjusted[dimension]))
+
+        # Convert back to 0.0-1.0 scale
+        return DimensionScores(
+            provenance=adjusted['provenance'] / 100,
+            resonance=adjusted['resonance'] / 100,
+            coherence=adjusted['coherence'] / 100,
+            transparency=adjusted['transparency'] / 100,
+            verification=adjusted['verification'] / 100
+        )
     
     def _get_llm_score(self, prompt: str) -> float:
         """Get score from LLM API"""
@@ -267,21 +363,43 @@ class ContentScorer:
             logger.error(f"LLM scoring error: {e}")
             return 0.5  # Return neutral score on error
     
-    def batch_score_content(self, content_list: List[NormalizedContent], 
+    def batch_score_content(self, content_list: List[NormalizedContent],
                           brand_context: Dict[str, Any]) -> List[ContentScores]:
-        """Score multiple content items in batch"""
+        """
+        Score multiple content items in batch
+        Combines LLM scoring with Trust Stack attribute detection
+
+        Args:
+            content_list: List of content to score
+            brand_context: Brand-specific context
+
+        Returns:
+            List of ContentScores with dimension ratings
+        """
         scores_list = []
-        
-        logger.info(f"Batch scoring {len(content_list)} content items")
-        
+
+        logger.info(f"Batch scoring {len(content_list)} content items (attribute detection: {self.use_attribute_detection})")
+
         for i, content in enumerate(content_list):
             if i % 10 == 0:
                 logger.info(f"Scoring progress: {i}/{len(content_list)}")
-            
-            # Score the content
+
+            # Step 1: Get base LLM scores
             dimension_scores = self.score_content(content, brand_context)
-            
-            # Create ContentScores object
+
+            # Step 2: Detect Trust Stack attributes (if enabled)
+            detected_attrs = []
+            if self.use_attribute_detection and self.attribute_detector:
+                try:
+                    detected_attrs = self.attribute_detector.detect_attributes(content)
+                    logger.debug(f"Detected {len(detected_attrs)} attributes for {content.content_id}")
+
+                    # Adjust LLM scores with attribute signals
+                    dimension_scores = self._adjust_scores_with_attributes(dimension_scores, detected_attrs)
+                except Exception as e:
+                    logger.warning(f"Attribute detection failed for {content.content_id}: {e}")
+
+            # Step 3: Create ContentScores object
             content_scores = ContentScores(
                 content_id=content.content_id,
                 brand=brand_context.get('brand_name', 'unknown'),
@@ -292,18 +410,31 @@ class ContentScorer:
                 score_coherence=dimension_scores.coherence,
                 score_transparency=dimension_scores.transparency,
                 score_verification=dimension_scores.verification,
-                class_label="pending",  # Will be set by classifier
-                is_authentic=False,     # Will be set by classifier
+                class_label="",  # Optional - for backward compatibility
+                is_authentic=False,  # Optional - for backward compatibility
                 rubric_version=self.rubric_version,
                 run_id=content.run_id,
                 meta=json.dumps(
-                    # Build a meta dict that includes scoring info and preserves key content metadata
+                    # Build a meta dict that includes scoring info and detected attributes
                     (lambda cm: {
                         "scoring_timestamp": content.event_ts,
                         "brand_context": brand_context,
                         "title": getattr(content, 'title', '') or None,
                         "description": getattr(content, 'body', '') or None,
                         "source_url": (cm.get('source_url') if isinstance(cm, dict) else None) or getattr(content, 'platform_id', None),
+                        # Include detected attributes for downstream analysis
+                        "detected_attributes": [
+                            {
+                                "id": attr.attribute_id,
+                                "dimension": attr.dimension,
+                                "label": attr.label,
+                                "value": attr.value,
+                                "evidence": attr.evidence,
+                                "confidence": attr.confidence
+                            }
+                            for attr in detected_attrs
+                        ] if detected_attrs else [],
+                        "attribute_count": len(detected_attrs),
                         # preserve any existing content.meta under orig_meta
                         "orig_meta": cm if isinstance(cm, dict) else None,
                         # propagate explicit footer links if present so downstream reporting can use them
@@ -314,8 +445,8 @@ class ContentScorer:
                     })(content.meta if hasattr(content, 'meta') else {})
                 )
             )
-            
+
             scores_list.append(content_scores)
-        
+
         logger.info(f"Completed batch scoring: {len(scores_list)} items scored")
         return scores_list
