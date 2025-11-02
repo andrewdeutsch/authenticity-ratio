@@ -1,6 +1,11 @@
 """
 Trust Stack Attribute Detector
 Detects 36 Trust Stack attributes from normalized content metadata
+
+Phase B Enhancements:
+- NLP-based sentiment, readability, language detection
+- Embedding-based brand voice and claim consistency
+- External API integration for domain reputation
 """
 import json
 import re
@@ -9,6 +14,32 @@ from urllib.parse import urlparse
 import logging
 
 from data.models import NormalizedContent, DetectedAttribute
+
+# Phase B: Import enhanced detection modules (lazy loading)
+try:
+    from scoring.nlp_enhanced import (
+        get_sentiment_analyzer,
+        get_readability_analyzer,
+        get_language_detector
+    )
+    NLP_ENHANCED_AVAILABLE = True
+except ImportError:
+    NLP_ENHANCED_AVAILABLE = False
+
+try:
+    from scoring.embeddings import (
+        get_brand_voice_analyzer,
+        get_claim_consistency_analyzer
+    )
+    EMBEDDINGS_AVAILABLE = True
+except ImportError:
+    EMBEDDINGS_AVAILABLE = False
+
+try:
+    from scoring.external_apis import get_domain_reputation_client
+    EXTERNAL_API_AVAILABLE = True
+except ImportError:
+    EXTERNAL_API_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -280,10 +311,30 @@ class TrustStackAttributeDetector:
         return None
 
     def _detect_domain_trust(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
-        """Detect source domain trust baseline"""
+        """Detect source domain trust baseline (Phase B: enhanced with API)"""
         meta = content.meta or {}
 
-        # Simple domain reputation based on source
+        # Try enhanced domain reputation API first
+        if EXTERNAL_API_AVAILABLE:
+            try:
+                domain_client = get_domain_reputation_client()
+                url = meta.get("url", "")
+
+                if url:
+                    result = domain_client.get_domain_score(url)
+                    if result:
+                        return DetectedAttribute(
+                            attribute_id="source_domain_trust_baseline",
+                            dimension="provenance",
+                            label="Source domain trust baseline",
+                            value=result['value'],
+                            evidence=result['evidence'],
+                            confidence=result['confidence']
+                        )
+            except Exception as e:
+                logger.debug(f"Domain reputation API failed, falling back to heuristic: {e}")
+
+        # Fallback: Simple domain reputation based on source
         domain = meta.get("domain", "")
         source = content.src.lower()
 
@@ -337,11 +388,31 @@ class TrustStackAttributeDetector:
         return None
 
     def _detect_language_match(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
-        """Detect language/locale match"""
+        """Detect language/locale match (Phase B: enhanced with langdetect)"""
+        text = content.body
+
+        # Try enhanced language detection first
+        if NLP_ENHANCED_AVAILABLE and text and len(text) >= 10:
+            try:
+                detector = get_language_detector()
+                target_lang = "en"  # TODO: Make configurable per brand
+
+                result = detector.detect_language(text, target_lang)
+                if result:
+                    return DetectedAttribute(
+                        attribute_id="language_locale_match",
+                        dimension="resonance",
+                        label="Language/locale match",
+                        value=result['value'],
+                        evidence=result['evidence'],
+                        confidence=result['confidence']
+                    )
+            except Exception as e:
+                logger.debug(f"Enhanced language detection failed, falling back to metadata: {e}")
+
+        # Fallback: Use metadata
         meta = content.meta or {}
         detected_lang = meta.get("language", "en")
-
-        # Assume English is target for now
         target_lang = "en"
 
         if detected_lang == target_lang:
@@ -366,13 +437,32 @@ class TrustStackAttributeDetector:
         return None
 
     def _detect_readability(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
-        """Detect readability grade level fit"""
+        """Detect readability grade level fit (Phase B: enhanced with textstat)"""
         text = content.body
 
-        # Simple readability heuristic (words per sentence)
         if not text or len(text) < 50:
             return None
 
+        # Try enhanced readability analysis first
+        if NLP_ENHANCED_AVAILABLE:
+            try:
+                analyzer = get_readability_analyzer()
+                target_grade = 9.0  # TODO: Make configurable per brand
+
+                result = analyzer.analyze_readability(text, target_grade)
+                if result:
+                    return DetectedAttribute(
+                        attribute_id="readability_grade_level_fit",
+                        dimension="resonance",
+                        label="Readability grade level fit",
+                        value=result['value'],
+                        evidence=result['evidence'],
+                        confidence=0.9
+                    )
+            except Exception as e:
+                logger.debug(f"Enhanced readability analysis failed, falling back to heuristic: {e}")
+
+        # Fallback: Simple readability heuristic (words per sentence)
         sentences = len(re.split(r'[.!?]+', text))
         words = len(text.split())
 
@@ -402,15 +492,63 @@ class TrustStackAttributeDetector:
         )
 
     def _detect_tone_sentiment(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
-        """Detect tone & sentiment appropriateness (placeholder)"""
-        # TODO: Integrate sentiment analysis model
+        """Detect tone & sentiment appropriateness (Phase B: enhanced with transformers)"""
+        text = content.body
+
+        if not text or len(text) < 10:
+            return None
+
+        # Try enhanced sentiment analysis
+        if NLP_ENHANCED_AVAILABLE:
+            try:
+                analyzer = get_sentiment_analyzer()
+
+                result = analyzer.analyze_sentiment(text)
+                if result:
+                    return DetectedAttribute(
+                        attribute_id="tone_sentiment_appropriateness",
+                        dimension="resonance",
+                        label="Tone & sentiment appropriateness",
+                        value=result['value'],
+                        evidence=result['evidence'],
+                        confidence=result['score']  # Use model confidence
+                    )
+            except Exception as e:
+                logger.debug(f"Sentiment analysis failed: {e}")
+
+        # No fallback - this attribute requires NLP
         return None
 
     # ===== COHERENCE DETECTORS =====
 
     def _detect_brand_voice(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
-        """Detect brand voice consistency (placeholder)"""
-        # TODO: Implement embedding similarity to brand corpus
+        """Detect brand voice consistency (Phase B: enhanced with embeddings)"""
+        text = content.body
+
+        if not text or len(text) < 20:
+            return None
+
+        # Try enhanced brand voice analysis
+        if EMBEDDINGS_AVAILABLE:
+            try:
+                analyzer = get_brand_voice_analyzer()
+
+                # Note: Brand corpus should be set via brand_config in scorer
+                # For now, this will return None if no corpus is set
+                result = analyzer.analyze_brand_voice_consistency(text)
+                if result:
+                    return DetectedAttribute(
+                        attribute_id="brand_voice_consistency_score",
+                        dimension="coherence",
+                        label="Brand voice consistency score",
+                        value=result['value'],
+                        evidence=result['evidence'],
+                        confidence=result['confidence']
+                    )
+            except Exception as e:
+                logger.debug(f"Brand voice analysis failed: {e}")
+
+        # No fallback - this attribute requires embeddings + brand corpus
         return None
 
     def _detect_broken_links(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
@@ -453,8 +591,40 @@ class TrustStackAttributeDetector:
         )
 
     def _detect_claim_consistency(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
-        """Detect claim consistency across pages (placeholder)"""
-        # TODO: Implement NLI/contradiction detection
+        """Detect claim consistency across pages (Phase B: enhanced with embeddings)"""
+        text = content.body
+
+        if not text or len(text) < 50:
+            return None
+
+        # Try enhanced claim consistency analysis
+        if EMBEDDINGS_AVAILABLE:
+            try:
+                analyzer = get_claim_consistency_analyzer()
+
+                # Note: Related content should be provided via context
+                # For now, we can't detect consistency without related content
+                # This will be enhanced in future phases with context passing
+
+                # Placeholder: Just check for basic contradictions within content
+                meta = content.meta or {}
+                related_content_list = meta.get("related_content", [])
+
+                if related_content_list:
+                    result = analyzer.analyze_claim_consistency(text, related_content_list)
+                    if result:
+                        return DetectedAttribute(
+                            attribute_id="claim_consistency_across_pages",
+                            dimension="coherence",
+                            label="Claim consistency across pages",
+                            value=result['value'],
+                            evidence=result['evidence'],
+                            confidence=result['confidence']
+                        )
+            except Exception as e:
+                logger.debug(f"Claim consistency analysis failed: {e}")
+
+        # No fallback - this attribute requires embeddings + related content
         return None
 
     def _detect_email_consistency(self, content: NormalizedContent) -> Optional[DetectedAttribute]:

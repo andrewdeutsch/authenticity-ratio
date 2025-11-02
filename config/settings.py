@@ -62,7 +62,32 @@ SETTINGS = {
     # Feature flags
     'enable_legacy_ar_mode': True,  # Synthesize AR from ratings for backward compatibility
     'show_ar_in_ui': False,  # Don't show AR in initial UI (can enable later)
-    
+
+    # Phase B: Enhanced Detection Configuration
+    'nlp_config': {
+        'enabled': True,  # Enable NLP-enhanced detection
+        'sentiment_model': 'distilbert-base-uncased-finetuned-sst-2-english',
+        'embedding_model': 'all-MiniLM-L6-v2',
+        'cache_embeddings': True,  # Cache embeddings for performance
+        'use_gpu': False,  # Set to True if CUDA available (much faster)
+        'target_language': 'en',  # Default language for detection
+        'target_reading_grade': 9.0,  # Grade 9 (general audience)
+    },
+
+    'api_config': {
+        'domain_reputation_enabled': True,  # Use domain reputation checking
+        'fact_checking_enabled': False,  # Requires API key (future phase)
+        'media_verification_enabled': False,  # Requires C2PA implementation (future phase)
+        'rate_limit': 1.0,  # Seconds between external API calls
+    },
+
+    'brand_voice_config': {
+        'enabled': True,  # Enable brand voice consistency checking
+        'corpus_path': 'data/brand_voice_corpus.txt',  # Brand content examples
+        'min_similarity': 0.4,  # Minimum similarity for "on brand"
+        'min_corpus_size': 5,  # Minimum brand corpus examples needed
+    },
+
     # Content processing
     'max_content_length': 10000,  # Characters
     'deduplication_window': 24,   # Hours for SimHash deduplication

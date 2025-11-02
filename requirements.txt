@@ -12,6 +12,13 @@ praw>=7.7.0  # Reddit API
 openai>=1.0.0
 scikit-learn>=1.3.0
 
+# Phase B: Enhanced NLP and Embeddings
+transformers>=4.30.0  # Sentiment analysis, NLP models
+torch>=2.0.0  # PyTorch backend for transformers
+sentence-transformers>=2.2.2  # Semantic embeddings
+textstat>=0.7.3  # Readability analysis
+langdetect>=1.0.9  # Language detection with confidence
+
 # Reporting
 reportlab>=4.0.0
 matplotlib>=3.7.0
