@@ -38,15 +38,30 @@ class APIConfig:
 
 # Global settings
 SETTINGS = {
-    'app_name': 'Authenticity Ratio Tool',
-    'version': '1.0.0',
+    'app_name': 'Trust Stack Rating Tool',
+    'version': '2.0.0-trust-stack',
     'debug': os.getenv('DEBUG', 'False').lower() == 'true',
-    
-    # Scoring configuration
+
+    # Trust Stack Rating configuration
     'scoring_weights': ScoringWeights(),
-    'rubric_version': 'v1.0',
-    'min_score_threshold': 0.7,  # Minimum score to be considered authentic
-    'suspect_threshold': 0.5,    # Score range for suspect content
+    'rubric_version': 'v2.0-trust-stack',
+
+    # Legacy AR thresholds (kept for backward compatibility and optional descriptive bands)
+    'min_score_threshold': 0.75,  # 75/100 - Excellent/Authentic threshold
+    'suspect_threshold': 0.40,    # 40/100 - Fair/Suspect threshold
+
+    # Rating bands (optional descriptive labels, not used for AR calculation)
+    'rating_scale': 100,  # 0-100 scale for all ratings
+    'rating_bands': {
+        'excellent': 80,  # >= 80 = Excellent
+        'good': 60,       # 60-79 = Good
+        'fair': 40,       # 40-59 = Fair
+        'poor': 0,        # < 40 = Poor
+    },
+
+    # Feature flags
+    'enable_legacy_ar_mode': True,  # Synthesize AR from ratings for backward compatibility
+    'show_ar_in_ui': False,  # Don't show AR in initial UI (can enable later)
     
     # Content processing
     'max_content_length': 10000,  # Characters
