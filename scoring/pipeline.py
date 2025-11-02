@@ -1,6 +1,7 @@
 """
-Scoring pipeline for AR tool
-Orchestrates the scoring and classification process
+Scoring pipeline for Trust Stack Rating tool
+Orchestrates Trust Stack rating with LLM + attribute detection
+Includes optional legacy AR support for backward compatibility
 """
 
 import uuid
@@ -17,26 +18,50 @@ from .classifier import ContentClassifier
 logger = logging.getLogger(__name__)
 
 class ScoringPipeline:
-    """Orchestrates the scoring and classification pipeline"""
-    
+    """
+    Orchestrates the Trust Stack rating pipeline
+
+    Pipeline flow:
+    1. Optional triage to reduce LLM API costs
+    2. LLM scoring + Trust Stack attribute detection (blended 70/30)
+    3. Optional legacy classification (if enable_legacy_ar_mode=True)
+    4. Upload to S3/Athena
+    5. Optional legacy AR calculation (if enable_legacy_ar_mode=True)
+
+    Attributes are now detected automatically by ContentScorer and blended
+    with LLM scores. No separate attribute application step needed.
+    """
+
     def __init__(self):
-        self.scorer = ContentScorer()
-        self.classifier = ContentClassifier()
+        """Initialize pipeline with scorer and classifier"""
+        # ContentScorer now includes TrustStackAttributeDetector
+        self.scorer = ContentScorer(use_attribute_detection=True)
+
+        # Classifier with deprecation warning suppressed (used for legacy mode)
+        self.classifier = ContentClassifier(suppress_warning=True)
+
         # Athena client is optional at runtime (may require boto3). Initialize
         # lazily when upload is requested to allow local runs without AWS deps.
         self.athena_client = None
     
-    def run_scoring_pipeline(self, content_list: List[NormalizedContent], 
+    def run_scoring_pipeline(self, content_list: List[NormalizedContent],
                            brand_config: Dict[str, Any]) -> PipelineRun:
         """
-        Run the complete scoring pipeline
-        
+        Run the Trust Stack rating pipeline
+
+        Pipeline flow:
+        1. Optional triage filter (reduce LLM costs)
+        2. Score with LLM + Trust Stack attributes (blended automatically)
+        3. Optional legacy classification (if enable_legacy_ar_mode=True)
+        4. Upload to S3/Athena
+        5. Optional legacy AR calculation
+
         Args:
-            content_list: List of normalized content to score
+            content_list: List of normalized content to rate
             brand_config: Brand configuration and context
-            
+
         Returns:
-            PipelineRun object with execution details
+            PipelineRun object with execution details and ratings
         """
         run_id = str(uuid.uuid4())
         brand_id = brand_config.get('brand_id', 'unknown')
@@ -60,8 +85,8 @@ class ScoringPipeline:
                 logger.info("Step 1: Running triage filter to reduce expensive scoring")
                 promoted, demoted = triage_filter(content_list, brand_config.get('keywords', []), promote_threshold=None)
 
-                # Step 2: Score promoted items with the high-quality LLM scorer
-                logger.info("Step 2: Scoring promoted content on 5D dimensions")
+                # Step 2: Score promoted items with LLM + Trust Stack attributes (blended automatically)
+                logger.info("Step 2: Scoring promoted content with LLM + Trust Stack attributes")
                 high_quality_scores = self.scorer.batch_score_content(promoted, brand_config) if promoted else []
                 pipeline_run.items_processed += len(high_quality_scores)
 
@@ -94,49 +119,54 @@ class ScoringPipeline:
                     scores_list = high_quality_scores + neutral_scores
             else:
                 # Triage disabled: run full scoring on all items
-                logger.info("Triage disabled; scoring all content on 5D dimensions")
+                logger.info("Triage disabled; scoring all content with LLM + Trust Stack attributes")
                 scores_list = self.scorer.batch_score_content(content_list, brand_config)
                 pipeline_run.items_processed += len(scores_list)
-            
-            # Step 2: Classify content (Authentic/Suspect/Inauthentic)
-            logger.info("Step 2: Classifying content")
-            classified_scores = self.classifier.batch_classify_content(scores_list)
-            
-            # Step 3: Upload scores to S3/Athena
-            logger.info("Step 3: Uploading scores to S3/Athena")
-            self._upload_scores_to_athena(classified_scores, brand_id)
-            
-            # Step 4: Calculate and log Authenticity Ratio
-            logger.info("Step 4: Calculating Authenticity Ratio")
-            ar_calc = self._calculate_authenticity_ratio(classified_scores, brand_id, run_id, include_appendix=True)
-            # _calculate_authenticity_ratio may return (AuthenticityRatio, per_item_breakdowns)
-            if isinstance(ar_calc, tuple) and len(ar_calc) == 2:
-                ar_result, per_item_breakdowns = ar_calc
+
+            # Step 3: Optional legacy classification (Trust Stack v2.0 uses rating bands instead)
+            enable_legacy_ar = SETTINGS.get('enable_legacy_ar_mode', True)
+
+            if enable_legacy_ar:
+                logger.info("Step 3: Legacy classification (Authentic/Suspect/Inauthentic)")
+                classified_scores = self.classifier.batch_classify_content(scores_list)
             else:
-                ar_result = ar_calc
-                per_item_breakdowns = []
-            
-            # Attach classified scores to the pipeline run so callers can use
-            # the exact objects that were uploaded to S3/Athena.
+                logger.info("Step 3: Trust Stack rating bands (Excellent/Good/Fair/Poor)")
+                self.classifier.log_rating_band_summary(scores_list)
+                classified_scores = scores_list
+
+            # Step 4: Upload to S3/Athena
+            logger.info("Step 4: Uploading ratings to S3/Athena")
+            self._upload_scores_to_athena(classified_scores, brand_id)
+
+            # Step 5: Optional legacy AR calculation
+            ar_result = None
+            if enable_legacy_ar:
+                logger.info("Step 5: Calculating legacy Authenticity Ratio")
+                ar_result = AuthenticityRatio.from_ratings(
+                    ratings=classified_scores,
+                    brand_id=brand_id,
+                    source=",".join(set(s.src for s in classified_scores)),
+                    run_id=run_id
+                )
+                logger.info(f"Legacy AR: {ar_result.authenticity_ratio_pct:.2f}% (Extended: {ar_result.extended_ar:.2f}%)")
+            else:
+                logger.info("Step 5: Legacy AR disabled (Trust Stack v2.0 uses per-property ratings)")
+
+            # Attach results to pipeline run
             pipeline_run.classified_scores = classified_scores
+            if ar_result:
+                # Store AR result for backward compatibility
+                try:
+                    pipeline_run.ar_result = ar_result
+                except Exception:
+                    pass
 
             # Complete pipeline run
             pipeline_run.end_time = datetime.now()
             pipeline_run.status = "completed"
-            
-            logger.info(f"Scoring pipeline {run_id} completed successfully")
-            try:
-                logger.info(f"Authenticity Ratio: {ar_result.authenticity_ratio_pct:.2f}%")
-            except Exception:
-                logger.info(f"Authenticity Ratio computed")
 
-            # Attach per-item appendix to the pipeline run for callers that
-            # want to render a detailed appendix in reports or UIs.
-            try:
-                pipeline_run.appendix = per_item_breakdowns
-            except Exception:
-                # Non-fatal if PipelineRun dataclass doesn't accept arbitrary attrs
-                pass
+            logger.info(f"Trust Stack rating pipeline {run_id} completed successfully")
+            logger.info(f"Processed {len(classified_scores)} items with {len([s for s in classified_scores if s.rating_comprehensive >= 80])} Excellent ratings")
             
         except Exception as e:
             pipeline_run.end_time = datetime.now()
@@ -178,14 +208,26 @@ class ScoringPipeline:
             except Exception as e:
                 logger.warning(f"Failed to upload scores for source {source}: {e}")
     
-    def _calculate_authenticity_ratio(self, scores_list: List[ContentScores], 
+    def _calculate_authenticity_ratio(self, scores_list: List[ContentScores],
                                     brand_id: str, run_id: str,
                                     include_appendix: bool = False) -> AuthenticityRatio:
-        """Calculate Authenticity Ratio from scores.
+        """
+        DEPRECATED: Calculate Authenticity Ratio from scores.
+
+        This method is kept for backward compatibility but is no longer used by
+        run_scoring_pipeline(). Trust Stack v2.0 uses AuthenticityRatio.from_ratings()
+        for simpler legacy AR synthesis.
+
+        The complex attribute bonus/penalty logic has been moved to TrustStackAttributeDetector
+        which is now integrated into ContentScorer.
 
         By default this function returns an AuthenticityRatio dataclass. If
         include_appendix=True it returns a tuple: (AuthenticityRatio, per_item_breakdowns).
         """
+        logger.warning(
+            "_calculate_authenticity_ratio() is deprecated. "
+            "Use AuthenticityRatio.from_ratings() instead."
+        )
         if not scores_list:
             logger.info(f"AR Calculation for {brand_id}: no scores")
             return (
