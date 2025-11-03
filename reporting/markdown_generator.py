@@ -260,14 +260,11 @@ class MarkdownReportGenerator:
         # Title
         content.append(self._create_header(report_data))
 
-        # Executive summary FIRST (most important - leads with key insights)
+        # Executive summary FIRST (Trust Stack focused - no AR metrics)
         content.append(self._create_executive_summary(report_data))
 
         # Metadata SECOND (collapsible reference details)
         content.append(self._create_metadata(report_data))
-
-        # Authenticity Ratio analysis
-        content.append(self._create_ar_analysis(report_data))
 
         # Dimension breakdown
         content.append(self._create_dimension_breakdown(report_data))
@@ -280,6 +277,10 @@ class MarkdownReportGenerator:
 
         # Appendix (per-item diagnostics)
         content.append(self._create_appendix(report_data))
+
+        # AR analysis moved to end and commented out per user request
+        # Uncomment when ready to integrate AR metrics back into reports
+        # content.append(self._create_ar_analysis(report_data))
 
         # Footer
         content.append(self._create_footer(report_data))
@@ -317,36 +318,79 @@ class MarkdownReportGenerator:
 ---"""
     
     def _create_executive_summary(self, report_data: Dict[str, Any]) -> str:
-        """Create executive summary section"""
+        """Create executive summary section - Trust Stack focused"""
         ar_data = report_data.get('authenticity_ratio', {})
         total_items = ar_data.get('total_items', 0)
-        authentic_items = ar_data.get('authentic_items', 0)
-        suspect_items = ar_data.get('suspect_items', 0)
-        inauthentic_items = ar_data.get('inauthentic_items', 0)
-        ar_pct = ar_data.get('authenticity_ratio_pct', 0.0)
-        extended_ar = ar_data.get('extended_ar_pct', 0.0)
+        dimension_breakdown = report_data.get('dimension_breakdown', {})
 
-        # Plain English interpretation paragraph (templated)
+        # Build Trust Stack ratings table
+        trust_stack_lines = ["### Trust Stack Ratings\n"]
+        trust_stack_lines.append("| Dimension | Average Score | Status | Key Insight |")
+        trust_stack_lines.append("|-----------|---------------|--------|-------------|")
+
+        dimension_interpretations = {
+            'provenance': 'Content traceability and source verification',
+            'verification': 'Alignment with authoritative brand data',
+            'transparency': 'Clarity of ownership and disclosure',
+            'coherence': 'Consistency with brand messaging',
+            'resonance': 'Authentic audience engagement'
+        }
+
+        weakest_dim = None
+        weakest_score = 1.0
+        strongest_dim = None
+        strongest_score = 0.0
+
+        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
+            stats = dimension_breakdown.get(dim, {})
+            avg = stats.get('average', 0.0)
+
+            # Track weakest and strongest
+            if avg < weakest_score:
+                weakest_score = avg
+                weakest_dim = dim
+            if avg > strongest_score:
+                strongest_score = avg
+                strongest_dim = dim
+
+            # Status indicator
+            if avg >= 0.70:
+                status = "✅ High"
+            elif avg >= 0.50:
+                status = "⚠️ Medium"
+            else:
+                status = "❌ Low"
+
+            insight = dimension_interpretations.get(dim, '')
+            trust_stack_lines.append(f"| **{dim.title()}** | {avg:.3f} | {status} | {insight} |")
+
+        trust_stack_table = "\n".join(trust_stack_lines)
+
+        # Build interpretation paragraph focused on dimensions
         interp = (
-            f"Out of {total_items} items analyzed, {ar_pct:.1f}% met authenticity standards, "
-            f"indicating that most brand-related content lacks verifiable provenance or transparency. "
-            f"The low Verification and Transparency scores suggest the brand’s messaging is being reused or misrepresented by third parties."
+            f"Analysis of {total_items:,} brand-related content items reveals trust patterns across five dimensions. "
+            f"**{strongest_dim.title()}** is the strongest dimension ({strongest_score:.3f}), "
+            f"while **{weakest_dim.title()}** ({weakest_score:.3f}) requires attention. "
         )
 
-        # Short one-line summary for non-technical stakeholders
-        executive_one_liner = f"Executive Summary: {ar_pct:.1f}% Core AR — {total_items} items analyzed."
+        # Add specific guidance based on weakest dimension
+        if weakest_dim == 'verification':
+            interp += "The low verification scores suggest content lacks authoritative identifiers such as verified domains or official brand handles."
+        elif weakest_dim == 'transparency':
+            interp += "The low transparency scores indicate missing disclosure tags or ambiguous authorship."
+        elif weakest_dim == 'provenance':
+            interp += "The low provenance scores suggest content lacks clear source attribution or traceability."
+        elif weakest_dim == 'coherence':
+            interp += "The low coherence scores indicate inconsistent messaging that may signal unofficial content."
+        elif weakest_dim == 'resonance':
+            interp += "The low resonance scores suggest engagement patterns don't align with authentic brand communities."
 
         # Build images (heatmap, trendline, channel breakdown) and include them if created
         visuals_md = []
         # Heatmap from dimension breakdown
         heatmap_path = self._create_dimension_heatmap(report_data)
         if heatmap_path:
-            visuals_md.append(f"![5D Heatmap]({heatmap_path})")
-
-        # Trendline from previous reports (optional)
-        trend_path = self._create_trendline(report_data)
-        if trend_path:
-            visuals_md.append(f"![AR Trend]({trend_path})")
+            visuals_md.append(f"![5D Trust Heatmap]({heatmap_path})")
 
         # Channel breakdown (if provided)
         channel_path = self._create_channel_breakdown(report_data)
@@ -358,7 +402,7 @@ class MarkdownReportGenerator:
         if ctype_path:
             visuals_md.append(f"![Content Type Breakdown]({ctype_path})")
 
-        visuals_block = "\n\n".join(visuals_md)
+        visuals_block = "\n\n".join(visuals_md) if visuals_md else ""
 
         # Include a short list of example items (up to 3) for the executive.
         # Prefer the detailed per-item diagnostics from the appendix when available
@@ -476,45 +520,19 @@ class MarkdownReportGenerator:
 
                 example_lines.append(line)
 
-            examples_md = "\n\n**Examples from this run:**\n" + "\n\n".join(example_lines) + "\n"
+            examples_md = "\n\n**Representative Examples:**\n" + "\n\n".join(example_lines) + "\n"
 
-        score_based = report_data.get('score_based_ar_pct')
+        return f"""## Executive Summary
 
-        # Add a short definitions block to explain Core vs Extended AR
-        defs_block = (
-            "**Definitions:**\n\n"
-            "- Core AR (classification): Percentage of items explicitly classified as 'Authentic' by the classifier (count of Authentic / total * 100).\n"
-            "- Score-based AR (mean 5D score): The arithmetic mean of the per-item 5D composite scores (0-100). Useful as a continuous measure.\n"
-            "- Extended AR: A blended metric that combines classification counts and score-based signals (rubric-dependent adjustments).\n"
-        )
+**Total Content Analyzed:** {total_items:,}
 
-        # Small computation table to show the numbers used to form Core/Extended AR
-        computation_table = (
-            "\n**Computation (values used):**\n\n"
-            f"- Total items = {total_items}\n"
-            f"- Authentic = {authentic_items}\n"
-            f"- Suspect = {suspect_items}\n"
-            f"- Inauthentic = {inauthentic_items}\n"
-            f"- Core AR = Authentic / Total * 100 = {ar_pct:.1f}%\n"
-            f"- Score-based AR (mean 5D) = {score_based:.1f}%\n"
-            f"- Extended AR = rubric-adjusted blend (see AR Analysis section) = {extended_ar:.1f}%\n"
-        )
+{trust_stack_table}
 
-        return f"""## Summary
+---
 
-**Core Authenticity Ratio (classification):** {ar_pct:.1f}%  
-**Score-based Authenticity Ratio (mean 5D score):** {score_based:.1f}%  
-**Extended Authenticity Ratio:** {extended_ar:.1f}%  
-**Total content analyzed:** {total_items:,}  
-**Distribution:** Authentic: {authentic_items:,} | Suspect: {suspect_items:,} | Inauthentic: {inauthentic_items:,}
-
-{defs_block}
-
-{computation_table}
+### Key Insights
 
 {interp}
-
-**Executive (one-liner):** {executive_one_liner}
 
 {examples_md}
 
