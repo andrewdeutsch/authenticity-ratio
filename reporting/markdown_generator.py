@@ -278,9 +278,16 @@ class MarkdownReportGenerator:
         # Appendix (per-item diagnostics)
         content.append(self._create_appendix(report_data))
 
-        # AR analysis moved to end and commented out per user request
-        # Uncomment when ready to integrate AR metrics back into reports
+        # ============ AUTHENTICITY RATIO INTEGRATION (DISABLED) ============
+        # The AR Analysis section is preserved but commented out during Trust Stack rebrand.
+        # To re-enable AR metrics in reports:
+        # 1. Uncomment the line below to add AR Analysis section
+        # 2. Update header from "Trust Stack Content Analysis" to "Authenticity Ratio™ Report" (line 293)
+        # 3. Update footer to reference AR instead of Trust Stack (line 786)
+        # 4. Update Recommendations to use ar_pct instead of dimension scores (see git history for original logic)
+        #
         # content.append(self._create_ar_analysis(report_data))
+        # ============ END AR INTEGRATION ============
 
         # Footer
         content.append(self._create_footer(report_data))
@@ -290,7 +297,7 @@ class MarkdownReportGenerator:
     def _create_header(self, report_data: Dict[str, Any]) -> str:
         """Create report header"""
         brand_id = report_data.get('brand_id', 'Unknown Brand')
-        return f"# Authenticity Ratio™ Report\n\n## Brand: {brand_id}"
+        return f"# Trust Stack Content Analysis\n\n## Brand: {brand_id}"
     
     def _create_metadata(self, report_data: Dict[str, Any]) -> str:
         """Create metadata section (collapsible)"""
@@ -539,9 +546,13 @@ class MarkdownReportGenerator:
 {visuals_block}
 
 """
-    
+
+    # ============ AUTHENTICITY RATIO FUNCTIONS (PRESERVED FOR FUTURE USE) ============
+    # These functions are preserved but not currently used in Trust Stack reports.
+    # See line 289 in _build_markdown_content() to re-enable AR Analysis section.
+
     def _create_ar_analysis(self, report_data: Dict[str, Any]) -> str:
-        """Create Authenticity Ratio analysis section"""
+        """Create Authenticity Ratio analysis section (DISABLED - Trust Stack rebrand)"""
         ar_data = report_data.get('authenticity_ratio', {})
         # Build per-dimension subsections
         dimension_breakdown = report_data.get('dimension_breakdown', {})
@@ -643,11 +654,11 @@ class MarkdownReportGenerator:
 
 Each dimension is scored on a scale of 0.0 to 1.0:
 - **0.8-1.0**: Excellent performance
-- **0.6-0.8**: Good performance  
+- **0.6-0.8**: Good performance
 - **0.4-0.6**: Moderate performance
 - **0.0-0.4**: Poor performance
 
-The overall Authenticity Ratio is calculated as a weighted average of all five dimensions, with each dimension contributing 20% to the final score."""
+Each dimension is independently scored and combined to form a comprehensive trust profile, with equal weighting (20% each) across all five dimensions."""
     
     def _create_classification_analysis(self, report_data: Dict[str, Any]) -> str:
         """Create classification analysis section"""
@@ -701,78 +712,114 @@ The overall Authenticity Ratio is calculated as a weighted average of all five d
 - **Goal**: Eliminate from brand ecosystem"""
     
     def _create_recommendations(self, report_data: Dict[str, Any]) -> str:
-        """Create recommendations section"""
-        ar_data = report_data.get('authenticity_ratio', {})
-        ar_pct = ar_data.get('authenticity_ratio_pct', 0.0)
-        
-        # Generate recommendations based on AR score
-        if ar_pct >= 80:
+        """Create recommendations section based on Trust Stack dimensions"""
+        dimension_breakdown = report_data.get('dimension_breakdown', {})
+
+        # Find weakest dimension score
+        weakest_dim = None
+        weakest_score = 1.0
+        dimension_scores = {}
+
+        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
+            stats = dimension_breakdown.get(dim, {})
+            avg = stats.get('average', 0.0)
+            dimension_scores[dim] = avg
+            if avg < weakest_score:
+                weakest_score = avg
+                weakest_dim = dim
+
+        # Determine priority level based on weakest dimension
+        if weakest_score >= 0.70:
             priority = "Low"
-            focus = "Maintain current standards"
+            focus = "Maintain current trust standards"
             recommendations = [
-                "Continue monitoring content quality",
-                "Amplify authentic content examples",
-                "Share best practices across teams"
+                "Continue monitoring content quality across all dimensions",
+                "Amplify high-trust content examples",
+                "Share best practices across teams",
+                f"Minor improvements to {weakest_dim.title()} (currently {weakest_score:.2f})"
             ]
-        elif ar_pct >= 60:
+        elif weakest_score >= 0.50:
             priority = "Medium"
-            focus = "Improve verification processes"
+            focus = f"Strengthen {weakest_dim.title()} dimension"
             recommendations = [
-                "Implement stricter content verification",
-                "Increase monitoring of suspect content",
-                "Develop content guidelines for brand teams"
+                f"Focus on improving {weakest_dim.title()} scores (currently {weakest_score:.2f})",
+                "Implement enhanced verification for lower-scoring content",
+                "Develop dimension-specific content guidelines",
+                "Increase monitoring of moderate-trust content"
             ]
-        elif ar_pct >= 40:
+        elif weakest_score >= 0.30:
             priority = "High"
-            focus = "Address authenticity issues"
+            focus = f"Address critical gaps in {weakest_dim.title()}"
             recommendations = [
-                "Immediate review of inauthentic content",
-                "Implement content moderation protocols",
-                "Train teams on authenticity standards",
-                "Consider content removal campaigns"
+                f"Immediate action required on {weakest_dim.title()} dimension (score: {weakest_score:.2f})",
+                "Implement content quality protocols",
+                "Train teams on trust dimension standards",
+                "Review and remediate low-trust content",
+                "Consider content removal for persistent violations"
             ]
         else:
             priority = "Critical"
-            focus = "Emergency authenticity intervention"
+            focus = f"Emergency intervention on {weakest_dim.title()}"
             recommendations = [
-                "Immediate removal of inauthentic content",
+                f"Critical trust failure in {weakest_dim.title()} (score: {weakest_score:.2f})",
+                "Immediate audit of content creation processes",
                 "Crisis communication strategy",
-                "Full audit of content creation processes",
-                "External authenticity consultation",
+                "External trust and safety consultation",
                 "Platform partnership for content verification"
             ]
-        
+
+        # Add dimension-specific guidance
+        dimension_guidance = {
+            'provenance': "Improve source attribution, metadata completeness, and traceability",
+            'verification': "Strengthen fact-checking, authoritative source validation, and brand alignment",
+            'transparency': "Enhance disclosure practices, authorship clarity, and ownership transparency",
+            'coherence': "Ensure brand messaging consistency, professional quality, and tone alignment",
+            'resonance': "Foster authentic engagement patterns and cultural fit with brand values"
+        }
+
+        specific_guidance = dimension_guidance.get(weakest_dim, "Focus on comprehensive trust improvements")
+
         recommendations_list = "\n".join([f"- {rec}" for rec in recommendations])
-        
+
+        # Calculate average score across all dimensions for success metrics
+        avg_all_dims = sum(dimension_scores.values()) / len(dimension_scores) if dimension_scores else 0.0
+
         return f"""## Recommendations
 
 ### Priority Level: {priority}
 **Focus Area**: {focus}
 
+**Weakest Dimension**: {weakest_dim.title() if weakest_dim else 'Unknown'} ({weakest_score:.3f})
+**Overall Trust Average**: {avg_all_dims:.3f}
+
 ### Recommended Actions
 
 {recommendations_list}
 
+### Dimension-Specific Guidance
+
+**{weakest_dim.title() if weakest_dim else 'Primary'}**: {specific_guidance}
+
 ### Next Steps
 
 1. **Immediate (1-7 days)**:
-   - Review and address inauthentic content
-   - Implement content monitoring alerts
+   - Focus on {weakest_dim} dimension improvements
+   - Implement content monitoring alerts for low-trust signals
 
 2. **Short-term (1-4 weeks)**:
-   - Develop content authenticity guidelines
-   - Train teams on verification processes
+   - Develop dimension-specific content guidelines
+   - Train teams on Trust Stack standards and best practices
 
 3. **Long-term (1-3 months)**:
-   - Establish ongoing monitoring systems
-   - Create authenticity performance metrics
-   - Regular Authenticity Ratio reporting
+   - Establish ongoing Trust Stack monitoring systems
+   - Create dimension performance dashboards
+   - Regular Trust Stack reporting and optimization
 
 ### Success Metrics
 
-- Increase Authenticity Ratio by 10+ percentage points
-- Reduce inauthentic content by 50%+
-- Improve average dimension scores across all 5D metrics"""
+- Improve {weakest_dim.title() if weakest_dim else 'weakest'} dimension score by 0.10+ points
+- Achieve minimum 0.60 score across all five dimensions
+- Increase overall Trust Stack average by 0.15+ points"""
     
     def _create_footer(self, report_data: Dict[str, Any]) -> str:
         """Create report footer"""
@@ -783,19 +830,19 @@ The overall Authenticity Ratio is calculated as a weighted average of all five d
 
 ## About This Report
 
-**Authenticity Ratio™** is a proprietary KPI that measures authentic vs. inauthentic brand-linked content across digital channels.
+**Trust Stack™** is a 5-dimensional framework for evaluating brand content authenticity across digital channels.
 
-This report provides actionable insights for brand health and content strategy based on the **5D Trust Dimensions** framework.
+This report provides actionable insights for brand health and content strategy based on comprehensive trust dimension analysis: **Provenance**, **Verification**, **Transparency**, **Coherence**, and **Resonance**.
 
 ### Learn More
 
-- **[AR Methodology & Technical Details](../docs/AR_METHODOLOGY.md)** - Complete methodology, formulas, and scoring criteria
+- **[Trust Stack Methodology](../docs/AR_METHODOLOGY.md)** - Complete methodology, formulas, and scoring criteria
 - **Tool Version**: v1.0
 - **Generated**: {generated_at}
 
 ---
 
-*This report is confidential and proprietary. For questions or additional analysis, contact the Authenticity Ratio team.*"""
+*This report is confidential and proprietary. For questions or additional analysis, contact the Trust Stack team.*"""
 
 
     def _create_appendix(self, report_data: Dict[str, Any]) -> str:
