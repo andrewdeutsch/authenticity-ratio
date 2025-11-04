@@ -331,7 +331,8 @@ class MarkdownReportGenerator:
         dimension_breakdown = report_data.get('dimension_breakdown', {})
 
         # Build Trust Stack ratings table
-        trust_stack_lines = ["### Trust Stack Ratings\n"]
+        trust_stack_lines = ["### Trust Stack Ratings"]
+        trust_stack_lines.append("")  # Blank line after header
         trust_stack_lines.append("| Dimension | Average Score | Status | Key Insight |")
         trust_stack_lines.append("|-----------|---------------|--------|-------------|")
 
@@ -360,13 +361,15 @@ class MarkdownReportGenerator:
                 strongest_score = avg
                 strongest_dim = dim
 
-            # Status indicator
-            if avg >= 0.70:
-                status = "✅ High"
-            elif avg >= 0.50:
-                status = "⚠️ Medium"
+            # Status indicator (consistent with Dimension Performance section)
+            if avg >= 0.80:
+                status = "🟢 Excellent"
+            elif avg >= 0.60:
+                status = "🟡 Good"
+            elif avg >= 0.40:
+                status = "🟠 Moderate"
             else:
-                status = "❌ Low"
+                status = "🔴 Poor"
 
             insight = dimension_interpretations.get(dim, '')
             trust_stack_lines.append(f"| **{dim.title()}** | {avg:.3f} | {status} | {insight} |")
@@ -495,7 +498,7 @@ class MarkdownReportGenerator:
                     body_text = meta.get('body') or ex.get('body') or ''
                     desc = _summarize_text(raw_desc or body_text, max_lines=2, max_chars=240)
 
-                # Short analysis: list top 2 dimension signals
+                # Parse dimension scores for trust assessment
                 dims = ex.get('dimension_scores') or {}
                 dims_parsed = {}
                 if isinstance(dims, dict):
@@ -504,26 +507,49 @@ class MarkdownReportGenerator:
                             dims_parsed[k] = float(v)
                         except Exception:
                             pass
-                top_dims = sorted(dims_parsed.items(), key=lambda x: x[1], reverse=True)[:2]
-                top_dims_str = ', '.join([f"{k.title()}: {v:.2f}" for k, v in top_dims]) if top_dims else ''
-                analysis = f"Label: {label} ({score:.1f})"
-                if top_dims_str:
-                    analysis += f" — Key signals: {top_dims_str}"
 
-                # Ensure we expose some useful URL when available (terms/privacy may indicate domain)
+                # Create trust assessment explanation based on dimension scores
+                trust_assessment = ""
+                if dims_parsed:
+                    # Find weakest and strongest dimensions for this item
+                    sorted_dims = sorted(dims_parsed.items(), key=lambda x: x[1])
+                    weakest_item_dims = sorted_dims[:2] if len(sorted_dims) >= 2 else sorted_dims
+                    strongest_item_dims = sorted(dims_parsed.items(), key=lambda x: x[1], reverse=True)[:1]
+
+                    # Determine trust level based on score
+                    if score >= 0.70:
+                        trust_level = "High Trust"
+                    elif score >= 0.50:
+                        trust_level = "Moderate Trust"
+                    else:
+                        trust_level = "Low Trust"
+
+                    # Build explanation
+                    trust_assessment = f"**Trust Assessment**: {trust_level} rating ({score:.2f}) "
+
+                    if weakest_item_dims:
+                        weak_dims_str = ', '.join([f"{k.title()} ({v:.2f})" for k, v in weakest_item_dims])
+                        trust_assessment += f"with weaker signals in {weak_dims_str}. "
+
+                    if strongest_item_dims:
+                        strong_dims_str = ', '.join([f"{k.title()} ({v:.2f})" for k, v in strongest_item_dims])
+                        trust_assessment += f"Strongest dimension: {strong_dims_str}."
+                else:
+                    trust_assessment = f"**Trust Assessment**: Score: {score:.2f}"
+
+                # Get URL - only show real URLs, not platform IDs
                 url = meta.get('source_url') or meta.get('url') or meta.get('source_link') or ''
-                if not url:
-                    # Try platform id or fall back to terms/privacy links if they point to same site
-                    url = meta.get('platform_id') or ''
-                    if not url:
-                        # prefer privacy/terms as a last-resort visited URL
-                        url = meta.get('privacy') or meta.get('terms') or ''
+                # Validate URL - must start with http:// or https://
+                if url and not (url.startswith('http://') or url.startswith('https://')):
+                    # Check if it's a YouTube ID or other platform ID (no dots, no slashes)
+                    if '.' not in url and '/' not in url:
+                        url = ''  # Clear platform IDs like "z1fgz5db-I4"
 
-                line = f"- **{title}**\n\n  {analysis}"
-                if desc:
-                    line += f"\n\n  Description: {desc}"
+                line = f"- **{title}**\n\n  {trust_assessment}"
                 if url:
-                    line += f"\n\n  Link: {url}"
+                    line += f"\n\n  **Link**: {url}"
+                else:
+                    line += f"\n\n  **Link**: Not available"
 
                 example_lines.append(line)
 
@@ -663,53 +689,53 @@ Each dimension is independently scored and combined to form a comprehensive trus
     def _create_classification_analysis(self, report_data: Dict[str, Any]) -> str:
         """Create classification analysis section"""
         classification_data = report_data.get('classification_analysis', {})
-        
+
         if not classification_data:
-            return "## Content Classification Analysis\n\n*No classification data available*"
-        
+            return "## Content Trust Classification\n\n*No classification data available*"
+
         dist = classification_data.get('classification_distribution', {})
         total = sum(dist.values())
-        
+
         if total == 0:
-            return "## Content Classification Analysis\n\n*No classification data available*"
-        
-        # Create classification summary
-        authentic_pct = dist.get('authentic', 0) / total * 100
-        suspect_pct = dist.get('suspect', 0) / total * 100
-        inauthentic_pct = dist.get('inauthentic', 0) / total * 100
-        
-        return f"""## Content Classification Analysis
+            return "## Content Trust Classification\n\n*No classification data available*"
 
-### Classification Distribution
+        # Create classification summary (using existing keys but new labels)
+        high_trust_pct = dist.get('authentic', 0) / total * 100
+        moderate_trust_pct = dist.get('suspect', 0) / total * 100
+        low_trust_pct = dist.get('inauthentic', 0) / total * 100
 
-| Classification | Count | Percentage | Status |
-|----------------|-------|------------|---------|
-| **Authentic** | {dist.get('authentic', 0):,} | {authentic_pct:.1f}% | ✅ Strengthens brand |
-| **Suspect** | {dist.get('suspect', 0):,} | {suspect_pct:.1f}% | ⚠️ Needs verification |
-| **Inauthentic** | {dist.get('inauthentic', 0):,} | {inauthentic_pct:.1f}% | ❌ Requires attention |
+        return f"""## Content Trust Classification
+
+### Trust Distribution
+
+| Trust Level | Count | Percentage | Status |
+|-------------|-------|------------|---------|
+| **High Trust** | {dist.get('authentic', 0):,} | {high_trust_pct:.1f}% | ✅ Strengthens brand |
+| **Moderate Trust** | {dist.get('suspect', 0):,} | {moderate_trust_pct:.1f}% | ⚠️ Needs verification |
+| **Low Trust** | {dist.get('inauthentic', 0):,} | {low_trust_pct:.1f}% | ❌ Requires attention |
 
 ### Classification Definitions
 
-- **Authentic**: Content that meets all authenticity criteria with high confidence
-- **Suspect**: Content that may be genuine but lacks sufficient verification
-- **Inauthentic**: Content that fails authenticity criteria or shows signs of manipulation
+- **High Trust**: Content that meets trust standards across all five dimensions with high confidence (score ≥0.70)
+- **Moderate Trust**: Content that shows mixed trust signals and requires additional verification (score 0.50-0.69)
+- **Low Trust**: Content that fails trust criteria or shows weak dimensional scores (score <0.50)
 
-### Action Items by Classification
+### Action Items by Trust Level
 
-#### 🟢 Authentic Content ({dist.get('authentic', 0):,} items)
+#### 🟢 High Trust Content ({dist.get('authentic', 0):,} items)
 - **Action**: Amplify and promote
-- **Strategy**: Use as examples of authentic brand engagement
+- **Strategy**: Use as examples of trusted brand engagement
 - **Goal**: Increase visibility and reach
 
-#### 🟡 Suspect Content ({dist.get('suspect', 0):,} items)  
-- **Action**: Investigate and verify
-- **Strategy**: Apply additional verification steps
-- **Goal**: Move to authentic classification or flag for removal
+#### 🟡 Moderate Trust Content ({dist.get('suspect', 0):,} items)
+- **Action**: Investigate and enhance
+- **Strategy**: Apply additional verification and improve weak dimensions
+- **Goal**: Elevate to high trust classification or flag for review
 
-#### 🔴 Inauthentic Content ({dist.get('inauthentic', 0):,} items)
-- **Action**: Remove or flag for removal
-- **Strategy**: Report to platform administrators
-- **Goal**: Eliminate from brand ecosystem"""
+#### 🔴 Low Trust Content ({dist.get('inauthentic', 0):,} items)
+- **Action**: Review and remediate or remove
+- **Strategy**: Address trust deficiencies or report to platform administrators
+- **Goal**: Improve trust scores or eliminate from brand ecosystem"""
     
     def _create_recommendations(self, report_data: Dict[str, Any]) -> str:
         """Create recommendations section based on Trust Stack dimensions"""
@@ -921,72 +947,20 @@ This report provides actionable insights for brand health and content strategy b
 
             title = meta.get('title') or meta.get('name') or meta.get('headline') or meta.get('og:title') or (item.get('source') or '') + ' - ' + (cid or '')
 
-            # Prefer body content for description when snippet appears noisy (multiple short fragments/menus)
-            raw_desc = meta.get('description') or meta.get('snippet') or meta.get('summary') or ''
-            body_candidate = meta.get('body') or item.get('body') or ''
-
-            def _is_noisy_snippet(s: str) -> bool:
-                if not s:
-                    return False
-                # Split on common separators; if many short fragments exist, it's noisy
-                parts = re.split(r'[\n\r\t\-•,;…]+', s)
-                parts = [p.strip() for p in parts if p.strip()]
-                short_fragments = sum(1 for p in parts if len(p) < 40)
-                if len(parts) >= 4 and short_fragments >= 4:
-                    return True
-                # also consider many languages / emoji-like tokens as noisy
-                non_alpha = sum(1 for ch in s if not (ch.isalnum() or ch.isspace()))
-                if non_alpha > max(10, len(s) * 0.05):
-                    return True
-                return False
-
-            desc_source = raw_desc
-            if raw_desc and _is_noisy_snippet(raw_desc) and body_candidate:
-                desc_source = body_candidate
-
-            # Allow LLM-generated descriptions when requested in report_data
-            use_llm = bool(report_data.get('use_llm_for_descriptions') or report_data.get('use_llm_for_examples'))
-            description = None
-            if use_llm:
-                try:
-                    desc_llm = _llm_summarize(desc_source or clean_text_for_llm(meta), model=report_data.get('llm_model', 'gpt-3.5-turbo'), max_words=80)
-                    if desc_llm:
-                        description = add_llm_provenance(desc_llm, report_data.get('llm_model', 'gpt-3.5-turbo'))
-                except Exception:
-                    description = None
-            if not description:
-                # Try to produce a summary from body/snippet, and if still empty, synthesize a minimal description
-                description = _summarize_text(desc_source or body_candidate or meta.get('snippet') or '', max_lines=2, max_chars=240)
-                if not description:
-                    # Synthesize a short description using available metadata
-                    parts = []
-                    domain = ''
-                    try:
-                        from urllib.parse import urlparse
-                        vurl = meta.get('source_url') or meta.get('url') or meta.get('privacy') or meta.get('terms') or ''
-                        if vurl:
-                            domain = urlparse(vurl).netloc
-                    except Exception:
-                        domain = ''
-                    if domain:
-                        parts.append(f"Page on {domain}")
-                    if meta.get('privacy'):
-                        parts.append('Privacy policy found')
-                    if meta.get('terms'):
-                        parts.append('Terms of service found')
-                    if meta.get('content_type'):
-                        parts.append(f"Content type: {meta.get('content_type')}")
-                    description = ("; ".join(parts)) if parts else ''
+            # Get visited URL - only show real URLs, not platform IDs
             visited_url = meta.get('source_url') or meta.get('url') or meta.get('source_link') or ''
-            # Robust visited URL fallback: platform_id, terms/privacy, or try to pull from item-level fields
-            if not visited_url:
-                visited_url = meta.get('platform_id') or item.get('platform_id') or item.get('url') or ''
-                if not visited_url:
-                    visited_url = meta.get('privacy') or meta.get('terms') or ''
-            # Last-resort: scan any meta/body text for the first http(s) URL and use it
+
+            # Validate URL - must be a proper URL
+            if visited_url and not (visited_url.startswith('http://') or visited_url.startswith('https://')):
+                # Check if it's a platform ID (no dots, no slashes) - if so, clear it
+                if '.' not in visited_url and '/' not in visited_url:
+                    visited_url = ''  # Clear platform IDs like "z1fgz5db-I4" or "1oiqgdr"
+
+            # If no valid URL, try to extract from meta/body text
             if not visited_url:
                 try:
                     import json as _json
+                    body_candidate = meta.get('body') or item.get('body') or ''
                     combined = ''
                     try:
                         combined = _json.dumps(meta) if meta else ''
@@ -994,14 +968,25 @@ This report provides actionable insights for brand health and content strategy b
                         combined = str(meta)
                     if not combined and body_candidate:
                         combined = body_candidate
-                    # look for http(s) links, avoiding common trailing punctuation
+                    # Look for http(s) links
                     m = re.search(r"https?://[^\s\)\]\'>]+", combined or '')
                     if m:
                         visited_url = m.group(0)
                 except Exception:
                     pass
+
             score = item.get('final_score') if item.get('final_score') is not None else item.get('final', None) or 0.0
-            label = (item.get('label') or item.get('class_label') or '').title()
+
+            # Convert label to trust-based terminology
+            raw_label = (item.get('label') or item.get('class_label') or '').lower()
+            if raw_label == 'authentic':
+                label = 'High Trust'
+            elif raw_label == 'suspect':
+                label = 'Moderate Trust'
+            elif raw_label == 'inauthentic':
+                label = 'Low Trust'
+            else:
+                label = (item.get('label') or item.get('class_label') or '').title()
 
             # Build a natural-language rationale using dimension signals, applied rules, and metadata cues
             rationale_sentences = []
@@ -1076,45 +1061,49 @@ This report provides actionable insights for brand health and content strategy b
 
             rationale = ' '.join(rationale_sentences) if rationale_sentences else ''
 
-            # Render item block with explicit Title bullet
-            # Provide more informative fallbacks for description/visited URL
-            desc_display = description if description else ''
-            if not desc_display:
-                terms_link = meta.get('terms') or meta.get('terms_url')
-                priv_link = meta.get('privacy') or meta.get('privacy_url')
-                if terms_link or priv_link:
-                    parts = []
-                    if terms_link:
-                        parts.append(f"Terms: {terms_link}")
-                    if priv_link:
-                        parts.append(f"Privacy: {priv_link}")
-                    desc_display = "Page content was thin; found: " + "; ".join(parts)
-                else:
-                    desc_display = '*No description available*'
+            # Build trust assessment explanation instead of content description
+            trust_assessment = ""
+            if dims:
+                try:
+                    # Parse dimension scores
+                    dims_parsed = {k: float(v) for k, v in dims.items() if v is not None}
+                    if dims_parsed:
+                        sorted_dims = sorted(dims_parsed.items(), key=lambda x: x[1])
+                        weakest_dims = sorted_dims[:2] if len(sorted_dims) >= 2 else sorted_dims
+                        strongest_dims = sorted(dims_parsed.items(), key=lambda x: x[1], reverse=True)[:1]
 
-            if visited_url:
-                visited_display = visited_url
+                        # Determine trust level
+                        if float(score) >= 0.70:
+                            trust_level = "High Trust"
+                        elif float(score) >= 0.50:
+                            trust_level = "Moderate Trust"
+                        else:
+                            trust_level = "Low Trust"
+
+                        trust_assessment = f"{trust_level} rating based on score of {float(score):.2f}. "
+
+                        if weakest_dims:
+                            weak_str = ', '.join([f"{k.title()} ({v:.2f})" for k, v in weakest_dims])
+                            trust_assessment += f"Weaker dimensions: {weak_str}. "
+
+                        if strongest_dims:
+                            strong_str = ', '.join([f"{k.title()} ({v:.2f})" for k, v in strongest_dims])
+                            trust_assessment += f"Strongest: {strong_str}."
+                except Exception:
+                    trust_assessment = f"Score: {float(score):.2f}"
             else:
-                # show any footer links when the main visited URL is unavailable
-                terms_link = meta.get('terms') or meta.get('terms_url')
-                priv_link = meta.get('privacy') or meta.get('privacy_url')
-                if terms_link or priv_link:
-                    parts = []
-                    if terms_link:
-                        parts.append(f"Terms: {terms_link}")
-                    if priv_link:
-                        parts.append(f"Privacy: {priv_link}")
-                    visited_display = "; ".join(parts)
-                else:
-                    visited_display = '*N/A*'
+                trust_assessment = f"Score: {float(score):.2f}"
+
+            # Format visited URL
+            visited_display = visited_url if visited_url else 'Not available'
 
             lines.append(
                 f"### {title}\n\n"
                 f"- **Source**: {source.title()}\n"
                 f"- **Title**: {title}\n"
-                f"- **Description**: {desc_display}\n"
+                f"- **Trust Assessment**: {trust_assessment}\n"
                 f"- **Visited URL**: {visited_display}\n"
-                f"- **Score**: {float(score):.2f} | **Label**: {label}\n"
+                f"- **Score**: {float(score):.2f} | **Trust Level**: {label}\n"
                 f"- **Rationale**: {rationale if rationale else 'No detailed rationale available.'}\n\n---\n"
             )
 
