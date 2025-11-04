@@ -175,7 +175,13 @@ class YouTubeScraper:
         for vid in videos:
             content_id = f"youtube_video_{vid.video_id}"
             event_ts = vid.publish_time or format_timestamp()
+
+            # Construct full YouTube URL
+            youtube_url = f"https://www.youtube.com/watch?v={vid.video_id}"
+
             meta = {
+                'source_url': youtube_url,  # Add full YouTube URL
+                'url': youtube_url,  # Also add as 'url' for compatibility
                 'channel_title': vid.channel_title,
                 'view_count': str(vid.view_count) if vid.view_count is not None else '',
                 'like_count': str(vid.like_count) if vid.like_count is not None else '',
@@ -211,6 +217,8 @@ class YouTubeScraper:
                     meta_comment = {
                         'video_id': vid.video_id,
                         'video_title': vid.title,
+                        'video_url': youtube_url,  # Add parent video URL
+                        'source_url': youtube_url,  # Comments link back to parent video
                         'like_count': str(c.get('like_count', 0))
                     }
 
