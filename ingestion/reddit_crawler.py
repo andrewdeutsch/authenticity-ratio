@@ -144,7 +144,7 @@ class RedditCrawler:
     
     def _parse_submission(self, submission) -> RedditPost:
         """Parse Reddit submission into RedditPost object"""
-        return RedditPost(
+        post = RedditPost(
             id=submission.id,
             title=submission.title,
             selftext=submission.selftext or "",
@@ -158,6 +158,11 @@ class RedditCrawler:
             permalink=submission.permalink,  # Reddit post permalink
             is_self=submission.is_self
         )
+
+        # Log what we captured for debugging
+        logger.info(f"Reddit post parsed: id={post.id}, title='{post.title[:80] if post.title else '[EMPTY TITLE]'}', permalink={post.permalink}")
+
+        return post
     
     def filter_by_brand_keywords(self, posts: List[RedditPost], 
                                brand_keywords: List[str]) -> List[RedditPost]:
@@ -201,6 +206,9 @@ class RedditCrawler:
                 "num_comments": str(post.num_comments),
                 "title": post.title  # Explicitly include title in metadata
             }
+
+            # Log the normalization for debugging
+            logger.info(f"Converting Reddit post to NormalizedContent: id={content_id}, title='{post.title[:80] if post.title else '[EMPTY]'}', url={reddit_post_url}")
 
             normalized_content.append(NormalizedContent(
                 content_id=content_id,
