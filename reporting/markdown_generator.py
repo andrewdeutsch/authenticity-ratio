@@ -464,10 +464,14 @@ class MarkdownReportGenerator:
             example_lines = []
             for ex in selected:
                 meta = _get_meta_from_item(ex)
-                # Robust title fallback: meta title/name/og/headline, then first words of body, then content_id
+                # Robust title fallback: check item first, then meta fields
                 title = (
-                    meta.get('title') or meta.get('name') or meta.get('headline') or meta.get('og:title')
-                    or (meta.get('source_url') if meta.get('source_url') and isinstance(meta.get('source_url'), str) else None)
+                    ex.get('title') or  # Check top-level title field first
+                    meta.get('title') or
+                    meta.get('name') or
+                    meta.get('headline') or
+                    meta.get('og:title') or
+                    (meta.get('source_url') if meta.get('source_url') and isinstance(meta.get('source_url'), str) else None)
                 )
                 if not title:
                     # Try to derive from body/snippet
@@ -945,7 +949,15 @@ This report provides actionable insights for brand health and content strategy b
                         except Exception:
                             continue
 
-            title = meta.get('title') or meta.get('name') or meta.get('headline') or meta.get('og:title') or (item.get('source') or '') + ' - ' + (cid or '')
+            # Extract title: check item first, then meta fields
+            title = (
+                item.get('title') or  # Check top-level title field first
+                meta.get('title') or
+                meta.get('name') or
+                meta.get('headline') or
+                meta.get('og:title') or
+                (item.get('source') or '') + ' - ' + (cid or '')  # Fallback to source-id
+            )
 
             # Get visited URL - only show real URLs, not platform IDs
             visited_url = meta.get('source_url') or meta.get('url') or meta.get('source_link') or ''
