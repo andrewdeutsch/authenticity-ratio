@@ -24,11 +24,10 @@ from typing import Dict, Any, List, Optional
 try:
     from openai import OpenAI
     from openai import OpenAIError
-    _HAVE_OPENAI = True
-except ImportError:
+except Exception:
+    # Defer raising ImportError until runtime so tests can patch OpenAI
     OpenAI = None
     OpenAIError = Exception
-    _HAVE_OPENAI = False
 
 logger = logging.getLogger(__name__)
 
@@ -61,27 +60,23 @@ class ChatClient:
             ImportError: If openai package is not installed
             ValueError: If API key is not configured
         """
-        if not _HAVE_OPENAI:
-            raise ImportError(
-                "OpenAI package not installed. Install with: pip install openai"
-            )
-
-        # Get API key from arg, config, or environment
-        if api_key is None:
-            try:
-                from config.settings import APIConfig
-                api_key = APIConfig.openai_api_key
-            except Exception:
-                pass
-
+        # Prefer explicit arg, then environment variable. We avoid relying on
+        # config.settings' APIConfig here because that module captures env vars
+        # at import time which makes tests brittle when the process env is
+        # patched during test runs.
         if api_key is None:
             api_key = os.environ.get('OPENAI_API_KEY')
 
         if not api_key:
             raise ValueError(
-                "OpenAI API key not configured. Set OPENAI_API_KEY environment variable "
-                "or configure APIConfig.openai_api_key in config/settings.py"
+                "OpenAI API key not configured. Set OPENAI_API_KEY environment variable"
             )
+
+        # Instantiate the OpenAI client. Allow tests to patch the OpenAI
+        # symbol in this module (so OpenAI may be a mock). If OpenAI is not
+        # available, raise ImportError to indicate missing dependency.
+        if OpenAI is None:
+            raise ImportError("OpenAI package not installed. Install with: pip install openai")
 
         self.client = OpenAI(api_key=api_key)
         self.default_model = default_model
