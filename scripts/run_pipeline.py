@@ -4,6 +4,8 @@ Main pipeline runner script for AR tool
 Executes the complete AR analysis pipeline
 """
 
+from __future__ import annotations
+
 import sys
 import os
 import argparse
@@ -56,7 +58,8 @@ def main():
     parser.add_argument('--output-dir', default='./output', help='Output directory for reports')
     parser.add_argument('--log-level', default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'])
     parser.add_argument('--dry-run', action='store_true', help='Run without making API calls or uploading data')
-    parser.add_argument('--max-content', type=int, default=1000, help='Maximum content items to process')
+    parser.add_argument('--max-items', '-n', type=int, default=100, help='Maximum total items to analyze across all sources (default: 100)')
+    parser.add_argument('--max-content', type=int, help='[DEPRECATED] Use --max-items instead')
     parser.add_argument('--brave-pages', type=int, default=10, help='Number of Brave search results/pages to fetch (default: 10)')
     parser.add_argument('--include-comments', action='store_true', help='Include comments in analysis (overrides settings include_comments_in_analysis)')
     parser.add_argument('--use-llm-examples', action='store_true', help='Use LLM (gpt-3.5-turbo by default) to produce abstractive summaries for executive examples')
@@ -65,6 +68,22 @@ def main():
     args = parser.parse_args()
     # Normalize sources to lowercase to be case-insensitive (users may pass 'Brave' or 'Youtube')
     args.sources = [s.lower() for s in args.sources]
+
+    # Backwards-compatible handling of deprecated --max-content
+    # Prefer explicit --max-items when provided; fall back to --max-content if present.
+    max_items = args.max_items
+    if args.max_content is not None:
+        try:
+            # allow --max-content to override when explicitly specified
+            max_items = int(args.max_content)
+        except Exception:
+            pass
+    try:
+        max_items = int(max_items)
+        if max_items <= 0:
+            max_items = 100
+    except Exception:
+        max_items = 100
     
     # Setup logging
     log_file = os.path.join(args.output_dir, 'logs', f'ar_pipeline_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
@@ -74,7 +93,7 @@ def main():
     logger.info(f"Brand ID: {args.brand_id}")
     logger.info(f"Keywords: {args.keywords}")
     logger.info(f"Sources: {args.sources}")
-    logger.info(f"Max content: {args.max_content}")
+    logger.info(f"Max items to analyze: {max_items}")
     logger.info(f"Dry run: {args.dry_run}")
     
     try:
@@ -183,7 +202,7 @@ def main():
                         reddit_crawler = RedditCrawler()
                         reddit_posts = reddit_crawler.search_posts(
                             keywords=args.keywords,
-                            limit=args.max_content // len(args.sources)
+                            limit=max_items // max(1, len(args.sources))
                         )
                         reddit_content = reddit_crawler.convert_to_normalized_content(
                             reddit_posts, args.brand_id, run_id
@@ -206,7 +225,7 @@ def main():
                         # mock_reviews_for_demo signature = (brand_keywords: List[str], num_reviews: int = 50)
                         amazon_reviews = amazon_scraper.mock_reviews_for_demo(
                             args.keywords,
-                            num_reviews=args.max_content // len(args.sources)
+                            num_reviews=max_items // max(1, len(args.sources))
                         )
                         amazon_content = amazon_scraper.convert_to_normalized_content(
                             amazon_reviews, args.brand_id, run_id
@@ -228,7 +247,7 @@ def main():
                         # Build a search query from keywords
                         youtube_scraper = YouTubeScraper()
                         query = ' '.join(args.keywords)
-                        videos = youtube_scraper.search_videos(query=query, max_results=args.max_content // len(args.sources))
+                        videos = youtube_scraper.search_videos(query=query, max_results=max_items // max(1, len(args.sources)))
                         youtube_content = youtube_scraper.convert_videos_to_normalized(videos, args.brand_id, run_id)
                         all_content.extend(youtube_content)
                         logger.info(f"Retrieved {len(youtube_content)} YouTube content items")
@@ -240,7 +259,7 @@ def main():
             if not args.dry_run:
                 query = ' '.join(args.keywords)
                 # Use the new collect_brave_pages helper to gather N successful pages
-                target = min(args.brave_pages, args.max_content)
+                target = min(args.brave_pages, max_items)
                 try:
                     collected = collect_brave_pages(query, target_count=target)
                 except Exception as e:

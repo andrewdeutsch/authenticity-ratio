@@ -1,24 +1,60 @@
 """
-Content classifier for AR tool
-Classifies content as Authentic, Suspect, or Inauthentic based on scores
+Content classifier for Trust Stack Rating tool
+
+DEPRECATED: This module provides legacy classification (Authentic/Suspect/Inauthentic)
+for backward compatibility with AR calculations. In Trust Stack v2.0, the primary
+model is per-property ratings (0-100 scale) without classification.
+
+This classifier is kept for:
+1. Optional descriptive rating bands (Excellent/Good/Fair/Poor)
+2. Legacy AR synthesis when enable_legacy_ar_mode=True
+
+New implementations should use TrustStackRating model with rating bands instead.
 """
 
 from typing import List, Dict, Any
 import logging
 import json
+import warnings
 
 from config.settings import SETTINGS
-from data.models import ContentScores, ContentClass
+from data.models import ContentScores, ContentClass, RatingBand
 
 logger = logging.getLogger(__name__)
 
+# Issue deprecation warning
+warnings.warn(
+    "ContentClassifier is deprecated in Trust Stack v2.0. "
+    "Use TrustStackRating with rating_band property for new implementations. "
+    "This classifier is kept for legacy AR mode only.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 class ContentClassifier:
-    """Classifies content based on 5D scores"""
-    
-    def __init__(self):
+    """
+    DEPRECATED: Classifies content based on 5D scores
+
+    This classifier provides legacy classification for backward compatibility.
+    For Trust Stack v2.0, use rating bands instead.
+    """
+
+    def __init__(self, suppress_warning: bool = False):
+        """
+        Initialize classifier
+
+        Args:
+            suppress_warning: If True, suppress deprecation warning (useful for legacy mode)
+        """
         self.min_authentic_threshold = SETTINGS['min_score_threshold']
         self.suspect_threshold = SETTINGS['suspect_threshold']
         self.scoring_weights = SETTINGS['scoring_weights']
+
+        if not suppress_warning:
+            logger.warning(
+                "ContentClassifier is deprecated. "
+                "Consider using rating bands from TrustStackRating model."
+            )
     
     def classify_content(self, content_scores: ContentScores) -> ContentScores:
         """
@@ -196,18 +232,72 @@ class ContentClassifier:
         """Calculate simple correlation coefficient"""
         if len(x) != len(y) or len(x) < 2:
             return 0.0
-        
+
         n = len(x)
         sum_x = sum(x)
         sum_y = sum(y)
         sum_xy = sum(x[i] * y[i] for i in range(n))
         sum_x2 = sum(x[i] ** 2 for i in range(n))
         sum_y2 = sum(y[i] ** 2 for i in range(n))
-        
+
         numerator = n * sum_xy - sum_x * sum_y
         denominator = ((n * sum_x2 - sum_x ** 2) * (n * sum_y2 - sum_y ** 2)) ** 0.5
-        
+
         if denominator == 0:
             return 0.0
-        
+
         return numerator / denominator
+
+    # Trust Stack v2.0 methods
+
+    def get_rating_band(self, content_scores: ContentScores) -> RatingBand:
+        """
+        Get Trust Stack rating band for content (new method for v2.0)
+
+        Args:
+            content_scores: ContentScores object
+
+        Returns:
+            RatingBand (Excellent/Good/Fair/Poor)
+        """
+        return content_scores.rating_band
+
+    def batch_get_rating_bands(self, scores_list: List[ContentScores]) -> Dict[RatingBand, int]:
+        """
+        Get rating band distribution for batch of content
+
+        Args:
+            scores_list: List of ContentScores
+
+        Returns:
+            Dictionary with count for each rating band
+        """
+        distribution = {
+            RatingBand.EXCELLENT: 0,
+            RatingBand.GOOD: 0,
+            RatingBand.FAIR: 0,
+            RatingBand.POOR: 0
+        }
+
+        for scores in scores_list:
+            band = self.get_rating_band(scores)
+            distribution[band] += 1
+
+        return distribution
+
+    def log_rating_band_summary(self, scores_list: List[ContentScores]) -> None:
+        """
+        Log summary of rating band distribution (Trust Stack v2.0 style)
+
+        Args:
+            scores_list: List of ContentScores
+        """
+        distribution = self.batch_get_rating_bands(scores_list)
+        total = len(scores_list)
+
+        logger.info("Trust Stack Rating Band Summary:")
+        logger.info(f"  Total items: {total}")
+        logger.info(f"  Excellent (80-100): {distribution[RatingBand.EXCELLENT]} ({distribution[RatingBand.EXCELLENT]/total*100:.1f}%)")
+        logger.info(f"  Good (60-79):      {distribution[RatingBand.GOOD]} ({distribution[RatingBand.GOOD]/total*100:.1f}%)")
+        logger.info(f"  Fair (40-59):      {distribution[RatingBand.FAIR]} ({distribution[RatingBand.FAIR]/total*100:.1f}%)")
+        logger.info(f"  Poor (0-39):       {distribution[RatingBand.POOR]} ({distribution[RatingBand.POOR]/total*100:.1f}%)")

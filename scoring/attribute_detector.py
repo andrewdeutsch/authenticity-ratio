@@ -1,0 +1,805 @@
+"""
+Trust Stack Attribute Detector
+Detects 36 Trust Stack attributes from normalized content metadata
+"""
+import json
+import re
+from typing import List, Dict, Optional
+from urllib.parse import urlparse
+import logging
+
+from data.models import NormalizedContent, DetectedAttribute
+
+logger = logging.getLogger(__name__)
+
+
+class TrustStackAttributeDetector:
+    """Detects Trust Stack attributes from content metadata"""
+
+    def __init__(self, rubric_path: str = "config/rubric.json"):
+        """
+        Initialize detector with rubric configuration
+
+        Args:
+            rubric_path: Path to rubric.json containing attribute definitions
+        """
+        with open(rubric_path, "r", encoding="utf-8") as f:
+            self.rubric = json.load(f)
+
+        # Load only enabled attributes
+        self.attributes = {
+            attr["id"]: attr
+            for attr in self.rubric["attributes"]
+            if attr.get("enabled", False)
+        }
+
+        logger.info(f"Loaded {len(self.attributes)} enabled Trust Stack attributes")
+
+    def detect_attributes(self, content: NormalizedContent) -> List[DetectedAttribute]:
+        """
+        Detect all applicable Trust Stack attributes from content
+
+        Args:
+            content: Normalized content to analyze
+
+        Returns:
+            List of detected attributes with values 1-10
+        """
+        detected = []
+
+        # Dispatch to specific detection methods
+        detection_methods = {
+            # Provenance
+            "ai_vs_human_labeling_clarity": self._detect_ai_human_labeling,
+            "author_brand_identity_verified": self._detect_author_verified,
+            "c2pa_cai_manifest_present": self._detect_c2pa_manifest,
+            "canonical_url_matches_declared_source": self._detect_canonical_url,
+            "digital_watermark_fingerprint_detected": self._detect_watermark,
+            "exif_metadata_integrity": self._detect_exif_integrity,
+            "source_domain_trust_baseline": self._detect_domain_trust,
+
+            # Resonance
+            "community_alignment_index": self._detect_community_alignment,
+            "creative_recency_vs_trend": self._detect_trend_alignment,
+            "cultural_context_alignment": self._detect_cultural_context,
+            "language_locale_match": self._detect_language_match,
+            "personalization_relevance_embedding_similarity": self._detect_personalization,
+            "readability_grade_level_fit": self._detect_readability,
+            "tone_sentiment_appropriateness": self._detect_tone_sentiment,
+
+            # Coherence
+            "brand_voice_consistency_score": self._detect_brand_voice,
+            "broken_link_rate": self._detect_broken_links,
+            "claim_consistency_across_pages": self._detect_claim_consistency,
+            "email_asset_consistency_check": self._detect_email_consistency,
+            "engagement_to_trust_correlation": self._detect_engagement_trust,
+            "multimodal_consistency_score": self._detect_multimodal_consistency,
+            "temporal_continuity_versions": self._detect_temporal_continuity,
+            "trust_fluctuation_index": self._detect_trust_fluctuation,
+
+            # Transparency
+            "ai_explainability_disclosure": self._detect_ai_explainability,
+            "ai_generated_assisted_disclosure_present": self._detect_ai_disclosure,
+            "bot_disclosure_response_audit": self._detect_bot_disclosure,
+            "caption_subtitle_availability_accuracy": self._detect_captions,
+            "data_source_citations_for_claims": self._detect_citations,
+            "privacy_policy_link_availability_clarity": self._detect_privacy_policy,
+
+            # Verification
+            "ad_sponsored_label_consistency": self._detect_ad_labels,
+            "agent_safety_guardrail_presence": self._detect_safety_guardrails,
+            "claim_to_source_traceability": self._detect_claim_traceability,
+            "engagement_authenticity_ratio": self._detect_engagement_authenticity,
+            "influencer_partner_identity_verified": self._detect_influencer_verified,
+            "review_authenticity_confidence": self._detect_review_authenticity,
+            "seller_product_verification_rate": self._detect_seller_verification,
+            "verified_purchaser_review_rate": self._detect_verified_purchaser,
+        }
+
+        for attr_id, detection_func in detection_methods.items():
+            if attr_id in self.attributes:
+                try:
+                    result = detection_func(content)
+                    if result:
+                        detected.append(result)
+                except Exception as e:
+                    logger.warning(f"Error detecting {attr_id}: {e}")
+
+        return detected
+
+    # ===== PROVENANCE DETECTORS =====
+
+    def _detect_ai_human_labeling(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect AI vs human labeling clarity"""
+        text = (content.body + " " + content.title).lower()
+        meta = content.meta or {}
+
+        # Check for explicit AI labels
+        ai_labels = ["ai-generated", "ai generated", "artificial intelligence", "generated by ai"]
+        human_labels = ["human-created", "human created", "written by", "authored by"]
+
+        has_ai_label = any(label in text for label in ai_labels)
+        has_human_label = any(label in text for label in human_labels)
+
+        # Check metadata
+        has_meta_label = any(key in meta for key in ["ai_generated", "human_created", "author_type"])
+
+        if has_ai_label or has_human_label or has_meta_label:
+            return DetectedAttribute(
+                attribute_id="ai_vs_human_labeling_clarity",
+                dimension="provenance",
+                label="AI vs Human Labeling Clarity",
+                value=10.0,
+                evidence="Clear labeling found in content or metadata",
+                confidence=1.0
+            )
+        else:
+            return DetectedAttribute(
+                attribute_id="ai_vs_human_labeling_clarity",
+                dimension="provenance",
+                label="AI vs Human Labeling Clarity",
+                value=1.0,
+                evidence="No labeling found",
+                confidence=1.0
+            )
+
+    def _detect_author_verified(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect author/brand identity verification"""
+        meta = content.meta or {}
+
+        # Check for verification indicators
+        is_verified = (
+            meta.get("author_verified") == "true" or
+            meta.get("verified") == "true" or
+            "verified" in content.author.lower()
+        )
+
+        if is_verified:
+            return DetectedAttribute(
+                attribute_id="author_brand_identity_verified",
+                dimension="provenance",
+                label="Author/brand identity verified",
+                value=10.0,
+                evidence=f"Verified author: {content.author}",
+                confidence=1.0
+            )
+        else:
+            return DetectedAttribute(
+                attribute_id="author_brand_identity_verified",
+                dimension="provenance",
+                label="Author/brand identity verified",
+                value=3.0,
+                evidence="Author verification status unknown",
+                confidence=0.8
+            )
+
+    def _detect_c2pa_manifest(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect C2PA/CAI manifest presence"""
+        meta = content.meta or {}
+
+        has_c2pa = any(key in meta for key in ["c2pa_manifest", "cai_manifest", "content_credentials"])
+
+        if has_c2pa:
+            is_valid = meta.get("c2pa_valid") != "false"
+            value = 10.0 if is_valid else 5.0
+            evidence = "C2PA manifest present and valid" if is_valid else "C2PA manifest present but invalid"
+            return DetectedAttribute(
+                attribute_id="c2pa_cai_manifest_present",
+                dimension="provenance",
+                label="C2PA/CAI manifest present",
+                value=value,
+                evidence=evidence,
+                confidence=1.0
+            )
+        else:
+            return DetectedAttribute(
+                attribute_id="c2pa_cai_manifest_present",
+                dimension="provenance",
+                label="C2PA/CAI manifest present",
+                value=1.0,
+                evidence="No C2PA manifest found",
+                confidence=1.0
+            )
+
+    def _detect_canonical_url(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect canonical URL match"""
+        meta = content.meta or {}
+        canonical_url = meta.get("canonical_url", "")
+
+        if not canonical_url:
+            return None  # Can't determine without canonical URL
+
+        # Parse both URLs
+        try:
+            canonical_domain = urlparse(canonical_url).netloc
+            source_domain = urlparse(meta.get("url", "")).netloc
+
+            if canonical_domain == source_domain:
+                value = 10.0
+                evidence = "Canonical URL matches source domain"
+            elif canonical_domain in source_domain or source_domain in canonical_domain:
+                value = 5.0
+                evidence = "Partial canonical URL match"
+            else:
+                value = 1.0
+                evidence = "Canonical URL mismatch"
+
+            return DetectedAttribute(
+                attribute_id="canonical_url_matches_declared_source",
+                dimension="provenance",
+                label="Canonical URL matches declared source",
+                value=value,
+                evidence=evidence,
+                confidence=1.0
+            )
+        except Exception:
+            return None
+
+    def _detect_watermark(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect digital watermark/fingerprint"""
+        meta = content.meta or {}
+
+        has_watermark = any(key in meta for key in ["watermark", "fingerprint", "digital_signature"])
+
+        if has_watermark:
+            return DetectedAttribute(
+                attribute_id="digital_watermark_fingerprint_detected",
+                dimension="provenance",
+                label="Digital watermark/fingerprint detected",
+                value=10.0,
+                evidence="Watermark detected in metadata",
+                confidence=1.0
+            )
+        return None  # Only report if found
+
+    def _detect_exif_integrity(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect EXIF/metadata integrity"""
+        meta = content.meta or {}
+
+        if "exif_data" in meta:
+            exif_status = meta.get("exif_status", "intact")
+
+            if exif_status == "intact":
+                value = 10.0
+                evidence = "EXIF metadata intact"
+            elif exif_status == "stripped":
+                value = 5.0
+                evidence = "EXIF metadata stripped"
+            else:  # spoofed
+                value = 1.0
+                evidence = "EXIF metadata spoofed"
+
+            return DetectedAttribute(
+                attribute_id="exif_metadata_integrity",
+                dimension="provenance",
+                label="EXIF/metadata integrity",
+                value=value,
+                evidence=evidence,
+                confidence=1.0
+            )
+        return None
+
+    def _detect_domain_trust(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect source domain trust baseline"""
+        meta = content.meta or {}
+
+        # Simple domain reputation based on source
+        domain = meta.get("domain", "")
+        source = content.src.lower()
+
+        # Trusted platforms get higher scores
+        trusted_sources = {
+            "reddit": 7.0,
+            "youtube": 7.0,
+            "amazon": 8.0,
+        }
+
+        # Known high-trust domains
+        trusted_domains = [
+            ".gov", ".edu", ".org",
+            "nytimes.com", "wsj.com", "bbc.com", "reuters.com"
+        ]
+
+        if source in trusted_sources:
+            value = trusted_sources[source]
+            evidence = f"Trusted platform: {source}"
+        elif any(domain.endswith(td) for td in trusted_domains):
+            value = 9.0
+            evidence = f"High-trust domain: {domain}"
+        else:
+            value = 5.0  # Neutral
+            evidence = f"Domain: {domain}"
+
+        return DetectedAttribute(
+            attribute_id="source_domain_trust_baseline",
+            dimension="provenance",
+            label="Source domain trust baseline",
+            value=value,
+            evidence=evidence,
+            confidence=0.8
+        )
+
+    # ===== RESONANCE DETECTORS =====
+
+    def _detect_community_alignment(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect community alignment index (placeholder)"""
+        # TODO: Implement hashtag/mention graph analysis
+        return None
+
+    def _detect_trend_alignment(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect creative recency vs trend (placeholder)"""
+        # TODO: Implement trend API integration
+        return None
+
+    def _detect_cultural_context(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect cultural context alignment (placeholder)"""
+        # TODO: Implement NER + cultural knowledge base
+        return None
+
+    def _detect_language_match(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect language/locale match"""
+        meta = content.meta or {}
+        detected_lang = meta.get("language", "en")
+
+        # Assume English is target for now
+        target_lang = "en"
+
+        if detected_lang == target_lang:
+            value = 10.0
+            evidence = f"Language match: {detected_lang}"
+        else:
+            value = 1.0
+            evidence = f"Language mismatch: {detected_lang} (expected: {target_lang})"
+
+        return DetectedAttribute(
+            attribute_id="language_locale_match",
+            dimension="resonance",
+            label="Language/locale match",
+            value=value,
+            evidence=evidence,
+            confidence=0.9
+        )
+
+    def _detect_personalization(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect personalization relevance (placeholder)"""
+        # TODO: Implement embedding similarity
+        return None
+
+    def _detect_readability(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect readability grade level fit"""
+        text = content.body
+
+        # Simple readability heuristic (words per sentence)
+        if not text or len(text) < 50:
+            return None
+
+        sentences = len(re.split(r'[.!?]+', text))
+        words = len(text.split())
+
+        if sentences == 0:
+            return None
+
+        words_per_sentence = words / sentences
+
+        # Target: 15-20 words per sentence (grade 8-10)
+        if 12 <= words_per_sentence <= 22:
+            value = 10.0
+            evidence = f"Readable: {words_per_sentence:.1f} words/sentence"
+        elif 8 <= words_per_sentence <= 30:
+            value = 7.0
+            evidence = f"Acceptable: {words_per_sentence:.1f} words/sentence"
+        else:
+            value = 4.0
+            evidence = f"Difficult: {words_per_sentence:.1f} words/sentence"
+
+        return DetectedAttribute(
+            attribute_id="readability_grade_level_fit",
+            dimension="resonance",
+            label="Readability grade level fit",
+            value=value,
+            evidence=evidence,
+            confidence=0.7
+        )
+
+    def _detect_tone_sentiment(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect tone & sentiment appropriateness (placeholder)"""
+        # TODO: Integrate sentiment analysis model
+        return None
+
+    # ===== COHERENCE DETECTORS =====
+
+    def _detect_brand_voice(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect brand voice consistency (placeholder)"""
+        # TODO: Implement embedding similarity to brand corpus
+        return None
+
+    def _detect_broken_links(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect broken link rate"""
+        text = content.body + " " + content.title
+
+        # Find URLs in text
+        urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)
+
+        if not urls:
+            return None  # No links to check
+
+        # Check metadata for broken link info
+        meta = content.meta or {}
+        broken_count = int(meta.get("broken_links", 0))
+        total_count = len(urls)
+
+        if broken_count == 0:
+            value = 10.0
+            evidence = f"No broken links ({total_count} total)"
+        else:
+            broken_rate = broken_count / total_count
+            if broken_rate < 0.01:
+                value = 10.0
+            elif broken_rate < 0.05:
+                value = 7.0
+            elif broken_rate < 0.10:
+                value = 4.0
+            else:
+                value = 1.0
+            evidence = f"{broken_count}/{total_count} broken links ({broken_rate:.1%})"
+
+        return DetectedAttribute(
+            attribute_id="broken_link_rate",
+            dimension="coherence",
+            label="Broken link rate",
+            value=value,
+            evidence=evidence,
+            confidence=0.8
+        )
+
+    def _detect_claim_consistency(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect claim consistency across pages (placeholder)"""
+        # TODO: Implement NLI/contradiction detection
+        return None
+
+    def _detect_email_consistency(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect email-asset consistency (placeholder)"""
+        # TODO: Implement cross-channel comparison
+        return None
+
+    def _detect_engagement_trust(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect engagement-to-trust correlation"""
+        # Use engagement metrics as proxy
+        upvotes = content.upvotes or 0
+        rating = content.rating or 0.0
+
+        # High engagement + high rating = high trust
+        if upvotes > 50 and rating > 4.0:
+            value = 10.0
+            evidence = f"High engagement ({upvotes} upvotes, {rating:.1f} rating)"
+        elif upvotes > 10 and rating > 3.0:
+            value = 7.0
+            evidence = f"Moderate engagement ({upvotes} upvotes, {rating:.1f} rating)"
+        else:
+            value = 5.0
+            evidence = f"Low engagement ({upvotes} upvotes, {rating:.1f} rating)"
+
+        return DetectedAttribute(
+            attribute_id="engagement_to_trust_correlation",
+            dimension="coherence",
+            label="Engagement-to-Trust Correlation",
+            value=value,
+            evidence=evidence,
+            confidence=0.6
+        )
+
+    def _detect_multimodal_consistency(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect multimodal consistency (placeholder)"""
+        # TODO: Implement caption vs transcript comparison
+        return None
+
+    def _detect_temporal_continuity(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect temporal continuity (placeholder)"""
+        # TODO: Check version history metadata
+        return None
+
+    def _detect_trust_fluctuation(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect trust fluctuation index (placeholder)"""
+        # TODO: Implement time-series sentiment analysis
+        return None
+
+    # ===== TRANSPARENCY DETECTORS =====
+
+    def _detect_ai_explainability(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect AI explainability disclosure"""
+        text = (content.body + " " + content.title).lower()
+
+        explainability_phrases = [
+            "why you're seeing this",
+            "powered by",
+            "how this works",
+            "algorithm",
+            "recommendation"
+        ]
+
+        has_explainability = any(phrase in text for phrase in explainability_phrases)
+
+        if has_explainability:
+            return DetectedAttribute(
+                attribute_id="ai_explainability_disclosure",
+                dimension="transparency",
+                label="AI Explainability Disclosure",
+                value=10.0,
+                evidence="Explainability disclosure found",
+                confidence=1.0
+            )
+        else:
+            return DetectedAttribute(
+                attribute_id="ai_explainability_disclosure",
+                dimension="transparency",
+                label="AI Explainability Disclosure",
+                value=1.0,
+                evidence="No explainability disclosure",
+                confidence=1.0
+            )
+
+    def _detect_ai_disclosure(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect AI-generated/assisted disclosure"""
+        text = (content.body + " " + content.title).lower()
+        meta = content.meta or {}
+
+        ai_disclosure_phrases = [
+            "ai-generated", "ai generated",
+            "ai-assisted", "ai assisted",
+            "generated by ai",
+            "created with ai"
+        ]
+
+        has_disclosure = (
+            any(phrase in text for phrase in ai_disclosure_phrases) or
+            meta.get("ai_generated") == "true"
+        )
+
+        if has_disclosure:
+            return DetectedAttribute(
+                attribute_id="ai_generated_assisted_disclosure_present",
+                dimension="transparency",
+                label="AI-generated/assisted disclosure present",
+                value=10.0,
+                evidence="AI disclosure present",
+                confidence=1.0
+            )
+        else:
+            return DetectedAttribute(
+                attribute_id="ai_generated_assisted_disclosure_present",
+                dimension="transparency",
+                label="AI-generated/assisted disclosure present",
+                value=1.0,
+                evidence="No AI disclosure",
+                confidence=1.0
+            )
+
+    def _detect_bot_disclosure(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect bot disclosure (placeholder)"""
+        # TODO: Check for bot self-identification
+        return None
+
+    def _detect_captions(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect caption/subtitle availability"""
+        meta = content.meta or {}
+
+        # Only applicable to video content
+        if content.src != "youtube":
+            return None
+
+        has_captions = meta.get("has_captions") == "true"
+
+        if has_captions:
+            return DetectedAttribute(
+                attribute_id="caption_subtitle_availability_accuracy",
+                dimension="transparency",
+                label="Caption/Subtitle Availability & Accuracy",
+                value=10.0,
+                evidence="Captions available",
+                confidence=1.0
+            )
+        else:
+            return DetectedAttribute(
+                attribute_id="caption_subtitle_availability_accuracy",
+                dimension="transparency",
+                label="Caption/Subtitle Availability & Accuracy",
+                value=1.0,
+                evidence="No captions found",
+                confidence=1.0
+            )
+
+    def _detect_citations(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect data source citations"""
+        text = content.body
+
+        # Look for citation patterns
+        citation_patterns = [
+            r'\[\d+\]',  # [1], [2], etc.
+            r'\(\w+,? \d{4}\)',  # (Author, 2024)
+            r'according to',
+            r'source:',
+            r'cited by'
+        ]
+
+        has_citations = any(re.search(pattern, text, re.IGNORECASE) for pattern in citation_patterns)
+
+        if has_citations:
+            return DetectedAttribute(
+                attribute_id="data_source_citations_for_claims",
+                dimension="transparency",
+                label="Data source citations for claims",
+                value=10.0,
+                evidence="Citations found in text",
+                confidence=0.8
+            )
+        else:
+            return DetectedAttribute(
+                attribute_id="data_source_citations_for_claims",
+                dimension="transparency",
+                label="Data source citations for claims",
+                value=1.0,
+                evidence="No citations found",
+                confidence=0.8
+            )
+
+    def _detect_privacy_policy(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect privacy policy link"""
+        text = (content.body + " " + content.title).lower()
+
+        has_privacy_link = "privacy policy" in text or "privacy" in text
+
+        if has_privacy_link:
+            return DetectedAttribute(
+                attribute_id="privacy_policy_link_availability_clarity",
+                dimension="transparency",
+                label="Privacy policy link availability & clarity",
+                value=10.0,
+                evidence="Privacy policy reference found",
+                confidence=0.7
+            )
+        return None
+
+    # ===== VERIFICATION DETECTORS =====
+
+    def _detect_ad_labels(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect ad/sponsored label consistency"""
+        text = (content.body + " " + content.title).lower()
+        meta = content.meta or {}
+
+        ad_labels = ["sponsored", "advertisement", "ad", "promoted", "paid partnership"]
+
+        has_ad_label = (
+            any(label in text for label in ad_labels) or
+            meta.get("is_sponsored") == "true"
+        )
+
+        if has_ad_label:
+            return DetectedAttribute(
+                attribute_id="ad_sponsored_label_consistency",
+                dimension="verification",
+                label="Ad/Sponsored Label Consistency",
+                value=10.0,
+                evidence="Ad/sponsored label present",
+                confidence=1.0
+            )
+        return None  # Only report if present
+
+    def _detect_safety_guardrails(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect agent safety guardrails (placeholder)"""
+        # TODO: Check for safety features in bot responses
+        return None
+
+    def _detect_claim_traceability(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect claim-to-source traceability (placeholder)"""
+        # TODO: Implement claim linking
+        return None
+
+    def _detect_engagement_authenticity(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect engagement authenticity ratio"""
+        # Check for signs of authentic engagement
+        upvotes = content.upvotes or 0
+        helpful_count = content.helpful_count or 0
+
+        # Simple heuristic: high engagement = likely authentic
+        if upvotes > 100 or helpful_count > 10:
+            value = 9.0
+            evidence = f"High authentic engagement ({upvotes} upvotes, {helpful_count} helpful)"
+        elif upvotes > 10:
+            value = 7.0
+            evidence = f"Moderate engagement ({upvotes} upvotes)"
+        else:
+            value = 5.0  # Neutral
+            evidence = f"Low engagement ({upvotes} upvotes)"
+
+        return DetectedAttribute(
+            attribute_id="engagement_authenticity_ratio",
+            dimension="verification",
+            label="Engagement Authenticity Ratio",
+            value=value,
+            evidence=evidence,
+            confidence=0.6
+        )
+
+    def _detect_influencer_verified(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect influencer/partner identity verification"""
+        # Similar to author verification
+        meta = content.meta or {}
+
+        is_verified = (
+            meta.get("influencer_verified") == "true" or
+            meta.get("verified") == "true"
+        )
+
+        if is_verified:
+            return DetectedAttribute(
+                attribute_id="influencer_partner_identity_verified",
+                dimension="verification",
+                label="Influencer/partner identity verified",
+                value=10.0,
+                evidence="Verified influencer/partner",
+                confidence=1.0
+            )
+        return None
+
+    def _detect_review_authenticity(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect review authenticity confidence"""
+        # Only applicable to reviews
+        if content.src != "amazon":
+            return None
+
+        # Simple heuristic based on verified purchase + helpful votes
+        meta = content.meta or {}
+        is_verified = meta.get("verified_purchase") == "true"
+        helpful_count = content.helpful_count or 0
+
+        if is_verified and helpful_count > 5:
+            value = 10.0
+            evidence = "Verified purchase with helpful votes"
+        elif is_verified:
+            value = 8.0
+            evidence = "Verified purchase"
+        else:
+            value = 5.0
+            evidence = "Unverified purchase"
+
+        return DetectedAttribute(
+            attribute_id="review_authenticity_confidence",
+            dimension="verification",
+            label="Review Authenticity Confidence",
+            value=value,
+            evidence=evidence,
+            confidence=0.7
+        )
+
+    def _detect_seller_verification(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect seller & product verification rate (placeholder)"""
+        # TODO: Implement marketplace verification checking
+        return None
+
+    def _detect_verified_purchaser(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect verified purchaser review rate"""
+        # Only applicable to Amazon reviews
+        if content.src != "amazon":
+            return None
+
+        meta = content.meta or {}
+        is_verified = meta.get("verified_purchase") == "true"
+
+        if is_verified:
+            return DetectedAttribute(
+                attribute_id="verified_purchaser_review_rate",
+                dimension="verification",
+                label="Verified purchaser review rate",
+                value=10.0,
+                evidence="Verified purchase badge present",
+                confidence=1.0
+            )
+        else:
+            return DetectedAttribute(
+                attribute_id="verified_purchaser_review_rate",
+                dimension="verification",
+                label="Verified purchaser review rate",
+                value=3.0,
+                evidence="No verified purchase badge",
+                confidence=1.0
+            )

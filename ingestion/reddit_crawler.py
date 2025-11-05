@@ -27,7 +27,8 @@ class RedditPost:
     num_comments: int
     created_utc: float
     subreddit: str
-    url: str
+    url: str  # URL that the post links to (if link post)
+    permalink: str  # Permalink to the Reddit post itself
     is_self: bool
 
 class RedditCrawler:
@@ -143,7 +144,7 @@ class RedditCrawler:
     
     def _parse_submission(self, submission) -> RedditPost:
         """Parse Reddit submission into RedditPost object"""
-        return RedditPost(
+        post = RedditPost(
             id=submission.id,
             title=submission.title,
             selftext=submission.selftext or "",
@@ -153,9 +154,15 @@ class RedditCrawler:
             num_comments=submission.num_comments,
             created_utc=submission.created_utc,
             subreddit=str(submission.subreddit),
-            url=submission.url,
+            url=submission.url,  # URL that post links to
+            permalink=submission.permalink,  # Reddit post permalink
             is_self=submission.is_self
         )
+
+        # Log what we captured for debugging
+        logger.info(f"Reddit post parsed: id={post.id}, title='{post.title[:80] if post.title else '[EMPTY TITLE]'}', permalink={post.permalink}")
+
+        return post
     
     def filter_by_brand_keywords(self, posts: List[RedditPost], 
                                brand_keywords: List[str]) -> List[RedditPost]:
@@ -173,27 +180,36 @@ class RedditCrawler:
         logger.info(f"Filtered {len(posts)} posts down to {len(filtered_posts)} with brand keywords")
         return filtered_posts
     
-    def convert_to_normalized_content(self, posts: List[RedditPost], 
+    def convert_to_normalized_content(self, posts: List[RedditPost],
                                     brand_id: str, run_id: str) -> List[NormalizedContent]:
         """Convert Reddit posts to NormalizedContent objects"""
         normalized_content = []
-        
+
         for post in posts:
             # Create content ID
             content_id = f"reddit_{post.id}"
-            
+
             # Format timestamp
             event_ts = datetime.fromtimestamp(post.created_utc).isoformat()
-            
+
+            # Construct full Reddit post URL from permalink
+            reddit_post_url = f"https://www.reddit.com{post.permalink}"
+
             # Prepare metadata
             meta = {
                 "subreddit": post.subreddit,
-                "url": post.url,
+                "source_url": reddit_post_url,  # Permalink to Reddit post
+                "url": reddit_post_url,  # Also add as 'url' for compatibility
+                "linked_url": post.url,  # URL that the post links to (if link post)
                 "is_self": str(post.is_self),
                 "upvote_ratio": str(post.upvote_ratio),
-                "num_comments": str(post.num_comments)
+                "num_comments": str(post.num_comments),
+                "title": post.title  # Explicitly include title in metadata
             }
-            
+
+            # Log the normalization for debugging
+            logger.info(f"Converting Reddit post to NormalizedContent: id={content_id}, title='{post.title[:80] if post.title else '[EMPTY]'}', url={reddit_post_url}")
+
             normalized_content.append(NormalizedContent(
                 content_id=content_id,
                 src="reddit",
@@ -208,5 +224,5 @@ class RedditCrawler:
                 run_id=run_id,
                 meta={**meta, 'content_type': ('text' if post.selftext else ('link' if post.url else 'title'))}
             ))
-        
+
         return normalized_content

@@ -6,6 +6,8 @@ length of body, presence of external links). The scoring pipeline will run
 the triage stage first to reduce the number of items sent to the expensive
 LLM-based `ContentScorer`.
 """
+from __future__ import annotations
+
 from typing import List, Dict, Any
 import logging
 import os
