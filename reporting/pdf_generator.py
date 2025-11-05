@@ -23,6 +23,32 @@ from config.settings import SETTINGS
 
 logger = logging.getLogger(__name__)
 
+# Helper to coerce item-like objects into dicts so callers can use .get()
+def _coerce_item_to_dict(item):
+    if isinstance(item, dict):
+        return item
+    try:
+        d = {}
+        for k in dir(item):
+            if k.startswith('_'):
+                continue
+            try:
+                v = getattr(item, k)
+            except Exception:
+                continue
+            if callable(v):
+                continue
+            try:
+                d[k] = v
+            except Exception:
+                continue
+        return d
+    except Exception:
+        try:
+            return dict(item)
+        except Exception:
+            return {}
+
 # Optional: reuse markdown generator's LLM helper if available
 try:
     from reporting.markdown_generator import _llm_summarize, clean_text_for_llm, add_llm_provenance
@@ -213,6 +239,8 @@ class PDFReportGenerator:
 
         # Examples section (up to 5 items) for quick review
         items = report_data.get('items', []) or report_data.get('items', [])
+        # Coerce any non-dict items into dicts so .get() accessors work uniformly
+        items = [_coerce_item_to_dict(it) for it in items]
         if items:
             story.append(Spacer(1, 8))
             story.append(Paragraph("Examples from this run:", self.styles['Heading3']))
@@ -270,6 +298,8 @@ class PDFReportGenerator:
         # Optionally include the full per-item table when requested (programmatic runs)
         if include_items_table:
             all_items = report_data.get('items', [])
+            # Coerce items for table rendering
+            all_items = [_coerce_item_to_dict(it) for it in all_items]
             if all_items:
                 story.append(PageBreak())
                 story.append(Paragraph('Per-item Scoring Table', self.styles['SectionHeader']))

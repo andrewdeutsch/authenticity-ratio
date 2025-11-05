@@ -557,9 +557,31 @@ class MarkdownReportGenerator:
 
                 example_lines.append(line)
 
-            examples_md = "\n\n**Representative Examples:**\n" + "\n\n".join(example_lines) + "\n"
+            examples_md = "\n\n**Examples from this run:**\n" + "\n\n".join(example_lines) + "\n"
 
-        return f"""## Executive Summary
+        score_based = report_data.get('score_based_ar_pct', 0.0) or 0.0
+
+        # Add a short definitions block to explain Core vs Extended AR
+        defs_block = (
+            "**Definitions:**\n\n"
+            "- Core AR (classification): Percentage of items explicitly classified as 'Authentic' by the classifier (count of Authentic / total * 100).\n"
+            "- Score-based AR (mean 5D score): The arithmetic mean of the per-item 5D composite scores (0-100). Useful as a continuous measure.\n"
+            "- Extended AR: A blended metric that combines classification counts and score-based signals (rubric-dependent adjustments).\n"
+        )
+
+        # Small computation table to show the numbers used to form Core/Extended AR
+        computation_table = (
+            "\n**Computation (values used):**\n\n"
+            f"- Total items = {total_items}\n"
+            f"- Authentic = {authentic_items}\n"
+            f"- Suspect = {suspect_items}\n"
+            f"- Inauthentic = {inauthentic_items}\n"
+            f"- Core AR = Authentic / Total * 100 = {ar_pct:.1f}%\n"
+            f"- Score-based AR (mean 5D) = {score_based:.1f}%\n"
+            f"- Extended AR = rubric-adjusted blend (see AR Analysis section) = {extended_ar:.1f}%\n"
+        )
+
+        return f"""## Summary
 
 **Total Content Analyzed:** {total_items:,}
 
@@ -915,8 +937,34 @@ This report provides actionable insights for brand health and content strategy b
 
         for item in render_source:
             # Normalize access to fields whether item came from appendix or items list
-            cid = item.get('content_id') or item.get('content_id') or item.get('id') or 'unknown'
-            source = item.get('source') or item.get('src') or 'unknown'
+            # Some pipeline paths pass objects (not dicts). Coerce to a dict-like mapping
+            if not isinstance(item, dict):
+                try:
+                    class _AttrDict(dict):
+                        def __init__(self, obj):
+                            super().__init__()
+                            for k in dir(obj):
+                                if k.startswith('_'):
+                                    continue
+                                try:
+                                    v = getattr(obj, k)
+                                except Exception:
+                                    continue
+                                if callable(v):
+                                    continue
+                                try:
+                                    self[k] = v
+                                except Exception:
+                                    continue
+                    item = _AttrDict(item)
+                except Exception:
+                    # fallback: wrap minimal representation
+                    try:
+                        item = dict(item)
+                    except Exception:
+                        item = {}
+
+            cid = item.get('content_id') or item.get('id') or 'unknown'
             meta = item.get('meta') or {}
             # meta might be a JSON string in some cases
             if isinstance(meta, str):
