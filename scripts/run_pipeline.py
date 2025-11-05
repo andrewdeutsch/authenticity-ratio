@@ -4,6 +4,8 @@ Main pipeline runner script for AR tool
 Executes the complete AR analysis pipeline
 """
 
+from __future__ import annotations
+
 import sys
 import os
 import argparse
@@ -67,12 +69,21 @@ def main():
     # Normalize sources to lowercase to be case-insensitive (users may pass 'Brave' or 'Youtube')
     args.sources = [s.lower() for s in args.sources]
 
-    # Handle backward compatibility for --max-content (deprecated)
+    # Backwards-compatible handling of deprecated --max-content
+    # Prefer explicit --max-items when provided; fall back to --max-content if present.
+    max_items = args.max_items
     if args.max_content is not None:
-        logger.warning("--max-content is deprecated. Please use --max-items or -n instead.")
-        max_items = args.max_content
-    else:
-        max_items = args.max_items
+        try:
+            # allow --max-content to override when explicitly specified
+            max_items = int(args.max_content)
+        except Exception:
+            pass
+    try:
+        max_items = int(max_items)
+        if max_items <= 0:
+            max_items = 100
+    except Exception:
+        max_items = 100
     
     # Setup logging
     log_file = os.path.join(args.output_dir, 'logs', f'ar_pipeline_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
@@ -191,7 +202,7 @@ def main():
                         reddit_crawler = RedditCrawler()
                         reddit_posts = reddit_crawler.search_posts(
                             keywords=args.keywords,
-                            limit=max_items // len(args.sources)
+                            limit=max_items // max(1, len(args.sources))
                         )
                         reddit_content = reddit_crawler.convert_to_normalized_content(
                             reddit_posts, args.brand_id, run_id
@@ -214,7 +225,7 @@ def main():
                         # mock_reviews_for_demo signature = (brand_keywords: List[str], num_reviews: int = 50)
                         amazon_reviews = amazon_scraper.mock_reviews_for_demo(
                             args.keywords,
-                            num_reviews=max_items // len(args.sources)
+                            num_reviews=max_items // max(1, len(args.sources))
                         )
                         amazon_content = amazon_scraper.convert_to_normalized_content(
                             amazon_reviews, args.brand_id, run_id
@@ -236,7 +247,7 @@ def main():
                         # Build a search query from keywords
                         youtube_scraper = YouTubeScraper()
                         query = ' '.join(args.keywords)
-                        videos = youtube_scraper.search_videos(query=query, max_results=max_items // len(args.sources))
+                        videos = youtube_scraper.search_videos(query=query, max_results=max_items // max(1, len(args.sources)))
                         youtube_content = youtube_scraper.convert_videos_to_normalized(videos, args.brand_id, run_id)
                         all_content.extend(youtube_content)
                         logger.info(f"Retrieved {len(youtube_content)} YouTube content items")

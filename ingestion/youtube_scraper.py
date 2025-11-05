@@ -4,6 +4,8 @@ Uses YouTube Data API v3 (API key) to search videos and fetch comments.
 Converts results to NormalizedContent objects compatible with ar_content_normalized_v2
 """
 
+from __future__ import annotations
+
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
