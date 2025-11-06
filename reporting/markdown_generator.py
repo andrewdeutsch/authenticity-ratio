@@ -835,14 +835,61 @@ Each dimension is independently scored and combined to form a comprehensive trus
 - **Strategy**: Address trust deficiencies or report to platform administrators
 - **Goal**: Improve trust scores or eliminate from brand ecosystem"""
     
-    def _create_recommendations(self, report_data: Dict[str, Any]) -> str:
-        """Create recommendations section based on Trust Stack dimensions"""
-        dimension_breakdown = report_data.get('dimension_breakdown', {})
+    def _extract_low_trust_items(self, report_data: Dict[str, Any], limit: int = 10) -> List[Dict[str, Any]]:
+        """Extract low and moderate trust items with details for LLM analysis"""
+        items = report_data.get('items', [])
+        appendix = report_data.get('appendix', [])
 
-        # Find weakest dimension score
+        # Use appendix if available (more detailed), otherwise use items
+        source = appendix if appendix else items
+
+        low_trust = []
+        moderate_trust = []
+
+        for item in source:
+            # Handle both dict and object types
+            if not isinstance(item, dict):
+                try:
+                    item = {k: getattr(item, k) for k in dir(item) if not k.startswith('_') and not callable(getattr(item, k, None))}
+                except Exception:
+                    continue
+
+            final_score = float(item.get('final_score', 0.0))
+            label = (item.get('label') or '').lower()
+
+            item_data = {
+                'url': item.get('url', 'Unknown URL'),
+                'title': item.get('title', 'No title'),
+                'score': final_score,
+                'label': label,
+                'source': item.get('source', 'Unknown'),
+                'dimension_scores': item.get('dimension_scores', {})
+            }
+
+            if label == 'inauthentic' or final_score < 0.50:
+                low_trust.append(item_data)
+            elif label == 'suspect' or (0.50 <= final_score < 0.70):
+                moderate_trust.append(item_data)
+
+        # Sort by score (worst first)
+        low_trust.sort(key=lambda x: x['score'])
+        moderate_trust.sort(key=lambda x: x['score'])
+
+        return {
+            'low_trust': low_trust[:limit],
+            'moderate_trust': moderate_trust[:limit]
+        }
+
+    def _prepare_recommendation_context(self, report_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Prepare comprehensive context for LLM recommendation generation"""
+        dimension_breakdown = report_data.get('dimension_breakdown', {})
+        classification_data = report_data.get('classification_analysis', {})
+        dist = classification_data.get('classification_distribution', {})
+
+        # Calculate dimension scores
+        dimension_scores = {}
         weakest_dim = None
         weakest_score = 1.0
-        dimension_scores = {}
 
         for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
             stats = dimension_breakdown.get(dim, {})
@@ -852,47 +899,163 @@ Each dimension is independently scored and combined to form a comprehensive trus
                 weakest_score = avg
                 weakest_dim = dim
 
-        # Determine priority level based on weakest dimension
+        avg_all_dims = sum(dimension_scores.values()) / len(dimension_scores) if dimension_scores else 0.0
+
+        # Get problematic items
+        problematic_items = self._extract_low_trust_items(report_data)
+
+        return {
+            'dimension_scores': dimension_scores,
+            'weakest_dimension': weakest_dim,
+            'weakest_score': weakest_score,
+            'overall_average': avg_all_dims,
+            'classification_counts': {
+                'high_trust': dist.get('authentic', 0),
+                'moderate_trust': dist.get('suspect', 0),
+                'low_trust': dist.get('inauthentic', 0),
+                'total': sum(dist.values())
+            },
+            'low_trust_items': problematic_items['low_trust'],
+            'moderate_trust_items': problematic_items['moderate_trust'],
+            'brand_id': report_data.get('brand_id', 'Unknown Brand')
+        }
+
+    def _llm_generate_recommendations(self, context: Dict[str, Any], model: str = 'gpt-4o-mini') -> Optional[str]:
+        """Use LLM to generate rich, contextual recommendations"""
+        # Avoid LLM calls during testing
+        try:
+            import os as _os
+            if 'PYTEST_CURRENT_TEST' in _os.environ:
+                return None
+        except Exception:
+            pass
+
+        try:
+            from scoring.llm_client import ChatClient
+        except Exception:
+            return None
+
+        # Build prompt with comprehensive context
+        prompt = f"""You are a Trust Stack analyst generating actionable recommendations for brand content authenticity.
+
+BRAND: {context['brand_id']}
+
+TRUST STACK ANALYSIS:
+- Overall Trust Average: {context['overall_average']:.3f}
+- Weakest Dimension: {context['weakest_dimension']} ({context['weakest_score']:.3f})
+
+DIMENSION SCORES:
+"""
+        for dim, score in context['dimension_scores'].items():
+            status = "✅" if score >= 0.70 else "⚠️" if score >= 0.50 else "❌"
+            prompt += f"  {status} {dim.title()}: {score:.3f}\n"
+
+        prompt += f"""
+CLASSIFICATION COUNTS:
+- High Trust: {context['classification_counts']['high_trust']} items
+- Moderate Trust: {context['classification_counts']['moderate_trust']} items
+- Low Trust: {context['classification_counts']['low_trust']} items
+- Total Analyzed: {context['classification_counts']['total']} items
+
+LOW TRUST ITEMS (examples):
+"""
+        for item in context['low_trust_items'][:5]:
+            prompt += f"  - {item['title']} — {item['url']}\n"
+            prompt += f"    Score: {item['score']:.2f}, Source: {item['source']}\n"
+
+        prompt += """
+Generate a comprehensive recommendations report with these EXACT sections:
+
+### Recommended Actions
+
+- Provide 4-6 specific, actionable recommendations based on the data
+- Reference actual dimension weaknesses and low-trust items
+- Be concrete and measurable (not generic advice)
+- Prioritize by impact
+
+### Next Steps (concrete)
+
+**Low Trust items (examples):**
+- List 2-3 specific low-trust items with URLs that need immediate attention
+- Provide brief context on why they are problematic
+
+- Immediate (1-7 days):
+  - List 2-3 concrete actions with specific targets
+  - Example: "Review and improve metadata for 5 low-trust Reddit posts"
+
+- Short-term (1-4 weeks):
+  - List 2-3 tactical improvements tied to dimension weaknesses
+  - Be specific about what to implement
+
+- Medium (4-12 weeks):
+  - List 2-3 strategic initiatives for long-term trust improvement
+  - Connect to overall trust average goals
+
+### Success Metrics
+
+Provide 4-6 specific, measurable metrics including:
+- Concrete targets for dimension improvements (e.g., "Increase transparency from 0.58 to 0.68")
+- Classification count goals (e.g., "Reduce low trust items from X to Y")
+- Timeline-specific milestones
+- Overall trust average improvement target
+
+IMPORTANT: Use the actual data provided. Reference specific numbers, URLs, and dimensions. Be actionable and concrete, not generic."""
+
+        try:
+            client = ChatClient()
+            response = client.chat(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2000,
+                temperature=0.5
+            )
+
+            content = response.get('content') or response.get('text')
+            if content:
+                # Add LLM provenance
+                content = f"{content}\n\n*Recommendations generated by {model} based on Trust Stack analysis data*"
+            return content
+
+        except Exception as e:
+            logger.warning(f"LLM recommendation generation failed: {e}")
+            return None
+
+    def _create_recommendations(self, report_data: Dict[str, Any]) -> str:
+        """Create recommendations section using LLM for rich, contextual insights"""
+        # Prepare context
+        context = self._prepare_recommendation_context(report_data)
+
+        # Determine priority level for header
+        weakest_score = context['weakest_score']
         if weakest_score >= 0.70:
             priority = "Low"
             focus = "Maintain current trust standards"
-            recommendations = [
-                "Continue monitoring content quality across all dimensions",
-                "Amplify high-trust content examples",
-                "Share best practices across teams",
-                f"Minor improvements to {weakest_dim.title()} (currently {weakest_score:.2f})"
-            ]
         elif weakest_score >= 0.50:
             priority = "Medium"
-            focus = f"Strengthen {weakest_dim.title()} dimension"
-            recommendations = [
-                f"Focus on improving {weakest_dim.title()} scores (currently {weakest_score:.2f})",
-                "Implement enhanced verification for lower-scoring content",
-                "Develop dimension-specific content guidelines",
-                "Increase monitoring of moderate-trust content"
-            ]
+            focus = f"Strengthen {context['weakest_dimension'].title()} dimension"
         elif weakest_score >= 0.30:
             priority = "High"
-            focus = f"Address critical gaps in {weakest_dim.title()}"
-            recommendations = [
-                f"Immediate action required on {weakest_dim.title()} dimension (score: {weakest_score:.2f})",
-                "Implement content quality protocols",
-                "Train teams on trust dimension standards",
-                "Review and remediate low-trust content",
-                "Consider content removal for persistent violations"
-            ]
+            focus = f"Address critical gaps in {context['weakest_dimension'].title()}"
         else:
             priority = "Critical"
-            focus = f"Emergency intervention on {weakest_dim.title()}"
-            recommendations = [
-                f"Critical trust failure in {weakest_dim.title()} (score: {weakest_score:.2f})",
-                "Immediate audit of content creation processes",
-                "Crisis communication strategy",
-                "External trust and safety consultation",
-                "Platform partnership for content verification"
-            ]
+            focus = f"Emergency intervention on {context['weakest_dimension'].title()}"
 
-        # Add dimension-specific guidance
+        # Try LLM-enhanced recommendations
+        llm_recommendations = self._llm_generate_recommendations(context)
+
+        if llm_recommendations:
+            # LLM succeeded - use rich contextual recommendations
+            return f"""## Recommendations
+
+### Priority Level: {priority}
+**Focus Area**: {focus}
+
+**Weakest Dimension**: {context['weakest_dimension'].title()} ({weakest_score:.3f})
+**Overall Trust Average**: {context['overall_average']:.3f}
+
+{llm_recommendations}"""
+
+        # Fallback to basic recommendations if LLM fails
         dimension_guidance = {
             'provenance': "Improve source attribution, metadata completeness, and traceability",
             'verification': "Strengthen fact-checking, authoritative source validation, and brand alignment",
@@ -901,49 +1064,47 @@ Each dimension is independently scored and combined to form a comprehensive trus
             'resonance': "Foster authentic engagement patterns and cultural fit with brand values"
         }
 
-        specific_guidance = dimension_guidance.get(weakest_dim, "Focus on comprehensive trust improvements")
-
-        recommendations_list = "\n".join([f"- {rec}" for rec in recommendations])
-
-        # Calculate average score across all dimensions for success metrics
-        avg_all_dims = sum(dimension_scores.values()) / len(dimension_scores) if dimension_scores else 0.0
+        low_items = context['low_trust_items'][:3]
+        low_items_text = "\n".join([f"- {item['title']} — {item['url']}" for item in low_items]) if low_items else "- No low trust items found"
 
         return f"""## Recommendations
 
 ### Priority Level: {priority}
 **Focus Area**: {focus}
 
-**Weakest Dimension**: {weakest_dim.title() if weakest_dim else 'Unknown'} ({weakest_score:.3f})
-**Overall Trust Average**: {avg_all_dims:.3f}
+**Weakest Dimension**: {context['weakest_dimension'].title()} ({weakest_score:.3f})
+**Overall Trust Average**: {context['overall_average']:.3f}
 
 ### Recommended Actions
 
-{recommendations_list}
+- Focus on improving {context['weakest_dimension'].title()} scores (currently {weakest_score:.2f})
+- {dimension_guidance.get(context['weakest_dimension'], 'Improve trust across all dimensions')}
+- Review and remediate {context['classification_counts']['low_trust']} low-trust items
+- Implement enhanced verification for {context['classification_counts']['moderate_trust']} moderate-trust items
 
-### Dimension-Specific Guidance
+### Next Steps (concrete)
 
-**{weakest_dim.title() if weakest_dim else 'Primary'}**: {specific_guidance}
+**Low Trust items (examples):**
+{low_items_text}
 
-### Next Steps
+- Immediate (1-7 days):
+  - Review {len(low_items)} low-trust items and develop remediation plan
+  - Implement monitoring alerts for {context['weakest_dimension']} dimension
 
-1. **Immediate (1-7 days)**:
-   - Focus on {weakest_dim} dimension improvements
-   - Implement content monitoring alerts for low-trust signals
+- Short-term (1-4 weeks):
+  - Develop {context['weakest_dimension']}-specific content guidelines
+  - Train teams on Trust Stack standards
 
-2. **Short-term (1-4 weeks)**:
-   - Develop dimension-specific content guidelines
-   - Train teams on Trust Stack standards and best practices
-
-3. **Long-term (1-3 months)**:
-   - Establish ongoing Trust Stack monitoring systems
-   - Create dimension performance dashboards
-   - Regular Trust Stack reporting and optimization
+- Medium (4-12 weeks):
+  - Establish Trust Stack monitoring dashboards
+  - Target overall trust average improvement to {context['overall_average'] + 0.15:.2f}
 
 ### Success Metrics
 
-- Improve {weakest_dim.title() if weakest_dim else 'weakest'} dimension score by 0.10+ points
-- Achieve minimum 0.60 score across all five dimensions
-- Increase overall Trust Stack average by 0.15+ points"""
+- Improve {context['weakest_dimension'].title()} dimension score from {weakest_score:.2f} to {min(weakest_score + 0.10, 1.0):.2f}
+- Reduce low trust items from {context['classification_counts']['low_trust']} to {max(0, context['classification_counts']['low_trust'] - 5)}
+- Increase overall Trust average from {context['overall_average']:.2f} to {min(context['overall_average'] + 0.15, 1.0):.2f}
+- Achieve minimum 0.60 score across all five dimensions"""
     
     def _create_footer(self, report_data: Dict[str, Any]) -> str:
         """Create report footer"""
