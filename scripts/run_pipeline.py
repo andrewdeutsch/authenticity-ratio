@@ -64,6 +64,7 @@ def main():
     parser.add_argument('--include-comments', action='store_true', help='Include comments in analysis (overrides settings include_comments_in_analysis)')
     parser.add_argument('--use-llm-examples', action='store_true', help='Use LLM (gpt-3.5-turbo by default) to produce abstractive summaries for executive examples')
     parser.add_argument('--llm-model', default='gpt-3.5-turbo', help='LLM model to use for executive summaries (default: gpt-3.5-turbo)')
+    parser.add_argument('--recommendations-model', default='gpt-4o-mini', help='LLM model to use for generating recommendations (default: gpt-4o-mini; options: gpt-4o, gpt-4o-mini, gpt-3.5-turbo)')
     
     args = parser.parse_args()
     # Normalize sources to lowercase to be case-insensitive (users may pass 'Brave' or 'Youtube')
@@ -345,6 +346,7 @@ def main():
         # Optionally inject LLM flags into the report generator data
         scoring_report['use_llm_for_examples'] = bool(args.use_llm_examples)
         scoring_report['llm_model'] = args.llm_model
+        scoring_report['recommendations_model'] = args.recommendations_model
 
         # Generate Markdown report
         md_path = os.path.join(args.output_dir, f'ar_report_{args.brand_id}_{run_id}.md')

@@ -921,7 +921,16 @@ Each dimension is independently scored and combined to form a comprehensive trus
         }
 
     def _llm_generate_recommendations(self, context: Dict[str, Any], model: str = 'gpt-4o-mini') -> Optional[str]:
-        """Use LLM to generate rich, contextual recommendations"""
+        """Use LLM to generate rich, contextual recommendations
+
+        Args:
+            context: Analysis context with dimension scores and problematic items
+            model: OpenAI model to use (configurable via --recommendations-model flag)
+                   Options: gpt-4o, gpt-4o-mini, gpt-3.5-turbo
+
+        Returns:
+            LLM-generated recommendations or None if generation fails
+        """
         # Avoid LLM calls during testing
         try:
             import os as _os
@@ -1025,6 +1034,9 @@ IMPORTANT: Use the actual data provided. Reference specific numbers, URLs, and d
         # Prepare context
         context = self._prepare_recommendation_context(report_data)
 
+        # Get model from report_data (set by run_pipeline --recommendations-model flag)
+        recommendations_model = report_data.get('recommendations_model', 'gpt-4o-mini')
+
         # Determine priority level for header
         weakest_score = context['weakest_score']
         if weakest_score >= 0.70:
@@ -1040,8 +1052,8 @@ IMPORTANT: Use the actual data provided. Reference specific numbers, URLs, and d
             priority = "Critical"
             focus = f"Emergency intervention on {context['weakest_dimension'].title()}"
 
-        # Try LLM-enhanced recommendations
-        llm_recommendations = self._llm_generate_recommendations(context)
+        # Try LLM-enhanced recommendations with specified model
+        llm_recommendations = self._llm_generate_recommendations(context, model=recommendations_model)
 
         if llm_recommendations:
             # LLM succeeded - use rich contextual recommendations
