@@ -904,6 +904,20 @@ Each dimension is independently scored and combined to form a comprehensive trus
         # Get problematic items
         problematic_items = self._extract_low_trust_items(report_data)
 
+        # Extract platform sources from items to provide platform-specific context
+        sources = set()
+        items = report_data.get('items', [])
+        for item in items:
+            if isinstance(item, dict):
+                src = item.get('source', '').lower()
+            else:
+                try:
+                    src = getattr(item, 'source', '').lower() if hasattr(item, 'source') else ''
+                except Exception:
+                    src = ''
+            if src:
+                sources.add(src)
+
         return {
             'dimension_scores': dimension_scores,
             'weakest_dimension': weakest_dim,
@@ -917,7 +931,8 @@ Each dimension is independently scored and combined to form a comprehensive trus
             },
             'low_trust_items': problematic_items['low_trust'],
             'moderate_trust_items': problematic_items['moderate_trust'],
-            'brand_id': report_data.get('brand_id', 'Unknown Brand')
+            'brand_id': report_data.get('brand_id', 'Unknown Brand'),
+            'sources': list(sources)
         }
 
     def _llm_generate_recommendations(self, context: Dict[str, Any], model: str = 'gpt-4o-mini') -> Optional[str]:
@@ -966,11 +981,40 @@ CLASSIFICATION COUNTS:
 - Low Trust: {context['classification_counts']['low_trust']} items
 - Total Analyzed: {context['classification_counts']['total']} items
 
+DATA SOURCES: {', '.join(context['sources']) if context['sources'] else 'Unknown'}
+
 LOW TRUST ITEMS (examples):
 """
         for item in context['low_trust_items'][:5]:
             prompt += f"  - {item['title']} — {item['url']}\n"
             prompt += f"    Score: {item['score']:.2f}, Source: {item['source']}\n"
+
+        # Add platform-specific caveats if Reddit or YouTube are present
+        platform_caveats = []
+        sources = context.get('sources', [])
+
+        if 'reddit' in sources:
+            platform_caveats.append("""
+**REDDIT PLATFORM LIMITATIONS:**
+- Provenance: Users are typically pseudonymous/anonymous - limited formal author attribution is NORMAL
+- Transparency: Lack of credentials/professional disclosure is inherent to Reddit's community model
+- Verification: Community-driven content with variable fact-checking (subreddit-dependent)
+- Coherence: Conversational/informal tone is expected; not professional brand messaging
+- Resonance: Grassroots discussions may not align with official brand voice
+- IMPORTANT: Do NOT penalize Reddit content for platform-inherent constraints. A transparency score of 0.50-0.65 may be "good" for Reddit given pseudonymous norms.""")
+
+        if 'youtube' in sources:
+            platform_caveats.append("""
+**YOUTUBE PLATFORM LIMITATIONS:**
+- Provenance: Video creators and commenters are often independent, not official brand channels
+- Transparency: Comment authors are pseudonymous with minimal profile information
+- Verification: User-generated content and comments lack formal verification mechanisms
+- Coherence: Quality and tone vary widely across user-generated videos and comments
+- Resonance: Community engagement patterns differ from controlled brand content
+- IMPORTANT: Do NOT penalize YouTube content for user-generated content characteristics. Focus on what's actionable within platform capabilities.""")
+
+        if platform_caveats:
+            prompt += "\n" + "\n".join(platform_caveats) + "\n"
 
         prompt += """
 Generate a comprehensive recommendations report with these EXACT sections:
@@ -1008,7 +1052,11 @@ Provide 4-6 specific, measurable metrics including:
 - Timeline-specific milestones
 - Overall trust average improvement target
 
-IMPORTANT: Use the actual data provided. Reference specific numbers, URLs, and dimensions. Be actionable and concrete, not generic."""
+CRITICAL INSTRUCTIONS:
+1. Use the actual data provided. Reference specific numbers, URLs, and dimensions. Be actionable and concrete, not generic.
+2. PLATFORM-AWARE RECOMMENDATIONS: When analyzing Reddit or YouTube content, contextualize scores relative to platform norms. Do NOT recommend impossible improvements (e.g., "add author credentials to Reddit posts"). Focus on actionable improvements WITHIN platform capabilities (e.g., "verify subreddit credibility", "check post history consistency").
+3. Adjust expectations: A 0.58 transparency score on Reddit may be acceptable given platform constraints. Clarify this in recommendations.
+4. Provide realistic, platform-appropriate guidance that acknowledges inherent limitations while identifying genuine improvement opportunities."""
 
         try:
             client = ChatClient()

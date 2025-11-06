@@ -132,6 +132,34 @@ Based on OpenAI pricing (as of 2024):
 
 If LLM generation fails (network issues, API errors, missing API key), the system automatically falls back to **enhanced structured recommendations** that still reference your actual data, URLs, and metrics.
 
+## Platform-Aware Recommendations
+
+The LLM recommendation system automatically adjusts its analysis based on the data sources being analyzed:
+
+### Reddit Content
+When analyzing Reddit posts and comments, the LLM understands:
+- **Pseudonymous users** are normal - won't penalize lack of formal credentials
+- **Transparency scores** of 0.50-0.65 may be "good" given platform norms
+- **Conversational tone** is expected, not professional brand messaging
+- Recommendations focus on **verifiable metadata** (subreddit credibility, post history) rather than impossible improvements
+
+### YouTube Content
+When analyzing YouTube videos and comments, the LLM understands:
+- **User-generated content** is inherent to the platform
+- **Independent creators** are not official brand channels
+- **Comment pseudonymity** is platform-standard
+- Recommendations focus on **actionable improvements** within platform capabilities
+
+### Why This Matters
+Without platform-aware context, the LLM might recommend:
+- ❌ "Add formal author credentials to all Reddit posts" (impossible)
+- ❌ "Ensure all YouTube commenters use real names" (not feasible)
+
+With platform-aware context, the LLM recommends:
+- ✅ "Verify subreddit credibility and moderator policies"
+- ✅ "Check YouTube channel verification status and posting history"
+- ✅ "Focus on metadata completeness within platform constraints"
+
 ## Requirements
 
 - `OPENAI_API_KEY` environment variable must be set
