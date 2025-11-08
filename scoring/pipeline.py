@@ -232,12 +232,13 @@ class ScoringPipeline:
 
         per_item_breakdowns = []
         for s in scores_list:
-            # Defensive defaults for missing scores
+            # Defensive defaults for missing scores (6D)
             p = getattr(s, 'score_provenance', 0.0) or 0.0
             r = getattr(s, 'score_resonance', 0.0) or 0.0
             c = getattr(s, 'score_coherence', 0.0) or 0.0
             t = getattr(s, 'score_transparency', 0.0) or 0.0
             v = getattr(s, 'score_verification', 0.0) or 0.0
+            ai = getattr(s, 'score_ai_readiness', 0.0) or 0.0
 
             # Base weighted score (0-100). Use weights.get to be resilient.
             base = (
@@ -245,7 +246,8 @@ class ScoringPipeline:
                 r * weights.get('resonance', 0.0) +
                 c * weights.get('coherence', 0.0) +
                 t * weights.get('transparency', 0.0) +
-                v * weights.get('verification', 0.0)
+                v * weights.get('verification', 0.0) +
+                ai * weights.get('ai_readiness', 0.0)
             ) * 100.0
 
             # Metadata bonuses/penalties applied from attributes_cfg
@@ -257,12 +259,22 @@ class ScoringPipeline:
                     meta_title = meta.get('title') or getattr(s, 'title', None) or meta.get('name')
                     meta_desc = meta.get('description') or meta.get('snippet') or getattr(s, 'body', None)
                     meta_url = meta.get('source_url') or meta.get('url') or getattr(s, 'platform_id', None)
+                    meta_modality = meta.get('modality') or getattr(s, 'modality', 'text')
+                    meta_channel = meta.get('channel') or getattr(s, 'channel', 'unknown')
+                    meta_platform_type = meta.get('platform_type') or getattr(s, 'platform_type', 'unknown')
+
                     if meta_title:
                         meta['title'] = meta_title
                     if meta_desc:
                         meta['description'] = meta_desc
                     if meta_url:
                         meta['source_url'] = meta_url
+                    if meta_modality:
+                        meta['modality'] = meta_modality
+                    if meta_channel:
+                        meta['channel'] = meta_channel
+                    if meta_platform_type:
+                        meta['platform_type'] = meta_platform_type
                 else:
                     meta = {}
             except Exception:
@@ -354,17 +366,22 @@ class ScoringPipeline:
             except Exception:
                 pass
 
+            # Build dimension scores dict (6D)
+            dim_scores = {
+                'provenance': p,
+                'resonance': r,
+                'coherence': c,
+                'transparency': t,
+                'verification': v,
+                'ai_readiness': ai,
+            }
+
             per_item_breakdowns.append({
                 'content_id': s.content_id,
                 'source': getattr(s, 'src', ''),
                 'event_ts': getattr(s, 'event_ts', ''),
-                'dimension_scores': {
-                    'provenance': p,
-                    'resonance': r,
-                    'coherence': c,
-                    'transparency': t,
-                    'verification': v,
-                },
+                'dimension_scores': dim_scores,
+                'dimensions': dim_scores,  # Alias for compatibility with markdown_generator
                 'base_score': base,
                 'applied_rules': applied_rules,
                 'final_score': item_score,
