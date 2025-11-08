@@ -1331,9 +1331,21 @@ Trust performance analysis across different platforms and channel types.
             final_score = float(item.get('final_score', 0.0))
             label = (item.get('label') or '').lower()
 
+            # Extract title and URL from meta dict
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    import json
+                    meta = json.loads(meta)
+                except:
+                    meta = {}
+
+            title = meta.get('title') or item.get('title', 'No title')
+            url = meta.get('source_url') or meta.get('url') or item.get('url', 'Unknown URL')
+
             item_data = {
-                'url': item.get('url', 'Unknown URL'),
-                'title': item.get('title', 'No title'),
+                'url': url,
+                'title': title,
                 'score': final_score,
                 'label': label,
                 'source': item.get('source', 'Unknown'),
