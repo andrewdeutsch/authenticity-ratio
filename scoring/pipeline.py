@@ -72,6 +72,24 @@ class ScoringPipeline:
                     # Create neutral ContentScores for demoted items to keep them in reports
                     neutral_scores = []
                     for c in demoted:
+                        # Smart fallback: derive channel/platform_type from src if unknown
+                        channel = getattr(c, 'channel', 'unknown')
+                        platform_type = getattr(c, 'platform_type', 'unknown')
+
+                        if channel == 'unknown' or not channel:
+                            # Derive from src field
+                            src_to_channel = {
+                                'reddit': ('reddit', 'social'),
+                                'youtube': ('youtube', 'social'),
+                                'amazon': ('amazon', 'marketplace'),
+                                'brave': ('web', 'web'),
+                            }
+                            if c.src in src_to_channel:
+                                channel, platform_type = src_to_channel[c.src]
+                            else:
+                                channel = c.src  # Use src as channel
+                                platform_type = 'unknown'
+
                         neutral = ContentScores(
                             content_id=c.content_id,
                             brand=brand_config.get('brand_id', 'unknown'),
@@ -88,8 +106,8 @@ class ScoringPipeline:
                             rubric_version=self.scorer.rubric_version,
                             run_id=run_id,
                             modality=getattr(c, 'modality', 'text'),
-                            channel=getattr(c, 'channel', 'unknown'),
-                            platform_type=getattr(c, 'platform_type', 'unknown'),
+                            channel=channel,
+                            platform_type=platform_type,
                             meta='{"triage": "demoted"}'
                         )
                         neutral_scores.append(neutral)
@@ -751,6 +769,30 @@ class ScoringPipeline:
                         meta_obj = {}
                 except Exception:
                     meta_obj = {}
+
+                # Smart fallback: ensure channel/platform_type are set
+                if not meta_obj.get('channel') or meta_obj.get('channel') == 'unknown':
+                    # Try to get from ContentScores attributes first
+                    channel = getattr(s, 'channel', 'unknown')
+                    platform_type = getattr(s, 'platform_type', 'unknown')
+
+                    # If still unknown, derive from src
+                    if channel == 'unknown' or not channel:
+                        src_to_channel = {
+                            'reddit': ('reddit', 'social'),
+                            'youtube': ('youtube', 'social'),
+                            'amazon': ('amazon', 'marketplace'),
+                            'brave': ('web', 'web'),
+                        }
+                        src = getattr(s, 'src', '')
+                        if src in src_to_channel:
+                            channel, platform_type = src_to_channel[src]
+                        else:
+                            channel = src if src else 'unknown'
+                            platform_type = 'unknown'
+
+                    meta_obj['channel'] = channel
+                    meta_obj['platform_type'] = platform_type
 
                 dims = {
                     'provenance': getattr(s, 'score_provenance', None),
