@@ -463,6 +463,10 @@ class ContentScorer:
                 is_authentic=False,  # Optional - for backward compatibility
                 rubric_version=self.rubric_version,
                 run_id=content.run_id,
+                # Enhanced Trust Stack fields
+                modality=getattr(content, 'modality', 'text'),
+                channel=getattr(content, 'channel', 'unknown'),
+                platform_type=getattr(content, 'platform_type', 'unknown'),
                 meta=json.dumps(
                     # Build a meta dict that includes scoring info and detected attributes
                     (lambda cm: {

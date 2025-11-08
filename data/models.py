@@ -78,6 +78,11 @@ class ContentScores:
     run_id: str = ""
     meta: str = ""
 
+    # Enhanced Trust Stack fields for 6D analysis
+    modality: str = "text"  # text, image, video, audio
+    channel: str = "unknown"  # youtube, reddit, amazon, instagram, etc.
+    platform_type: str = "unknown"  # owned, social, marketplace, email
+
     @property
     def overall_score(self) -> float:
         """Calculate weighted overall score (0.0-1.0 scale)"""

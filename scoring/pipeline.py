@@ -82,10 +82,14 @@ class ScoringPipeline:
                             score_coherence=0.5,
                             score_transparency=0.5,
                             score_verification=0.5,
+                            score_ai_readiness=0.5,
                             class_label='pending',
                             is_authentic=False,
                             rubric_version=self.scorer.rubric_version,
                             run_id=run_id,
+                            modality=getattr(c, 'modality', 'text'),
+                            channel=getattr(c, 'channel', 'unknown'),
+                            platform_type=getattr(c, 'platform_type', 'unknown'),
                             meta='{"triage": "demoted"}'
                         )
                         neutral_scores.append(neutral)
