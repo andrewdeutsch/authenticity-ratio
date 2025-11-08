@@ -37,3 +37,10 @@ playwright>=1.35.0
 # scrapy>=2.10.0          # Web crawling framework
 google-api-python-client>=2.80.0
 google-auth>=2.20.0
+
+# Enhanced data collection
+extruct>=0.16.0          # Schema.org extraction (JSON-LD, microdata, RDFa)
+langdetect>=1.0.9        # Language detection
+textstat>=0.7.3          # Readability scoring
+lxml>=4.9.0              # XML/HTML parsing for extruct
+pillow>=10.0.0           # Image processing for EXIF data

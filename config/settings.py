@@ -12,12 +12,13 @@ load_dotenv()
 
 @dataclass
 class ScoringWeights:
-    """5D Trust Dimension weights"""
-    provenance: float = 0.20
-    verification: float = 0.20
-    transparency: float = 0.20
-    coherence: float = 0.20
-    resonance: float = 0.20
+    """6D Trust Dimension weights"""
+    provenance: float = 0.16666666666666666
+    verification: float = 0.16666666666666666
+    transparency: float = 0.16666666666666666
+    coherence: float = 0.16666666666666666
+    resonance: float = 0.16666666666666666
+    ai_readiness: float = 0.16666666666666666
 
 @dataclass
 class APIConfig:
@@ -123,7 +124,8 @@ def validate_config() -> List[str]:
            SETTINGS['scoring_weights'].verification + \
            SETTINGS['scoring_weights'].transparency + \
            SETTINGS['scoring_weights'].coherence + \
-           SETTINGS['scoring_weights'].resonance == 1.0:
+           SETTINGS['scoring_weights'].resonance + \
+           SETTINGS['scoring_weights'].ai_readiness == 1.0:
         issues.append("Scoring weights must sum to 1.0")
     
     if SETTINGS['min_score_threshold'] <= SETTINGS['suspect_threshold']:

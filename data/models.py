@@ -30,7 +30,7 @@ class RatingBand(Enum):
 
 @dataclass
 class NormalizedContent:
-    """Matches ar_content_normalized_v2 table schema"""
+    """Matches ar_content_normalized_v2 table schema with enhanced Trust Stack fields"""
     content_id: str
     src: str
     platform_id: str
@@ -43,7 +43,14 @@ class NormalizedContent:
     event_ts: str = ""  # Stored as string for Athena compatibility
     run_id: str = ""
     meta: Dict[str, str] = None
-    
+
+    # Enhanced Trust Stack fields for 6D analysis
+    url: str = ""  # Full URL of the content
+    published_at: Optional[str] = None  # ISO datetime string
+    modality: str = "text"  # text, image, video, audio
+    channel: str = "unknown"  # youtube, reddit, amazon, instagram, etc.
+    platform_type: str = "unknown"  # owned, social, marketplace, email
+
     def __post_init__(self):
         if self.meta is None:
             self.meta = {}
@@ -64,6 +71,7 @@ class ContentScores:
     score_coherence: float
     score_transparency: float
     score_verification: float
+    score_ai_readiness: float = 0.5  # Default to neutral if not provided for backward compatibility
     class_label: str = ""  # Legacy field - optional for backward compatibility
     is_authentic: bool = False  # Legacy field - optional
     rubric_version: str = "v2.0-trust-stack"
@@ -81,7 +89,8 @@ class ContentScores:
             self.score_resonance * weights.resonance +
             self.score_coherence * weights.coherence +
             self.score_transparency * weights.transparency +
-            self.score_verification * weights.verification
+            self.score_verification * weights.verification +
+            self.score_ai_readiness * weights.ai_readiness
         )
 
     # Trust Stack Rating properties (0-100 scale)
@@ -109,6 +118,11 @@ class ContentScores:
     def rating_verification(self) -> float:
         """Verification rating on 0-100 scale"""
         return self.score_verification * 100
+
+    @property
+    def rating_ai_readiness(self) -> float:
+        """AI Readiness rating on 0-100 scale"""
+        return self.score_ai_readiness * 100
 
     @property
     def rating_comprehensive(self) -> float:

@@ -279,6 +279,15 @@ class MarkdownReportGenerator:
         # Dimension breakdown
         content.append(self._create_dimension_breakdown(report_data))
 
+        # Attribute-level analysis (NEW: 6D Trust Stack enhancement)
+        content.append(self._create_attribute_analysis(report_data))
+
+        # Modality breakdown (NEW: Content type analysis)
+        content.append(self._create_modality_breakdown(report_data))
+
+        # Channel breakdown (NEW: Platform analysis)
+        content.append(self._create_channel_breakdown_section(report_data))
+
         # Classification analysis
         content.append(self._create_classification_analysis(report_data))
 
@@ -351,7 +360,8 @@ class MarkdownReportGenerator:
             'verification': 'Alignment with authoritative brand data',
             'transparency': 'Clarity of ownership and disclosure',
             'coherence': 'Consistency with brand messaging',
-            'resonance': 'Authentic audience engagement'
+            'resonance': 'Authentic audience engagement',
+            'ai_readiness': 'Machine discoverability and LLM-readable signals'
         }
 
         weakest_dim = None
@@ -359,7 +369,7 @@ class MarkdownReportGenerator:
         strongest_dim = None
         strongest_score = 0.0
 
-        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
+        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
             stats = dimension_breakdown.get(dim, {})
             avg = stats.get('average', 0.0)
 
@@ -388,7 +398,7 @@ class MarkdownReportGenerator:
 
         # Build interpretation paragraph focused on dimensions
         interp = (
-            f"Analysis of {total_items:,} brand-related content items reveals trust patterns across five dimensions. "
+            f"Analysis of {total_items:,} brand-related content items reveals trust patterns across six dimensions. "
             f"**{strongest_dim.title()}** is the strongest dimension ({strongest_score:.3f}), "
             f"while **{weakest_dim.title()}** ({weakest_score:.3f}) requires attention. "
         )
@@ -404,6 +414,8 @@ class MarkdownReportGenerator:
             interp += "The low coherence scores indicate inconsistent messaging that may signal unofficial content."
         elif weakest_dim == 'resonance':
             interp += "The low resonance scores suggest engagement patterns don't align with authentic brand communities."
+        elif weakest_dim == 'ai_readiness':
+            interp += "The low AI readiness scores indicate missing structured data, schema markup, or metadata that limits machine discoverability."
 
         # Build images (heatmap, trendline, channel breakdown) and include them if created
         visuals_md = []
@@ -727,7 +739,7 @@ class MarkdownReportGenerator:
         dimension_data = report_data.get('dimension_breakdown', {})
         
         if not dimension_data:
-            return "## 5D Trust Dimensions Analysis\n\n*No dimension data available*"
+            return "## 6D Trust Dimensions Analysis\n\n*No dimension data available*"
         
         # Create dimension scores table
         table_rows = ["| Dimension | Average | Min | Max | Std Dev |"]
@@ -744,7 +756,8 @@ class MarkdownReportGenerator:
             'verification': 'Factual accuracy and consistency with trusted sources',
             'transparency': 'Clear disclosures and honest communication',
             'coherence': 'Consistency with brand messaging and professional quality',
-            'resonance': 'Cultural fit and authentic engagement patterns'
+            'resonance': 'Cultural fit and authentic engagement patterns',
+            'ai_readiness': 'Machine-readable structured data, schema markup, and LLM discoverability'
         }
         
         dimension_details = []
@@ -764,7 +777,7 @@ class MarkdownReportGenerator:
             
             dimension_details.append(f"**{dimension.title()}** ({indicator}): {description}")
         
-        return f"""## 5D Trust Dimensions Analysis
+        return f"""## 6D Trust Dimensions Analysis
 
 ### Dimension Scores
 
@@ -782,8 +795,468 @@ Each dimension is scored on a scale of 0.0 to 1.0:
 - **0.4-0.6**: Moderate performance
 - **0.0-0.4**: Poor performance
 
-Each dimension is independently scored and combined to form a comprehensive trust profile, with equal weighting (20% each) across all five dimensions."""
-    
+Each dimension is independently scored and combined to form a comprehensive trust profile, with equal weighting (16.7% each) across all six dimensions."""
+
+    def _create_attribute_analysis(self, report_data: Dict[str, Any]) -> str:
+        """Create attribute-level analysis section"""
+        appendix = report_data.get('appendix', [])
+
+        if not appendix:
+            return "## Attribute-Level Analysis\n\n*No attribute-level data available*"
+
+        # Load rubric to get attribute definitions
+        try:
+            import json
+            with open('config/rubric.json', 'r') as f:
+                rubric = json.load(f)
+            attributes = rubric.get('attributes', [])
+        except Exception as e:
+            logger.warning(f"Could not load rubric for attribute analysis: {e}")
+            return "## Attribute-Level Analysis\n\n*Rubric configuration not available*"
+
+        # Extract all detected attributes from appendix items
+        # Appendix items have meta field with detected_attributes
+        all_detected_attrs = []
+        for item in appendix:
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except:
+                    meta = {}
+
+            detected = meta.get('detected_attributes', [])
+            all_detected_attrs.extend(detected)
+
+        if not all_detected_attrs:
+            return """## Attribute-Level Analysis
+
+### Overview
+
+This report includes analysis of **78 Trust Stack attributes** across 6 dimensions. Attribute-level detection is enabled but no specific attribute scores were captured in this run.
+
+**Note**: To see detailed attribute breakdowns, ensure `use_attribute_detection=True` in the scorer configuration.
+
+### Attribute Coverage by Dimension
+
+Attribute detection analyzes specific trust signals such as:
+- **Provenance** (12 attributes): AI labeling, C2PA manifests, EXIF integrity, watermarks, etc.
+- **Resonance** (13 attributes): Cultural context, language match, readability, tone appropriateness, etc.
+- **Coherence** (18 attributes): Brand voice consistency, claim consistency, temporal continuity, etc.
+- **Transparency** (10 attributes): AI disclosure, bot disclosure, data citations, privacy policies, etc.
+- **Verification** (19 attributes): Ad labels, engagement authenticity, review authenticity, etc.
+- **AI Readiness** (6 attributes): Schema.org compliance, metadata completeness, LLM retrievability, etc.
+
+Enable attribute detection in your next run to see granular scoring."""
+
+        # Group attributes by dimension
+        attrs_by_dimension = {}
+        for attr in all_detected_attrs:
+            dim = attr.get('dimension', 'unknown')
+            if dim not in attrs_by_dimension:
+                attrs_by_dimension[dim] = []
+            attrs_by_dimension[dim].append(attr)
+
+        # Calculate statistics
+        total_possible_attrs = len(attributes)
+        total_detected = len(all_detected_attrs)
+        coverage_pct = (total_detected / (total_possible_attrs * len(appendix))) * 100 if appendix else 0
+
+        # Build the markdown section
+        md = f"""## Attribute-Level Analysis
+
+### Overview
+
+Analyzed **{len(appendix):,} content items** across **{total_possible_attrs} Trust Stack attributes** (6 dimensions).
+
+- **Total Attribute Detections**: {total_detected:,}
+- **Average Attributes Per Item**: {total_detected / len(appendix):.1f}
+- **Detection Coverage**: {coverage_pct:.1f}%
+
+---
+
+### Attribute Performance by Dimension
+
+"""
+
+        # Create tables for each dimension
+        for dimension in ['provenance', 'resonance', 'coherence', 'transparency', 'verification', 'ai_readiness']:
+            dim_attrs = attrs_by_dimension.get(dimension, [])
+
+            if not dim_attrs:
+                continue
+
+            md += f"\n#### {dimension.title()} Attributes\n\n"
+            md += "| Attribute | Avg Score | Min | Max | Detection Rate | Status |\n"
+            md += "|-----------|-----------|-----|-----|----------------|--------|\n"
+
+            # Group by attribute name and calculate stats
+            attr_stats = {}
+            for attr in dim_attrs:
+                attr_id = attr.get('attribute_id', 'unknown')
+                value = attr.get('value', 0)
+
+                if attr_id not in attr_stats:
+                    attr_stats[attr_id] = {
+                        'values': [],
+                        'label': attr.get('label', attr_id)
+                    }
+                attr_stats[attr_id]['values'].append(value)
+
+            # Add rows for each attribute
+            for attr_id, stats in sorted(attr_stats.items()):
+                values = stats['values']
+                avg_score = sum(values) / len(values)
+                min_score = min(values)
+                max_score = max(values)
+                detection_rate = (len(values) / len(appendix)) * 100
+
+                # Status indicator
+                if avg_score >= 8.0:
+                    status = "✅ Excellent"
+                elif avg_score >= 6.0:
+                    status = "🟢 Good"
+                elif avg_score >= 4.0:
+                    status = "🟡 Fair"
+                else:
+                    status = "🔴 Needs Work"
+
+                md += f"| {stats['label']} | {avg_score:.1f} | {min_score:.1f} | {max_score:.1f} | {detection_rate:.0f}% | {status} |\n"
+
+        md += "\n---\n\n"
+        md += "### Interpretation\n\n"
+        md += "- **Avg Score**: Average score for this attribute across all content (1-10 scale)\n"
+        md += "- **Detection Rate**: Percentage of content items where this attribute was detected\n"
+        md += "- **Status**: ✅ Excellent (8-10), 🟢 Good (6-8), 🟡 Fair (4-6), 🔴 Needs Work (<4)\n"
+
+        return md
+
+    def _create_modality_breakdown(self, report_data: Dict[str, Any]) -> str:
+        """Create modality breakdown section (text/image/video/audio)"""
+        appendix = report_data.get('appendix', [])
+
+        if not appendix:
+            return "## Content Type Analysis (Modality)\n\n*No content data available for modality breakdown*"
+
+        # Extract modality and dimension scores from appendix
+        modality_data = {}
+
+        for item in appendix:
+            # Get modality from meta
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    import json
+                    meta = json.loads(meta)
+                except:
+                    meta = {}
+
+            modality = meta.get('modality', 'text')  # Default to text
+
+            if modality not in modality_data:
+                modality_data[modality] = {
+                    'count': 0,
+                    'dimensions': {dim: [] for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']}
+                }
+
+            modality_data[modality]['count'] += 1
+
+            # Extract dimension scores
+            dimensions = item.get('dimensions', {})
+            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+                score = dimensions.get(dim)
+                if score is not None:
+                    modality_data[modality]['dimensions'][dim].append(score)
+
+        if not modality_data:
+            return "## Content Type Analysis (Modality)\n\n*Modality data not available for analyzed content*"
+
+        # Build markdown
+        md = """## Content Type Analysis (Modality)
+
+### Overview
+
+Analysis of trust performance across different content types (text, image, video, audio).
+
+"""
+
+        # Summary table
+        md += "| Content Type | Count | % of Total | Avg Trust Score | Status |\n"
+        md += "|--------------|-------|------------|-----------------|--------|\n"
+
+        total_items = sum(data['count'] for data in modality_data.values())
+
+        for modality in ['text', 'image', 'video', 'audio']:
+            if modality not in modality_data:
+                continue
+
+            data = modality_data[modality]
+            count = data['count']
+            pct = (count / total_items * 100) if total_items > 0 else 0
+
+            # Calculate average trust score across all dimensions
+            all_scores = []
+            for dim_scores in data['dimensions'].values():
+                all_scores.extend(dim_scores)
+
+            avg_trust = sum(all_scores) / len(all_scores) if all_scores else 0
+
+            # Status indicator
+            if avg_trust >= 0.8:
+                status = "✅ Excellent"
+            elif avg_trust >= 0.6:
+                status = "🟢 Good"
+            elif avg_trust >= 0.4:
+                status = "🟡 Moderate"
+            else:
+                status = "🔴 Poor"
+
+            # Icon mapping
+            icons = {
+                'text': '📝',
+                'image': '🖼️',
+                'video': '🎥',
+                'audio': '🎵'
+            }
+
+            icon = icons.get(modality, '📄')
+            md += f"| {icon} {modality.title()} | {count:,} | {pct:.1f}% | {avg_trust:.3f} | {status} |\n"
+
+        md += "\n---\n\n### Dimension Performance by Content Type\n\n"
+
+        # Create detailed breakdown for each modality
+        for modality in ['text', 'image', 'video', 'audio']:
+            if modality not in modality_data:
+                continue
+
+            data = modality_data[modality]
+            if data['count'] == 0:
+                continue
+
+            icons = {'text': '📝', 'image': '🖼️', 'video': '🎥', 'audio': '🎵'}
+            icon = icons.get(modality, '📄')
+
+            md += f"\n#### {icon} {modality.title()} Content ({data['count']} items)\n\n"
+            md += "| Dimension | Avg Score | Min | Max | Samples |\n"
+            md += "|-----------|-----------|-----|-----|----------|\n"
+
+            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+                scores = data['dimensions'][dim]
+                if not scores:
+                    continue
+
+                avg = sum(scores) / len(scores)
+                min_score = min(scores)
+                max_score = max(scores)
+
+                md += f"| {dim.title()} | {avg:.3f} | {min_score:.3f} | {max_score:.3f} | {len(scores)} |\n"
+
+        md += "\n---\n\n### Key Insights\n\n"
+
+        # Generate insights
+        if len(modality_data) > 1:
+            # Find best and worst modalities
+            modality_scores = {}
+            for modality, data in modality_data.items():
+                all_scores = []
+                for dim_scores in data['dimensions'].values():
+                    all_scores.extend(dim_scores)
+                if all_scores:
+                    modality_scores[modality] = sum(all_scores) / len(all_scores)
+
+            if modality_scores:
+                best_modality = max(modality_scores, key=modality_scores.get)
+                worst_modality = min(modality_scores, key=modality_scores.get)
+
+                md += f"- **Strongest Content Type**: {best_modality.title()} ({modality_scores[best_modality]:.3f} avg)\n"
+                md += f"- **Weakest Content Type**: {worst_modality.title()} ({modality_scores[worst_modality]:.3f} avg)\n"
+                md += f"- **Most Common**: {max(modality_data, key=lambda k: modality_data[k]['count']).title()} ({modality_data[max(modality_data, key=lambda k: modality_data[k]['count'])]['count']} items)\n"
+        else:
+            md += f"- **Single Content Type**: All analyzed content is {list(modality_data.keys())[0]}-based\n"
+
+        return md
+
+    def _create_channel_breakdown_section(self, report_data: Dict[str, Any]) -> str:
+        """Create channel/platform breakdown section"""
+        appendix = report_data.get('appendix', [])
+
+        if not appendix:
+            return "## Platform Analysis (Channel Breakdown)\n\n*No content data available for platform breakdown*"
+
+        # Extract channel and dimension scores from appendix
+        channel_data = {}
+        platform_type_data = {}
+
+        for item in appendix:
+            # Get channel and platform_type from meta
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    import json
+                    meta = json.loads(meta)
+                except:
+                    meta = {}
+
+            channel = meta.get('channel', 'unknown')
+            platform_type = meta.get('platform_type', 'unknown')
+
+            # Track channel data
+            if channel not in channel_data:
+                channel_data[channel] = {
+                    'count': 0,
+                    'platform_type': platform_type,
+                    'dimensions': {dim: [] for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']}
+                }
+
+            channel_data[channel]['count'] += 1
+
+            # Track platform type data
+            if platform_type not in platform_type_data:
+                platform_type_data[platform_type] = {
+                    'count': 0,
+                    'channels': set(),
+                    'dimensions': {dim: [] for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']}
+                }
+
+            platform_type_data[platform_type]['count'] += 1
+            platform_type_data[platform_type]['channels'].add(channel)
+
+            # Extract dimension scores
+            dimensions = item.get('dimensions', {})
+            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+                score = dimensions.get(dim)
+                if score is not None:
+                    channel_data[channel]['dimensions'][dim].append(score)
+                    platform_type_data[platform_type]['dimensions'][dim].append(score)
+
+        if not channel_data:
+            return "## Platform Analysis (Channel Breakdown)\n\n*Channel data not available for analyzed content*"
+
+        # Build markdown
+        md = """## Platform Analysis (Channel Breakdown)
+
+### Overview
+
+Trust performance analysis across different platforms and channel types.
+
+"""
+
+        # Platform type summary
+        md += "#### By Platform Type\n\n"
+        md += "| Platform Type | Channels | Items | Avg Trust | Status |\n"
+        md += "|---------------|----------|-------|-----------|--------|\n"
+
+        for platform_type in ['owned', 'social', 'marketplace', 'email', 'unknown']:
+            if platform_type not in platform_type_data:
+                continue
+
+            data = platform_type_data[platform_type]
+
+            # Calculate average trust
+            all_scores = []
+            for dim_scores in data['dimensions'].values():
+                all_scores.extend(dim_scores)
+
+            avg_trust = sum(all_scores) / len(all_scores) if all_scores else 0
+
+            # Status
+            if avg_trust >= 0.8:
+                status = "✅ Excellent"
+            elif avg_trust >= 0.6:
+                status = "🟢 Good"
+            elif avg_trust >= 0.4:
+                status = "🟡 Moderate"
+            else:
+                status = "🔴 Poor"
+
+            # Icons
+            icons = {
+                'owned': '🏢',
+                'social': '👥',
+                'marketplace': '🛒',
+                'email': '📧',
+                'unknown': '❓'
+            }
+            icon = icons.get(platform_type, '📄')
+
+            md += f"| {icon} {platform_type.title()} | {len(data['channels'])} | {data['count']:,} | {avg_trust:.3f} | {status} |\n"
+
+        # Channel detail table
+        md += "\n---\n\n### Trust Scores by Channel\n\n"
+        md += "| Channel | Type | Items | Provenance | Verification | Transparency | Coherence | Resonance | AI Readiness | Overall |\n"
+        md += "|---------|------|-------|------------|--------------|--------------|-----------|-----------|--------------|----------|\n"
+
+        # Sort channels by count (descending)
+        sorted_channels = sorted(channel_data.items(), key=lambda x: x[1]['count'], reverse=True)
+
+        for channel, data in sorted_channels:
+            if data['count'] == 0:
+                continue
+
+            platform_type = data['platform_type']
+            count = data['count']
+
+            # Calculate dimension averages
+            dim_avgs = {}
+            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+                scores = data['dimensions'][dim]
+                dim_avgs[dim] = sum(scores) / len(scores) if scores else 0
+
+            overall = sum(dim_avgs.values()) / len(dim_avgs) if dim_avgs else 0
+
+            # Platform type icon
+            icons = {'owned': '🏢', 'social': '👥', 'marketplace': '🛒', 'email': '📧', 'unknown': '❓'}
+            type_icon = icons.get(platform_type, '📄')
+
+            md += f"| {channel} | {type_icon} {platform_type} | {count:,} | "
+            md += f"{dim_avgs.get('provenance', 0):.2f} | "
+            md += f"{dim_avgs.get('verification', 0):.2f} | "
+            md += f"{dim_avgs.get('transparency', 0):.2f} | "
+            md += f"{dim_avgs.get('coherence', 0):.2f} | "
+            md += f"{dim_avgs.get('resonance', 0):.2f} | "
+            md += f"{dim_avgs.get('ai_readiness', 0):.2f} | "
+            md += f"**{overall:.2f}** |\n"
+
+        md += "\n---\n\n### Key Insights\n\n"
+
+        # Generate insights
+        if len(channel_data) > 1:
+            # Find best and worst channels
+            channel_scores = {}
+            for channel, data in channel_data.items():
+                all_scores = []
+                for dim_scores in data['dimensions'].values():
+                    all_scores.extend(dim_scores)
+                if all_scores:
+                    channel_scores[channel] = sum(all_scores) / len(all_scores)
+
+            if channel_scores:
+                best_channel = max(channel_scores, key=channel_scores.get)
+                worst_channel = min(channel_scores, key=channel_scores.get)
+                most_common = max(channel_data, key=lambda k: channel_data[k]['count'])
+
+                md += f"- **Highest Trust Platform**: {best_channel} ({channel_scores[best_channel]:.3f} avg)\n"
+                md += f"- **Lowest Trust Platform**: {worst_channel} ({channel_scores[worst_channel]:.3f} avg)\n"
+                md += f"- **Most Content From**: {most_common} ({channel_data[most_common]['count']} items)\n"
+
+                # Platform type insights
+                if len(platform_type_data) > 1:
+                    platform_scores = {}
+                    for ptype, data in platform_type_data.items():
+                        all_scores = []
+                        for dim_scores in data['dimensions'].values():
+                            all_scores.extend(dim_scores)
+                        if all_scores:
+                            platform_scores[ptype] = sum(all_scores) / len(all_scores)
+
+                    if platform_scores:
+                        best_type = max(platform_scores, key=platform_scores.get)
+                        md += f"- **Best Platform Type**: {best_type.title()} content ({platform_scores[best_type]:.3f} avg)\n"
+        else:
+            md += f"- **Single Platform**: All content from {list(channel_data.keys())[0]}\n"
+
+        return md
+
     def _create_classification_analysis(self, report_data: Dict[str, Any]) -> str:
         """Create classification analysis section"""
         classification_data = report_data.get('classification_analysis', {})
@@ -814,7 +1287,7 @@ Each dimension is independently scored and combined to form a comprehensive trus
 
 ### Classification Definitions
 
-- **High Trust**: Content that meets trust standards across all five dimensions with high confidence (score ≥0.70)
+- **High Trust**: Content that meets trust standards across all six dimensions with high confidence (score ≥0.70)
 - **Moderate Trust**: Content that shows mixed trust signals and requires additional verification (score 0.50-0.69)
 - **Low Trust**: Content that fails trust criteria or shows weak dimensional scores (score <0.50)
 
@@ -835,16 +1308,282 @@ Each dimension is independently scored and combined to form a comprehensive trus
 - **Strategy**: Address trust deficiencies or report to platform administrators
 - **Goal**: Improve trust scores or eliminate from brand ecosystem"""
     
-    def _create_recommendations(self, report_data: Dict[str, Any]) -> str:
-        """Create recommendations section based on Trust Stack dimensions"""
-        dimension_breakdown = report_data.get('dimension_breakdown', {})
+    def _extract_low_trust_items(self, report_data: Dict[str, Any], limit: int = 10) -> List[Dict[str, Any]]:
+        """Extract low and moderate trust items with details for LLM analysis"""
+        items = report_data.get('items', [])
+        appendix = report_data.get('appendix', [])
 
-        # Find weakest dimension score
+        # Use appendix if available (more detailed), otherwise use items
+        source = appendix if appendix else items
+
+        low_trust = []
+        moderate_trust = []
+
+        for item in source:
+            # Handle both dict and object types
+            if not isinstance(item, dict):
+                try:
+                    item = {k: getattr(item, k) for k in dir(item) if not k.startswith('_') and not callable(getattr(item, k, None))}
+                except Exception:
+                    continue
+
+            final_score = float(item.get('final_score', 0.0))
+            label = (item.get('label') or '').lower()
+
+            item_data = {
+                'url': item.get('url', 'Unknown URL'),
+                'title': item.get('title', 'No title'),
+                'score': final_score,
+                'label': label,
+                'source': item.get('source', 'Unknown'),
+                'dimension_scores': item.get('dimension_scores', {})
+            }
+
+            if label == 'inauthentic' or final_score < 0.50:
+                low_trust.append(item_data)
+            elif label == 'suspect' or (0.50 <= final_score < 0.70):
+                moderate_trust.append(item_data)
+
+        # Sort by score (worst first)
+        low_trust.sort(key=lambda x: x['score'])
+        moderate_trust.sort(key=lambda x: x['score'])
+
+        return {
+            'low_trust': low_trust[:limit],
+            'moderate_trust': moderate_trust[:limit]
+        }
+
+    def _analyze_attribute_gaps(self, report_data: Dict[str, Any]) -> list:
+        """
+        Analyze attribute performance and identify gaps with impact scoring
+
+        Returns list of recommendations with impact scores, sorted by priority
+        """
+        appendix = report_data.get('appendix', [])
+
+        if not appendix:
+            return []
+
+        # Load rubric for attribute metadata
+        try:
+            import json
+            with open('config/rubric.json', 'r') as f:
+                rubric = json.load(f)
+            attributes = {attr['id']: attr for attr in rubric.get('attributes', [])}
+            dimension_weights = rubric.get('dimension_weights', {})
+        except Exception as e:
+            logger.warning(f"Could not load rubric for recommendations: {e}")
+            return []
+
+        # Collect all detected attributes
+        all_detected = {}  # attr_id -> list of scores
+
+        for item in appendix:
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except:
+                    meta = {}
+
+            detected = meta.get('detected_attributes', [])
+            for attr in detected:
+                attr_id = attr.get('attribute_id')
+                value = attr.get('value', 0)
+
+                if attr_id not in all_detected:
+                    all_detected[attr_id] = []
+                all_detected[attr_id].append(value)
+
+        # Calculate gaps and impact scores
+        recommendations = []
+
+        for attr_id, scores in all_detected.items():
+            if attr_id not in attributes:
+                continue
+
+            attr_config = attributes[attr_id]
+            dimension = attr_config.get('dimension', 'unknown')
+            threshold = attr_config.get('scoring_rule_parsed', {}).get('threshold', 7.0)
+
+            avg_score = sum(scores) / len(scores)
+            detection_rate = len(scores) / len(appendix)
+
+            # Only recommend if score is below threshold
+            if avg_score < threshold:
+                gap = threshold - avg_score
+                dim_weight = dimension_weights.get(dimension, 0.167)
+
+                # Impact = gap × dimension_weight × detection_rate
+                # Higher impact = more important to fix
+                impact = gap * dim_weight * detection_rate
+
+                recommendations.append({
+                    'attribute_id': attr_id,
+                    'label': attr_config.get('label', attr_id),
+                    'dimension': dimension,
+                    'avg_score': avg_score,
+                    'threshold': threshold,
+                    'gap': gap,
+                    'detection_rate': detection_rate,
+                    'impact': impact,
+                    'affected_items': len(scores),
+                    'remediation': self._get_remediation_guidance(attr_id, attr_config)
+                })
+
+        # Sort by impact (highest first)
+        recommendations.sort(key=lambda x: x['impact'], reverse=True)
+
+        return recommendations
+
+    def _get_remediation_guidance(self, attr_id: str, attr_config: dict) -> dict:
+        """Get specific remediation guidance for an attribute"""
+
+        # Remediation database
+        remediation_db = {
+            # Provenance
+            'ai_vs_human_labeling_clarity': {
+                'action': 'Add clear AI disclosure labels to all AI-generated content',
+                'tools': ['Label templates', 'Content management system tags'],
+                'timeline': '1-2 weeks',
+                'difficulty': 'Easy',
+                'success_criteria': 'All AI content explicitly labeled'
+            },
+            'c2pa_cai_manifest_present': {
+                'action': 'Implement C2PA content credentials for images and videos',
+                'tools': ['C2PA tool (content-credentials.org)', 'Adobe Content Authenticity'],
+                'timeline': '4-8 weeks',
+                'difficulty': 'Hard',
+                'success_criteria': 'C2PA manifests on 80%+ of media'
+            },
+            'schema_compliance': {
+                'action': 'Add schema.org structured data markup to all pages',
+                'tools': ['Schema.org validator', 'JSON-LD generator', 'Google Rich Results Test'],
+                'timeline': '2-4 weeks',
+                'difficulty': 'Medium',
+                'success_criteria': 'Valid schema.org markup on all content'
+            },
+            'metadata_completeness': {
+                'action': 'Ensure all content has title, description, author, date, and keywords',
+                'tools': ['CMS metadata fields', 'Meta tag checkers'],
+                'timeline': '1-2 weeks',
+                'difficulty': 'Easy',
+                'success_criteria': '5/5 metadata fields present on all content'
+            },
+            'llm_retrievability': {
+                'action': 'Remove noindex tags, add sitemap, ensure robots.txt allows crawling',
+                'tools': ['Robots.txt validator', 'XML sitemap generators'],
+                'timeline': '1 week',
+                'difficulty': 'Easy',
+                'success_criteria': 'All content indexable by search engines and LLMs'
+            },
+            'canonical_linking': {
+                'action': 'Add canonical URL tags to all pages',
+                'tools': ['HTML head tag editor', 'CMS plugins'],
+                'timeline': '1 week',
+                'difficulty': 'Easy',
+                'success_criteria': 'Canonical URL on every page'
+            },
+            'indexing_visibility': {
+                'action': 'Create XML sitemap and submit to search engines',
+                'tools': ['Sitemap generators', 'Google Search Console'],
+                'timeline': '1 week',
+                'difficulty': 'Easy',
+                'success_criteria': 'Sitemap indexed by major search engines'
+            },
+            'ai_generated_assisted_disclosure_present': {
+                'action': 'Add "AI-generated" or "AI-assisted" disclosures to relevant content',
+                'tools': ['Disclosure templates', 'CMS disclosure fields'],
+                'timeline': '1-2 weeks',
+                'difficulty': 'Easy',
+                'success_criteria': 'All AI content properly disclosed'
+            },
+            'privacy_policy_link_availability_clarity': {
+                'action': 'Add visible privacy policy link to all pages',
+                'tools': ['Privacy policy generators', 'Footer templates'],
+                'timeline': '1 week',
+                'difficulty': 'Easy',
+                'success_criteria': 'Privacy policy link on every page'
+            },
+            'ad_sponsored_label_consistency': {
+                'action': 'Label all sponsored content with "Ad" or "Sponsored" tags',
+                'tools': ['Ad disclosure templates', 'FTC compliance checkers'],
+                'timeline': '1-2 weeks',
+                'difficulty': 'Easy',
+                'success_criteria': 'All ads clearly labeled'
+            },
+        }
+
+        # Get specific guidance or use generic
+        if attr_id in remediation_db:
+            return remediation_db[attr_id]
+        else:
+            # Generic guidance based on dimension
+            dimension = attr_config.get('dimension', 'unknown')
+            generic = {
+                'provenance': {
+                    'action': 'Improve source attribution and metadata tracking',
+                    'tools': ['Metadata management systems', 'Content tracking tools'],
+                    'timeline': '2-4 weeks',
+                    'difficulty': 'Medium',
+                    'success_criteria': 'Attribute score above 7.0'
+                },
+                'verification': {
+                    'action': 'Strengthen fact-checking and source validation',
+                    'tools': ['Fact-checking services', 'Citation validators'],
+                    'timeline': '2-4 weeks',
+                    'difficulty': 'Medium',
+                    'success_criteria': 'Attribute score above 7.0'
+                },
+                'transparency': {
+                    'action': 'Enhance disclosure practices and authorship clarity',
+                    'tools': ['Disclosure templates', 'Author attribution systems'],
+                    'timeline': '1-3 weeks',
+                    'difficulty': 'Easy',
+                    'success_criteria': 'Attribute score above 7.0'
+                },
+                'coherence': {
+                    'action': 'Ensure consistent messaging across channels',
+                    'tools': ['Brand style guides', 'Content review workflows'],
+                    'timeline': '2-4 weeks',
+                    'difficulty': 'Medium',
+                    'success_criteria': 'Attribute score above 7.0'
+                },
+                'resonance': {
+                    'action': 'Foster authentic engagement and cultural alignment',
+                    'tools': ['Community management tools', 'Sentiment analysis'],
+                    'timeline': '4-8 weeks',
+                    'difficulty': 'Hard',
+                    'success_criteria': 'Attribute score above 7.0'
+                },
+                'ai_readiness': {
+                    'action': 'Add structured data and improve machine readability',
+                    'tools': ['Schema.org tools', 'Metadata validators'],
+                    'timeline': '2-4 weeks',
+                    'difficulty': 'Medium',
+                    'success_criteria': 'Attribute score above 7.0'
+                }
+            }
+            return generic.get(dimension, {
+                'action': 'Review and improve this attribute',
+                'tools': ['Manual review'],
+                'timeline': '2-4 weeks',
+                'difficulty': 'Medium',
+                'success_criteria': 'Attribute score above 7.0'
+            })
+
+    def _prepare_recommendation_context(self, report_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Prepare comprehensive context for LLM recommendation generation"""
+        dimension_breakdown = report_data.get('dimension_breakdown', {})
+        classification_data = report_data.get('classification_analysis', {})
+        dist = classification_data.get('classification_distribution', {})
+
+        # Calculate dimension scores
+        dimension_scores = {}
         weakest_dim = None
         weakest_score = 1.0
-        dimension_scores = {}
 
-        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
+        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
             stats = dimension_breakdown.get(dim, {})
             avg = stats.get('average', 0.0)
             dimension_scores[dim] = avg
@@ -852,98 +1591,347 @@ Each dimension is independently scored and combined to form a comprehensive trus
                 weakest_score = avg
                 weakest_dim = dim
 
-        # Determine priority level based on weakest dimension
+        avg_all_dims = sum(dimension_scores.values()) / len(dimension_scores) if dimension_scores else 0.0
+
+        # Get problematic items
+        problematic_items = self._extract_low_trust_items(report_data)
+
+        # Extract platform sources from items to provide platform-specific context
+        sources = set()
+        items = report_data.get('items', [])
+        for item in items:
+            if isinstance(item, dict):
+                src = item.get('source', '').lower()
+            else:
+                try:
+                    src = getattr(item, 'source', '').lower() if hasattr(item, 'source') else ''
+                except Exception:
+                    src = ''
+            if src:
+                sources.add(src)
+
+        return {
+            'dimension_scores': dimension_scores,
+            'weakest_dimension': weakest_dim,
+            'weakest_score': weakest_score,
+            'overall_average': avg_all_dims,
+            'classification_counts': {
+                'high_trust': dist.get('authentic', 0),
+                'moderate_trust': dist.get('suspect', 0),
+                'low_trust': dist.get('inauthentic', 0),
+                'total': sum(dist.values())
+            },
+            'low_trust_items': problematic_items['low_trust'],
+            'moderate_trust_items': problematic_items['moderate_trust'],
+            'brand_id': report_data.get('brand_id', 'Unknown Brand'),
+            'sources': list(sources)
+        }
+
+    def _llm_generate_recommendations(self, context: Dict[str, Any], model: str = 'gpt-4o-mini') -> Optional[str]:
+        """Use LLM to generate rich, contextual recommendations
+
+        Args:
+            context: Analysis context with dimension scores and problematic items
+            model: OpenAI model to use (configurable via --recommendations-model flag)
+                   Options: gpt-4o, gpt-4o-mini, gpt-3.5-turbo
+
+        Returns:
+            LLM-generated recommendations or None if generation fails
+        """
+        # Avoid LLM calls during testing
+        try:
+            import os as _os
+            if 'PYTEST_CURRENT_TEST' in _os.environ:
+                return None
+        except Exception:
+            pass
+
+        try:
+            from scoring.llm_client import ChatClient
+        except Exception:
+            return None
+
+        # Build prompt with comprehensive context
+        prompt = f"""You are a Trust Stack analyst generating actionable recommendations for brand content authenticity.
+
+BRAND: {context['brand_id']}
+
+TRUST STACK ANALYSIS:
+- Overall Trust Average: {context['overall_average']:.3f}
+- Weakest Dimension: {context['weakest_dimension']} ({context['weakest_score']:.3f})
+
+DIMENSION SCORES:
+"""
+        for dim, score in context['dimension_scores'].items():
+            status = "✅" if score >= 0.70 else "⚠️" if score >= 0.50 else "❌"
+            prompt += f"  {status} {dim.title()}: {score:.3f}\n"
+
+        prompt += f"""
+CLASSIFICATION COUNTS:
+- High Trust: {context['classification_counts']['high_trust']} items
+- Moderate Trust: {context['classification_counts']['moderate_trust']} items
+- Low Trust: {context['classification_counts']['low_trust']} items
+- Total Analyzed: {context['classification_counts']['total']} items
+
+DATA SOURCES: {', '.join(context['sources']) if context['sources'] else 'Unknown'}
+
+LOW TRUST ITEMS (examples):
+"""
+        for item in context['low_trust_items'][:5]:
+            prompt += f"  - {item['title']} — {item['url']}\n"
+            prompt += f"    Score: {item['score']:.2f}, Source: {item['source']}\n"
+
+        # Add platform-specific caveats if Reddit or YouTube are present
+        platform_caveats = []
+        sources = context.get('sources', [])
+
+        if 'reddit' in sources:
+            platform_caveats.append("""
+**REDDIT PLATFORM LIMITATIONS:**
+- Provenance: Users are typically pseudonymous/anonymous - limited formal author attribution is NORMAL
+- Transparency: Lack of credentials/professional disclosure is inherent to Reddit's community model
+- Verification: Community-driven content with variable fact-checking (subreddit-dependent)
+- Coherence: Conversational/informal tone is expected; not professional brand messaging
+- Resonance: Grassroots discussions may not align with official brand voice
+- IMPORTANT: Do NOT penalize Reddit content for platform-inherent constraints. A transparency score of 0.50-0.65 may be "good" for Reddit given pseudonymous norms.""")
+
+        if 'youtube' in sources:
+            platform_caveats.append("""
+**YOUTUBE PLATFORM LIMITATIONS:**
+- Provenance: Video creators and commenters are often independent, not official brand channels
+- Transparency: Comment authors are pseudonymous with minimal profile information
+- Verification: User-generated content and comments lack formal verification mechanisms
+- Coherence: Quality and tone vary widely across user-generated videos and comments
+- Resonance: Community engagement patterns differ from controlled brand content
+- IMPORTANT: Do NOT penalize YouTube content for user-generated content characteristics. Focus on what's actionable within platform capabilities.""")
+
+        if platform_caveats:
+            prompt += "\n" + "\n".join(platform_caveats) + "\n"
+
+        prompt += """
+Generate a comprehensive recommendations report with these EXACT sections:
+
+### Recommended Actions
+
+- Provide 4-6 specific, actionable recommendations based on the data
+- Reference actual dimension weaknesses and low-trust items
+- Be concrete and measurable (not generic advice)
+- Prioritize by impact
+
+### Next Steps (concrete)
+
+**Low Trust items (examples):**
+- List 2-3 specific low-trust items with URLs that need immediate attention
+- Provide brief context on why they are problematic
+
+- Immediate (1-7 days):
+  - List 2-3 concrete actions with specific targets
+  - Example: "Review and improve metadata for 5 low-trust Reddit posts"
+
+- Short-term (1-4 weeks):
+  - List 2-3 tactical improvements tied to dimension weaknesses
+  - Be specific about what to implement
+
+- Medium (4-12 weeks):
+  - List 2-3 strategic initiatives for long-term trust improvement
+  - Connect to overall trust average goals
+
+### Success Metrics
+
+Provide 4-6 specific, measurable metrics including:
+- Concrete targets for dimension improvements (e.g., "Increase transparency from 0.58 to 0.68")
+- Classification count goals (e.g., "Reduce low trust items from X to Y")
+- Timeline-specific milestones
+- Overall trust average improvement target
+
+CRITICAL INSTRUCTIONS:
+1. Use the actual data provided. Reference specific numbers, URLs, and dimensions. Be actionable and concrete, not generic.
+2. PLATFORM-AWARE RECOMMENDATIONS: When analyzing Reddit or YouTube content, contextualize scores relative to platform norms. Do NOT recommend impossible improvements (e.g., "add author credentials to Reddit posts"). Focus on actionable improvements WITHIN platform capabilities (e.g., "verify subreddit credibility", "check post history consistency").
+3. Adjust expectations: A 0.58 transparency score on Reddit may be acceptable given platform constraints. Clarify this in recommendations.
+4. Provide realistic, platform-appropriate guidance that acknowledges inherent limitations while identifying genuine improvement opportunities."""
+
+        try:
+            client = ChatClient()
+            response = client.chat(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2000,
+                temperature=0.5
+            )
+
+            content = response.get('content') or response.get('text')
+            if content:
+                # Add LLM provenance
+                content = f"{content}\n\n*Recommendations generated by {model} based on Trust Stack analysis data*"
+            return content
+
+        except Exception as e:
+            logger.warning(f"LLM recommendation generation failed: {e}")
+            return None
+
+    def _create_attribute_recommendations_section(self, report_data: Dict[str, Any]) -> str:
+        """Create data-driven attribute recommendations section with impact scores"""
+        # Get prioritized attribute recommendations
+        recommendations = self._analyze_attribute_gaps(report_data)
+
+        if not recommendations:
+            return ""
+
+        # Display top 8 recommendations (or fewer if not available)
+        top_recommendations = recommendations[:8]
+
+        section = """
+---
+
+### Priority Attribute Improvements (Data-Driven)
+
+The following attribute improvements are prioritized by **impact score** (gap × dimension weight × detection rate), providing the highest ROI for Trust Stack enhancement:
+
+"""
+
+        # Create recommendations table
+        section += "| Priority | Attribute | Dimension | Current | Target | Gap | Impact | Items |\n"
+        section += "|----------|-----------|-----------|---------|--------|-----|--------|-------|\n"
+
+        for i, rec in enumerate(top_recommendations, 1):
+            priority_emoji = "🔴" if i <= 3 else "🟡" if i <= 6 else "🟢"
+            dimension_short = rec['dimension'][:4].upper()
+
+            section += f"| {priority_emoji} #{i} | **{rec['label']}** | {dimension_short} | "
+            section += f"{rec['avg_score']:.2f} | {rec['threshold']:.2f} | "
+            section += f"{rec['gap']:.2f} | {rec['impact']:.3f} | {rec['affected_items']} |\n"
+
+        section += "\n"
+
+        # Add detailed remediation for top 3
+        section += "#### Top 3 Recommended Actions\n\n"
+
+        for i, rec in enumerate(top_recommendations[:3], 1):
+            remediation = rec.get('remediation', {})
+
+            section += f"**{i}. {rec['label']}** ({rec['dimension'].title()} dimension)\n\n"
+            section += f"- **Current Performance**: {rec['avg_score']:.2f}/10 (affects {rec['affected_items']} items)\n"
+            section += f"- **Gap**: {rec['gap']:.2f} points below threshold\n"
+            section += f"- **Impact Score**: {rec['impact']:.3f}\n"
+
+            if remediation:
+                section += f"- **Action**: {remediation.get('action', 'See dimension guidance')}\n"
+                section += f"- **Tools**: {remediation.get('tools', 'Standard tools')}\n"
+                section += f"- **Timeline**: {remediation.get('timeline', 'TBD')}\n"
+                section += f"- **Difficulty**: {remediation.get('difficulty', 'Medium')}\n"
+                section += f"- **Success Criteria**: {remediation.get('success_criteria', 'Achieve target threshold')}\n"
+
+            section += "\n"
+
+        # Add quick wins section if there are easy items
+        easy_wins = [r for r in top_recommendations if r.get('remediation', {}).get('difficulty') == 'Easy']
+        if easy_wins:
+            section += "#### Quick Wins (Easy Difficulty)\n\n"
+            section += "The following improvements can be implemented quickly with high impact:\n\n"
+
+            for rec in easy_wins[:3]:
+                section += f"- **{rec['label']}**: {rec.get('remediation', {}).get('action', 'Improve attribute detection')}\n"
+
+            section += "\n"
+
+        return section
+
+    def _create_recommendations(self, report_data: Dict[str, Any]) -> str:
+        """Create recommendations section using LLM for rich, contextual insights"""
+        # Prepare context
+        context = self._prepare_recommendation_context(report_data)
+
+        # Get model from report_data (set by run_pipeline --recommendations-model flag)
+        recommendations_model = report_data.get('recommendations_model', 'gpt-4o-mini')
+
+        # Determine priority level for header
+        weakest_score = context['weakest_score']
         if weakest_score >= 0.70:
             priority = "Low"
             focus = "Maintain current trust standards"
-            recommendations = [
-                "Continue monitoring content quality across all dimensions",
-                "Amplify high-trust content examples",
-                "Share best practices across teams",
-                f"Minor improvements to {weakest_dim.title()} (currently {weakest_score:.2f})"
-            ]
         elif weakest_score >= 0.50:
             priority = "Medium"
-            focus = f"Strengthen {weakest_dim.title()} dimension"
-            recommendations = [
-                f"Focus on improving {weakest_dim.title()} scores (currently {weakest_score:.2f})",
-                "Implement enhanced verification for lower-scoring content",
-                "Develop dimension-specific content guidelines",
-                "Increase monitoring of moderate-trust content"
-            ]
+            focus = f"Strengthen {context['weakest_dimension'].title()} dimension"
         elif weakest_score >= 0.30:
             priority = "High"
-            focus = f"Address critical gaps in {weakest_dim.title()}"
-            recommendations = [
-                f"Immediate action required on {weakest_dim.title()} dimension (score: {weakest_score:.2f})",
-                "Implement content quality protocols",
-                "Train teams on trust dimension standards",
-                "Review and remediate low-trust content",
-                "Consider content removal for persistent violations"
-            ]
+            focus = f"Address critical gaps in {context['weakest_dimension'].title()}"
         else:
             priority = "Critical"
-            focus = f"Emergency intervention on {weakest_dim.title()}"
-            recommendations = [
-                f"Critical trust failure in {weakest_dim.title()} (score: {weakest_score:.2f})",
-                "Immediate audit of content creation processes",
-                "Crisis communication strategy",
-                "External trust and safety consultation",
-                "Platform partnership for content verification"
-            ]
+            focus = f"Emergency intervention on {context['weakest_dimension'].title()}"
 
-        # Add dimension-specific guidance
+        # Generate data-driven attribute recommendations
+        attribute_recommendations = self._create_attribute_recommendations_section(report_data)
+
+        # Try LLM-enhanced recommendations with specified model
+        llm_recommendations = self._llm_generate_recommendations(context, model=recommendations_model)
+
+        if llm_recommendations:
+            # LLM succeeded - use rich contextual recommendations with attribute analysis
+            return f"""## Recommendations
+
+### Priority Level: {priority}
+**Focus Area**: {focus}
+
+**Weakest Dimension**: {context['weakest_dimension'].title()} ({weakest_score:.3f})
+**Overall Trust Average**: {context['overall_average']:.3f}
+
+{llm_recommendations}
+
+{attribute_recommendations}"""
+
+        # Fallback to basic recommendations if LLM fails
         dimension_guidance = {
             'provenance': "Improve source attribution, metadata completeness, and traceability",
             'verification': "Strengthen fact-checking, authoritative source validation, and brand alignment",
             'transparency': "Enhance disclosure practices, authorship clarity, and ownership transparency",
             'coherence': "Ensure brand messaging consistency, professional quality, and tone alignment",
-            'resonance': "Foster authentic engagement patterns and cultural fit with brand values"
+            'resonance': "Foster authentic engagement patterns and cultural fit with brand values",
+            'ai_readiness': "Add schema.org markup, improve metadata completeness, and enhance LLM discoverability"
         }
 
-        specific_guidance = dimension_guidance.get(weakest_dim, "Focus on comprehensive trust improvements")
-
-        recommendations_list = "\n".join([f"- {rec}" for rec in recommendations])
-
-        # Calculate average score across all dimensions for success metrics
-        avg_all_dims = sum(dimension_scores.values()) / len(dimension_scores) if dimension_scores else 0.0
+        low_items = context['low_trust_items'][:3]
+        low_items_text = "\n".join([f"- {item['title']} — {item['url']}" for item in low_items]) if low_items else "- No low trust items found"
 
         return f"""## Recommendations
 
 ### Priority Level: {priority}
 **Focus Area**: {focus}
 
-**Weakest Dimension**: {weakest_dim.title() if weakest_dim else 'Unknown'} ({weakest_score:.3f})
-**Overall Trust Average**: {avg_all_dims:.3f}
+**Weakest Dimension**: {context['weakest_dimension'].title()} ({weakest_score:.3f})
+**Overall Trust Average**: {context['overall_average']:.3f}
 
 ### Recommended Actions
 
-{recommendations_list}
+- Focus on improving {context['weakest_dimension'].title()} scores (currently {weakest_score:.2f})
+- {dimension_guidance.get(context['weakest_dimension'], 'Improve trust across all dimensions')}
+- Review and remediate {context['classification_counts']['low_trust']} low-trust items
+- Implement enhanced verification for {context['classification_counts']['moderate_trust']} moderate-trust items
 
-### Dimension-Specific Guidance
+### Next Steps (concrete)
 
-**{weakest_dim.title() if weakest_dim else 'Primary'}**: {specific_guidance}
+**Low Trust items (examples):**
+{low_items_text}
 
-### Next Steps
+- Immediate (1-7 days):
+  - Review {len(low_items)} low-trust items and develop remediation plan
+  - Implement monitoring alerts for {context['weakest_dimension']} dimension
 
-1. **Immediate (1-7 days)**:
-   - Focus on {weakest_dim} dimension improvements
-   - Implement content monitoring alerts for low-trust signals
+- Short-term (1-4 weeks):
+  - Develop {context['weakest_dimension']}-specific content guidelines
+  - Train teams on Trust Stack standards
 
-2. **Short-term (1-4 weeks)**:
-   - Develop dimension-specific content guidelines
-   - Train teams on Trust Stack standards and best practices
-
-3. **Long-term (1-3 months)**:
-   - Establish ongoing Trust Stack monitoring systems
-   - Create dimension performance dashboards
-   - Regular Trust Stack reporting and optimization
+- Medium (4-12 weeks):
+  - Establish Trust Stack monitoring dashboards
+  - Target overall trust average improvement to {context['overall_average'] + 0.15:.2f}
 
 ### Success Metrics
 
-- Improve {weakest_dim.title() if weakest_dim else 'weakest'} dimension score by 0.10+ points
-- Achieve minimum 0.60 score across all five dimensions
-- Increase overall Trust Stack average by 0.15+ points"""
+- Improve {context['weakest_dimension'].title()} dimension score from {weakest_score:.2f} to {min(weakest_score + 0.10, 1.0):.2f}
+- Reduce low trust items from {context['classification_counts']['low_trust']} to {max(0, context['classification_counts']['low_trust'] - 5)}
+- Increase overall Trust average from {context['overall_average']:.2f} to {min(context['overall_average'] + 0.15, 1.0):.2f}
+- Achieve minimum 0.60 score across all six dimensions
+
+{attribute_recommendations}"""
     
     def _create_footer(self, report_data: Dict[str, Any]) -> str:
         """Create report footer"""
@@ -954,9 +1942,9 @@ Each dimension is independently scored and combined to form a comprehensive trus
 
 ## About This Report
 
-**Trust Stack™** is a 5-dimensional framework for evaluating brand content authenticity across digital channels.
+**Trust Stack™** is a 6-dimensional framework for evaluating brand content authenticity across digital channels.
 
-This report provides actionable insights for brand health and content strategy based on comprehensive trust dimension analysis: **Provenance**, **Verification**, **Transparency**, **Coherence**, and **Resonance**.
+This report provides actionable insights for brand health and content strategy based on comprehensive trust dimension analysis: **Provenance**, **Verification**, **Transparency**, **Coherence**, **Resonance**, and **AI Readiness**.
 
 ### Learn More
 
