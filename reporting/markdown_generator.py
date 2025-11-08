@@ -282,6 +282,12 @@ class MarkdownReportGenerator:
         # Attribute-level analysis (NEW: 6D Trust Stack enhancement)
         content.append(self._create_attribute_analysis(report_data))
 
+        # Modality breakdown (NEW: Content type analysis)
+        content.append(self._create_modality_breakdown(report_data))
+
+        # Channel breakdown (NEW: Platform analysis)
+        content.append(self._create_channel_breakdown_section(report_data))
+
         # Classification analysis
         content.append(self._create_classification_analysis(report_data))
 
@@ -922,6 +928,332 @@ Analyzed **{len(appendix):,} content items** across **{total_possible_attrs} Tru
         md += "- **Avg Score**: Average score for this attribute across all content (1-10 scale)\n"
         md += "- **Detection Rate**: Percentage of content items where this attribute was detected\n"
         md += "- **Status**: ✅ Excellent (8-10), 🟢 Good (6-8), 🟡 Fair (4-6), 🔴 Needs Work (<4)\n"
+
+        return md
+
+    def _create_modality_breakdown(self, report_data: Dict[str, Any]) -> str:
+        """Create modality breakdown section (text/image/video/audio)"""
+        appendix = report_data.get('appendix', [])
+
+        if not appendix:
+            return "## Content Type Analysis (Modality)\n\n*No content data available for modality breakdown*"
+
+        # Extract modality and dimension scores from appendix
+        modality_data = {}
+
+        for item in appendix:
+            # Get modality from meta
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    import json
+                    meta = json.loads(meta)
+                except:
+                    meta = {}
+
+            modality = meta.get('modality', 'text')  # Default to text
+
+            if modality not in modality_data:
+                modality_data[modality] = {
+                    'count': 0,
+                    'dimensions': {dim: [] for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']}
+                }
+
+            modality_data[modality]['count'] += 1
+
+            # Extract dimension scores
+            dimensions = item.get('dimensions', {})
+            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+                score = dimensions.get(dim)
+                if score is not None:
+                    modality_data[modality]['dimensions'][dim].append(score)
+
+        if not modality_data:
+            return "## Content Type Analysis (Modality)\n\n*Modality data not available for analyzed content*"
+
+        # Build markdown
+        md = """## Content Type Analysis (Modality)
+
+### Overview
+
+Analysis of trust performance across different content types (text, image, video, audio).
+
+"""
+
+        # Summary table
+        md += "| Content Type | Count | % of Total | Avg Trust Score | Status |\n"
+        md += "|--------------|-------|------------|-----------------|--------|\n"
+
+        total_items = sum(data['count'] for data in modality_data.values())
+
+        for modality in ['text', 'image', 'video', 'audio']:
+            if modality not in modality_data:
+                continue
+
+            data = modality_data[modality]
+            count = data['count']
+            pct = (count / total_items * 100) if total_items > 0 else 0
+
+            # Calculate average trust score across all dimensions
+            all_scores = []
+            for dim_scores in data['dimensions'].values():
+                all_scores.extend(dim_scores)
+
+            avg_trust = sum(all_scores) / len(all_scores) if all_scores else 0
+
+            # Status indicator
+            if avg_trust >= 0.8:
+                status = "✅ Excellent"
+            elif avg_trust >= 0.6:
+                status = "🟢 Good"
+            elif avg_trust >= 0.4:
+                status = "🟡 Moderate"
+            else:
+                status = "🔴 Poor"
+
+            # Icon mapping
+            icons = {
+                'text': '📝',
+                'image': '🖼️',
+                'video': '🎥',
+                'audio': '🎵'
+            }
+
+            icon = icons.get(modality, '📄')
+            md += f"| {icon} {modality.title()} | {count:,} | {pct:.1f}% | {avg_trust:.3f} | {status} |\n"
+
+        md += "\n---\n\n### Dimension Performance by Content Type\n\n"
+
+        # Create detailed breakdown for each modality
+        for modality in ['text', 'image', 'video', 'audio']:
+            if modality not in modality_data:
+                continue
+
+            data = modality_data[modality]
+            if data['count'] == 0:
+                continue
+
+            icons = {'text': '📝', 'image': '🖼️', 'video': '🎥', 'audio': '🎵'}
+            icon = icons.get(modality, '📄')
+
+            md += f"\n#### {icon} {modality.title()} Content ({data['count']} items)\n\n"
+            md += "| Dimension | Avg Score | Min | Max | Samples |\n"
+            md += "|-----------|-----------|-----|-----|----------|\n"
+
+            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+                scores = data['dimensions'][dim]
+                if not scores:
+                    continue
+
+                avg = sum(scores) / len(scores)
+                min_score = min(scores)
+                max_score = max(scores)
+
+                md += f"| {dim.title()} | {avg:.3f} | {min_score:.3f} | {max_score:.3f} | {len(scores)} |\n"
+
+        md += "\n---\n\n### Key Insights\n\n"
+
+        # Generate insights
+        if len(modality_data) > 1:
+            # Find best and worst modalities
+            modality_scores = {}
+            for modality, data in modality_data.items():
+                all_scores = []
+                for dim_scores in data['dimensions'].values():
+                    all_scores.extend(dim_scores)
+                if all_scores:
+                    modality_scores[modality] = sum(all_scores) / len(all_scores)
+
+            if modality_scores:
+                best_modality = max(modality_scores, key=modality_scores.get)
+                worst_modality = min(modality_scores, key=modality_scores.get)
+
+                md += f"- **Strongest Content Type**: {best_modality.title()} ({modality_scores[best_modality]:.3f} avg)\n"
+                md += f"- **Weakest Content Type**: {worst_modality.title()} ({modality_scores[worst_modality]:.3f} avg)\n"
+                md += f"- **Most Common**: {max(modality_data, key=lambda k: modality_data[k]['count']).title()} ({modality_data[max(modality_data, key=lambda k: modality_data[k]['count'])]['count']} items)\n"
+        else:
+            md += f"- **Single Content Type**: All analyzed content is {list(modality_data.keys())[0]}-based\n"
+
+        return md
+
+    def _create_channel_breakdown_section(self, report_data: Dict[str, Any]) -> str:
+        """Create channel/platform breakdown section"""
+        appendix = report_data.get('appendix', [])
+
+        if not appendix:
+            return "## Platform Analysis (Channel Breakdown)\n\n*No content data available for platform breakdown*"
+
+        # Extract channel and dimension scores from appendix
+        channel_data = {}
+        platform_type_data = {}
+
+        for item in appendix:
+            # Get channel and platform_type from meta
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    import json
+                    meta = json.loads(meta)
+                except:
+                    meta = {}
+
+            channel = meta.get('channel', 'unknown')
+            platform_type = meta.get('platform_type', 'unknown')
+
+            # Track channel data
+            if channel not in channel_data:
+                channel_data[channel] = {
+                    'count': 0,
+                    'platform_type': platform_type,
+                    'dimensions': {dim: [] for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']}
+                }
+
+            channel_data[channel]['count'] += 1
+
+            # Track platform type data
+            if platform_type not in platform_type_data:
+                platform_type_data[platform_type] = {
+                    'count': 0,
+                    'channels': set(),
+                    'dimensions': {dim: [] for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']}
+                }
+
+            platform_type_data[platform_type]['count'] += 1
+            platform_type_data[platform_type]['channels'].add(channel)
+
+            # Extract dimension scores
+            dimensions = item.get('dimensions', {})
+            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+                score = dimensions.get(dim)
+                if score is not None:
+                    channel_data[channel]['dimensions'][dim].append(score)
+                    platform_type_data[platform_type]['dimensions'][dim].append(score)
+
+        if not channel_data:
+            return "## Platform Analysis (Channel Breakdown)\n\n*Channel data not available for analyzed content*"
+
+        # Build markdown
+        md = """## Platform Analysis (Channel Breakdown)
+
+### Overview
+
+Trust performance analysis across different platforms and channel types.
+
+"""
+
+        # Platform type summary
+        md += "#### By Platform Type\n\n"
+        md += "| Platform Type | Channels | Items | Avg Trust | Status |\n"
+        md += "|---------------|----------|-------|-----------|--------|\n"
+
+        for platform_type in ['owned', 'social', 'marketplace', 'email', 'unknown']:
+            if platform_type not in platform_type_data:
+                continue
+
+            data = platform_type_data[platform_type]
+
+            # Calculate average trust
+            all_scores = []
+            for dim_scores in data['dimensions'].values():
+                all_scores.extend(dim_scores)
+
+            avg_trust = sum(all_scores) / len(all_scores) if all_scores else 0
+
+            # Status
+            if avg_trust >= 0.8:
+                status = "✅ Excellent"
+            elif avg_trust >= 0.6:
+                status = "🟢 Good"
+            elif avg_trust >= 0.4:
+                status = "🟡 Moderate"
+            else:
+                status = "🔴 Poor"
+
+            # Icons
+            icons = {
+                'owned': '🏢',
+                'social': '👥',
+                'marketplace': '🛒',
+                'email': '📧',
+                'unknown': '❓'
+            }
+            icon = icons.get(platform_type, '📄')
+
+            md += f"| {icon} {platform_type.title()} | {len(data['channels'])} | {data['count']:,} | {avg_trust:.3f} | {status} |\n"
+
+        # Channel detail table
+        md += "\n---\n\n### Trust Scores by Channel\n\n"
+        md += "| Channel | Type | Items | Provenance | Verification | Transparency | Coherence | Resonance | AI Readiness | Overall |\n"
+        md += "|---------|------|-------|------------|--------------|--------------|-----------|-----------|--------------|----------|\n"
+
+        # Sort channels by count (descending)
+        sorted_channels = sorted(channel_data.items(), key=lambda x: x[1]['count'], reverse=True)
+
+        for channel, data in sorted_channels:
+            if data['count'] == 0:
+                continue
+
+            platform_type = data['platform_type']
+            count = data['count']
+
+            # Calculate dimension averages
+            dim_avgs = {}
+            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+                scores = data['dimensions'][dim]
+                dim_avgs[dim] = sum(scores) / len(scores) if scores else 0
+
+            overall = sum(dim_avgs.values()) / len(dim_avgs) if dim_avgs else 0
+
+            # Platform type icon
+            icons = {'owned': '🏢', 'social': '👥', 'marketplace': '🛒', 'email': '📧', 'unknown': '❓'}
+            type_icon = icons.get(platform_type, '📄')
+
+            md += f"| {channel} | {type_icon} {platform_type} | {count:,} | "
+            md += f"{dim_avgs.get('provenance', 0):.2f} | "
+            md += f"{dim_avgs.get('verification', 0):.2f} | "
+            md += f"{dim_avgs.get('transparency', 0):.2f} | "
+            md += f"{dim_avgs.get('coherence', 0):.2f} | "
+            md += f"{dim_avgs.get('resonance', 0):.2f} | "
+            md += f"{dim_avgs.get('ai_readiness', 0):.2f} | "
+            md += f"**{overall:.2f}** |\n"
+
+        md += "\n---\n\n### Key Insights\n\n"
+
+        # Generate insights
+        if len(channel_data) > 1:
+            # Find best and worst channels
+            channel_scores = {}
+            for channel, data in channel_data.items():
+                all_scores = []
+                for dim_scores in data['dimensions'].values():
+                    all_scores.extend(dim_scores)
+                if all_scores:
+                    channel_scores[channel] = sum(all_scores) / len(all_scores)
+
+            if channel_scores:
+                best_channel = max(channel_scores, key=channel_scores.get)
+                worst_channel = min(channel_scores, key=channel_scores.get)
+                most_common = max(channel_data, key=lambda k: channel_data[k]['count'])
+
+                md += f"- **Highest Trust Platform**: {best_channel} ({channel_scores[best_channel]:.3f} avg)\n"
+                md += f"- **Lowest Trust Platform**: {worst_channel} ({channel_scores[worst_channel]:.3f} avg)\n"
+                md += f"- **Most Content From**: {most_common} ({channel_data[most_common]['count']} items)\n"
+
+                # Platform type insights
+                if len(platform_type_data) > 1:
+                    platform_scores = {}
+                    for ptype, data in platform_type_data.items():
+                        all_scores = []
+                        for dim_scores in data['dimensions'].values():
+                            all_scores.extend(dim_scores)
+                        if all_scores:
+                            platform_scores[ptype] = sum(all_scores) / len(all_scores)
+
+                    if platform_scores:
+                        best_type = max(platform_scores, key=platform_scores.get)
+                        md += f"- **Best Platform Type**: {best_type.title()} content ({platform_scores[best_type]:.3f} avg)\n"
+        else:
+            md += f"- **Single Platform**: All content from {list(channel_data.keys())[0]}\n"
 
         return md
 
