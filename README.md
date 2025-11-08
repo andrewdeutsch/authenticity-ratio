@@ -9,16 +9,17 @@ Authenticity Ratio (AR) is a KPI that measures authentic vs. inauthentic brand-l
 **Extended (with suspect):** AR = (A + 0.5S) ÷ (A + S + I) × 100
 - A = Authentic, S = Suspect, I = Inauthentic
 
-## 5D Trust Dimensions
+## 6D Trust Dimensions
 Content is scored on:
-- **Provenance** – origin, traceability, metadata (20%)
-- **Verification** – factual accuracy vs. trusted DBs (20%)
-- **Transparency** – disclosures, clarity (20%)
-- **Coherence** – consistency across channels (20%)
-- **Resonance** – cultural fit, organic engagement (20%)
+- **Provenance** – origin, traceability, metadata (16.7%)
+- **Verification** – factual accuracy vs. trusted DBs (16.7%)
+- **Transparency** – disclosures, clarity (16.7%)
+- **Coherence** – consistency across channels (16.7%)
+- **Resonance** – cultural fit, organic engagement (16.7%)
+- **AI Readiness** – machine discoverability, LLM-readable signals (16.7%)
 
 ## Pipeline
-Ingest → Normalize → Enrich (metadata + fact-check) → Score (5D rubric) → Classify (A/S/I) → Compute AR → Report
+Ingest → Normalize → Enrich (metadata + fact-check) → Score (6D rubric) → Classify (A/S/I) → Compute AR → Report
 
 ## Project Structure
 ```
@@ -26,7 +27,7 @@ AR/
 ├── config/                 # Configuration files
 ├── data/                   # Data storage and processing
 ├── ingestion/              # Data collection modules
-├── scoring/                # 5D scoring and classification
+├── scoring/                # 6D scoring and classification
 ├── reporting/              # Report generation and dashboards
 ├── utils/                  # Shared utilities and helpers
 ├── tests/                  # Test files
