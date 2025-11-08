@@ -30,7 +30,7 @@ class RatingBand(Enum):
 
 @dataclass
 class NormalizedContent:
-    """Matches ar_content_normalized_v2 table schema"""
+    """Matches ar_content_normalized_v2 table schema with enhanced Trust Stack fields"""
     content_id: str
     src: str
     platform_id: str
@@ -43,7 +43,14 @@ class NormalizedContent:
     event_ts: str = ""  # Stored as string for Athena compatibility
     run_id: str = ""
     meta: Dict[str, str] = None
-    
+
+    # Enhanced Trust Stack fields for 6D analysis
+    url: str = ""  # Full URL of the content
+    published_at: Optional[str] = None  # ISO datetime string
+    modality: str = "text"  # text, image, video, audio
+    channel: str = "unknown"  # youtube, reddit, amazon, instagram, etc.
+    platform_type: str = "unknown"  # owned, social, marketplace, email
+
     def __post_init__(self):
         if self.meta is None:
             self.meta = {}

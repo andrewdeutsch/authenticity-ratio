@@ -10,37 +10,44 @@ from datetime import datetime, timedelta
 import logging
 
 from data.models import NormalizedContent
+from ingestion.metadata_extractor import MetadataExtractor
 
 logger = logging.getLogger(__name__)
 
 class ContentNormalizer:
     """Normalizes and deduplicates content"""
-    
+
     def __init__(self, deduplication_window_hours: int = 24):
         self.deduplication_window = timedelta(hours=deduplication_window_hours)
         self.seen_hashes: Set[str] = set()
+        self.metadata_extractor = MetadataExtractor()
     
     def normalize_content(self, content_list: List[NormalizedContent]) -> List[NormalizedContent]:
         """
         Normalize content by:
         1. Text cleaning and standardization
-        2. Deduplication using SimHash
-        3. Content length validation
+        2. Enhanced metadata extraction (modality, channel, platform type)
+        3. Deduplication using SimHash
+        4. Content length validation
         """
         logger.info(f"Normalizing {len(content_list)} content items")
-        
+
         # Step 1: Clean and standardize text
         cleaned_content = self._clean_content(content_list)
         logger.info(f"After cleaning: {len(cleaned_content)} items")
-        
-        # Step 2: Deduplicate using SimHash
-        deduplicated_content = self._deduplicate_content(cleaned_content)
+
+        # Step 2: Extract enhanced metadata
+        enriched_content = self._enrich_metadata(cleaned_content)
+        logger.info(f"After metadata enrichment: {len(enriched_content)} items")
+
+        # Step 3: Deduplicate using SimHash
+        deduplicated_content = self._deduplicate_content(enriched_content)
         logger.info(f"After deduplication: {len(deduplicated_content)} items")
-        
-        # Step 3: Validate content length
+
+        # Step 4: Validate content length
         validated_content = self._validate_content_length(deduplicated_content)
         logger.info(f"After validation: {len(validated_content)} items")
-        
+
         return validated_content
     
     def _clean_content(self, content_list: List[NormalizedContent]) -> List[NormalizedContent]:
@@ -76,6 +83,38 @@ class ContentNormalizer:
         
         return cleaned_content
     
+    def _enrich_metadata(self, content_list: List[NormalizedContent]) -> List[NormalizedContent]:
+        """Enrich content with enhanced metadata (modality, channel, platform type)"""
+        enriched_content = []
+
+        for content in content_list:
+            try:
+                # Detect modality if not already set
+                if not content.modality or content.modality == "text":
+                    content.modality = self.metadata_extractor.detect_modality(
+                        url=content.url,
+                        content_type=content.meta.get('content_type', ''),
+                        src=content.src
+                    )
+
+                # Extract channel info if not already set
+                if content.url and (not content.channel or content.channel == "unknown"):
+                    channel, platform_type = self.metadata_extractor.extract_channel_info(
+                        content.url,
+                        content.src
+                    )
+                    content.channel = channel
+                    content.platform_type = platform_type
+
+                enriched_content.append(content)
+
+            except Exception as e:
+                logger.warning(f"Error enriching metadata for {content.content_id}: {e}")
+                # Still include the content even if enrichment fails
+                enriched_content.append(content)
+
+        return enriched_content
+
     def _clean_text(self, text: str) -> str:
         """Clean individual text field"""
         if not text:
