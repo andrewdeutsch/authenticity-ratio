@@ -279,6 +279,9 @@ class MarkdownReportGenerator:
         # Dimension breakdown
         content.append(self._create_dimension_breakdown(report_data))
 
+        # Attribute-level analysis (NEW: 6D Trust Stack enhancement)
+        content.append(self._create_attribute_analysis(report_data))
+
         # Classification analysis
         content.append(self._create_classification_analysis(report_data))
 
@@ -787,7 +790,141 @@ Each dimension is scored on a scale of 0.0 to 1.0:
 - **0.0-0.4**: Poor performance
 
 Each dimension is independently scored and combined to form a comprehensive trust profile, with equal weighting (16.7% each) across all six dimensions."""
-    
+
+    def _create_attribute_analysis(self, report_data: Dict[str, Any]) -> str:
+        """Create attribute-level analysis section"""
+        appendix = report_data.get('appendix', [])
+
+        if not appendix:
+            return "## Attribute-Level Analysis\n\n*No attribute-level data available*"
+
+        # Load rubric to get attribute definitions
+        try:
+            import json
+            with open('config/rubric.json', 'r') as f:
+                rubric = json.load(f)
+            attributes = rubric.get('attributes', [])
+        except Exception as e:
+            logger.warning(f"Could not load rubric for attribute analysis: {e}")
+            return "## Attribute-Level Analysis\n\n*Rubric configuration not available*"
+
+        # Extract all detected attributes from appendix items
+        # Appendix items have meta field with detected_attributes
+        all_detected_attrs = []
+        for item in appendix:
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except:
+                    meta = {}
+
+            detected = meta.get('detected_attributes', [])
+            all_detected_attrs.extend(detected)
+
+        if not all_detected_attrs:
+            return """## Attribute-Level Analysis
+
+### Overview
+
+This report includes analysis of **78 Trust Stack attributes** across 6 dimensions. Attribute-level detection is enabled but no specific attribute scores were captured in this run.
+
+**Note**: To see detailed attribute breakdowns, ensure `use_attribute_detection=True` in the scorer configuration.
+
+### Attribute Coverage by Dimension
+
+Attribute detection analyzes specific trust signals such as:
+- **Provenance** (12 attributes): AI labeling, C2PA manifests, EXIF integrity, watermarks, etc.
+- **Resonance** (13 attributes): Cultural context, language match, readability, tone appropriateness, etc.
+- **Coherence** (18 attributes): Brand voice consistency, claim consistency, temporal continuity, etc.
+- **Transparency** (10 attributes): AI disclosure, bot disclosure, data citations, privacy policies, etc.
+- **Verification** (19 attributes): Ad labels, engagement authenticity, review authenticity, etc.
+- **AI Readiness** (6 attributes): Schema.org compliance, metadata completeness, LLM retrievability, etc.
+
+Enable attribute detection in your next run to see granular scoring."""
+
+        # Group attributes by dimension
+        attrs_by_dimension = {}
+        for attr in all_detected_attrs:
+            dim = attr.get('dimension', 'unknown')
+            if dim not in attrs_by_dimension:
+                attrs_by_dimension[dim] = []
+            attrs_by_dimension[dim].append(attr)
+
+        # Calculate statistics
+        total_possible_attrs = len(attributes)
+        total_detected = len(all_detected_attrs)
+        coverage_pct = (total_detected / (total_possible_attrs * len(appendix))) * 100 if appendix else 0
+
+        # Build the markdown section
+        md = f"""## Attribute-Level Analysis
+
+### Overview
+
+Analyzed **{len(appendix):,} content items** across **{total_possible_attrs} Trust Stack attributes** (6 dimensions).
+
+- **Total Attribute Detections**: {total_detected:,}
+- **Average Attributes Per Item**: {total_detected / len(appendix):.1f}
+- **Detection Coverage**: {coverage_pct:.1f}%
+
+---
+
+### Attribute Performance by Dimension
+
+"""
+
+        # Create tables for each dimension
+        for dimension in ['provenance', 'resonance', 'coherence', 'transparency', 'verification', 'ai_readiness']:
+            dim_attrs = attrs_by_dimension.get(dimension, [])
+
+            if not dim_attrs:
+                continue
+
+            md += f"\n#### {dimension.title()} Attributes\n\n"
+            md += "| Attribute | Avg Score | Min | Max | Detection Rate | Status |\n"
+            md += "|-----------|-----------|-----|-----|----------------|--------|\n"
+
+            # Group by attribute name and calculate stats
+            attr_stats = {}
+            for attr in dim_attrs:
+                attr_id = attr.get('attribute_id', 'unknown')
+                value = attr.get('value', 0)
+
+                if attr_id not in attr_stats:
+                    attr_stats[attr_id] = {
+                        'values': [],
+                        'label': attr.get('label', attr_id)
+                    }
+                attr_stats[attr_id]['values'].append(value)
+
+            # Add rows for each attribute
+            for attr_id, stats in sorted(attr_stats.items()):
+                values = stats['values']
+                avg_score = sum(values) / len(values)
+                min_score = min(values)
+                max_score = max(values)
+                detection_rate = (len(values) / len(appendix)) * 100
+
+                # Status indicator
+                if avg_score >= 8.0:
+                    status = "✅ Excellent"
+                elif avg_score >= 6.0:
+                    status = "🟢 Good"
+                elif avg_score >= 4.0:
+                    status = "🟡 Fair"
+                else:
+                    status = "🔴 Needs Work"
+
+                md += f"| {stats['label']} | {avg_score:.1f} | {min_score:.1f} | {max_score:.1f} | {detection_rate:.0f}% | {status} |\n"
+
+        md += "\n---\n\n"
+        md += "### Interpretation\n\n"
+        md += "- **Avg Score**: Average score for this attribute across all content (1-10 scale)\n"
+        md += "- **Detection Rate**: Percentage of content items where this attribute was detected\n"
+        md += "- **Status**: ✅ Excellent (8-10), 🟢 Good (6-8), 🟡 Fair (4-6), 🔴 Needs Work (<4)\n"
+
+        return md
+
     def _create_classification_analysis(self, report_data: Dict[str, Any]) -> str:
         """Create classification analysis section"""
         classification_data = report_data.get('classification_analysis', {})
@@ -895,7 +1032,7 @@ Each dimension is independently scored and combined to form a comprehensive trus
         weakest_dim = None
         weakest_score = 1.0
 
-        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
+        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
             stats = dimension_breakdown.get(dim, {})
             avg = stats.get('average', 0.0)
             dimension_scores[dim] = avg
@@ -1125,7 +1262,8 @@ CRITICAL INSTRUCTIONS:
             'verification': "Strengthen fact-checking, authoritative source validation, and brand alignment",
             'transparency': "Enhance disclosure practices, authorship clarity, and ownership transparency",
             'coherence': "Ensure brand messaging consistency, professional quality, and tone alignment",
-            'resonance': "Foster authentic engagement patterns and cultural fit with brand values"
+            'resonance': "Foster authentic engagement patterns and cultural fit with brand values",
+            'ai_readiness': "Add schema.org markup, improve metadata completeness, and enhance LLM discoverability"
         }
 
         low_items = context['low_trust_items'][:3]
@@ -1179,9 +1317,9 @@ CRITICAL INSTRUCTIONS:
 
 ## About This Report
 
-**Trust Stack™** is a 5-dimensional framework for evaluating brand content authenticity across digital channels.
+**Trust Stack™** is a 6-dimensional framework for evaluating brand content authenticity across digital channels.
 
-This report provides actionable insights for brand health and content strategy based on comprehensive trust dimension analysis: **Provenance**, **Verification**, **Transparency**, **Coherence**, and **Resonance**.
+This report provides actionable insights for brand health and content strategy based on comprehensive trust dimension analysis: **Provenance**, **Verification**, **Transparency**, **Coherence**, **Resonance**, and **AI Readiness**.
 
 ### Learn More
 

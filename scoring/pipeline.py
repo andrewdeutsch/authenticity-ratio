@@ -688,12 +688,12 @@ class ScoringPipeline:
         
         # Generate dimension breakdown
         dimension_breakdown = {}
-        for dimension in ["provenance", "verification", "transparency", "coherence", "resonance"]:
-            scores = [getattr(s, f"score_{dimension}") for s in scores_list]
+        for dimension in ["provenance", "verification", "transparency", "coherence", "resonance", "ai_readiness"]:
+            scores = [getattr(s, f"score_{dimension}", 0.5) for s in scores_list]  # Default to 0.5 if not present
             dimension_breakdown[dimension] = {
-                "average": sum(scores) / len(scores),
-                "min": min(scores),
-                "max": max(scores),
+                "average": sum(scores) / len(scores) if scores else 0,
+                "min": min(scores) if scores else 0,
+                "max": max(scores) if scores else 0,
                 "std_dev": self._calculate_std_dev(scores)
             }
         
@@ -737,6 +737,7 @@ class ScoringPipeline:
                     'coherence': getattr(s, 'score_coherence', None),
                     'transparency': getattr(s, 'score_transparency', None),
                     'verification': getattr(s, 'score_verification', None),
+                    'ai_readiness': getattr(s, 'score_ai_readiness', None),
                 }
 
                 # Compute a simple mean-based final score when rubric weights are not available here
