@@ -262,7 +262,28 @@ class MarkdownReportGenerator:
         
         logger.info(f"Markdown report generated successfully: {output_path}")
         return output_path
-    
+
+    def _format_dimension_name(self, dim_name: str) -> str:
+        """
+        Format dimension names consistently for display.
+        Handles special case of AI Readiness.
+
+        Args:
+            dim_name: Raw dimension name (e.g., 'ai_readiness', 'Ai_Readiness')
+
+        Returns:
+            Properly formatted name (e.g., 'AI Readiness')
+        """
+        if not dim_name:
+            return ""
+
+        # Special case for AI Readiness
+        if dim_name.lower() in ('ai_readiness', 'aireadiness'):
+            return "AI Readiness"
+
+        # General case: replace underscores and title case
+        return dim_name.replace('_', ' ').title()
+
     def _build_markdown_content(self, report_data: Dict[str, Any]) -> str:
         """Build the complete markdown content"""
         content = []
@@ -278,6 +299,11 @@ class MarkdownReportGenerator:
 
         # Dimension breakdown
         content.append(self._create_dimension_breakdown(report_data))
+
+        # Notable examples (high and low trust items)
+        notable_examples = self._format_notable_examples(report_data)
+        if notable_examples:
+            content.append(notable_examples)
 
         # Attribute-level analysis (NEW: 6D Trust Stack enhancement)
         content.append(self._create_attribute_analysis(report_data))
@@ -314,9 +340,33 @@ class MarkdownReportGenerator:
         return "\n\n".join(content)
     
     def _create_header(self, report_data: Dict[str, Any]) -> str:
-        """Create report header"""
+        """Create report header with title and brand"""
         brand_id = report_data.get('brand_id', 'Unknown Brand')
-        return f"# Trust Stack Content Analysis\n\n## Brand: {brand_id}"
+
+        lines = ["# Trust Stack Content Analysis\n"]
+
+        # Add TL;DR if we have dimension data
+        dims = report_data.get('dimension_breakdown', {})
+        if dims:
+            dim_avgs = {k: v.get('average', 0.0) for k, v in dims.items()}
+            if dim_avgs:
+                strongest = max(dim_avgs.items(), key=lambda x: x[1])
+                weakest = min(dim_avgs.items(), key=lambda x: x[1])
+                total_items = report_data.get('authenticity_ratio', {}).get('total_items', 0)
+                if not total_items:
+                    # Fallback to counting items
+                    total_items = len(report_data.get('items', []))
+
+                tldr = (
+                    f"> **TL;DR**: Analysis of {total_items:,} content items shows strong "
+                    f"{self._format_dimension_name(strongest[0])} ({strongest[1]:.3f}) but "
+                    f"{self._format_dimension_name(weakest[0])} ({weakest[1]:.3f}) needs "
+                    f"improvement—focus on adding clear disclosures and source attribution.\n"
+                )
+                lines.append(tldr)
+
+        lines.append(f"## Brand: {brand_id}\n")
+        return "\n".join(lines)
     
     def _create_metadata(self, report_data: Dict[str, Any]) -> str:
         """Create metadata section (collapsible)"""
@@ -392,15 +442,15 @@ class MarkdownReportGenerator:
                 status = "🔴 Poor"
 
             insight = dimension_interpretations.get(dim, '')
-            trust_stack_lines.append(f"| **{dim.title()}** | {avg:.3f} | {status} | {insight} |")
+            trust_stack_lines.append(f"| **{self._format_dimension_name(dim)}** | {avg:.3f} | {status} | {insight} |")
 
         trust_stack_table = "\n".join(trust_stack_lines)
 
         # Build interpretation paragraph focused on dimensions
         interp = (
             f"Analysis of {total_items:,} brand-related content items reveals trust patterns across six dimensions. "
-            f"**{strongest_dim.title()}** is the strongest dimension ({strongest_score:.3f}), "
-            f"while **{weakest_dim.title()}** ({weakest_score:.3f}) requires attention. "
+            f"**{self._format_dimension_name(strongest_dim)}** is the strongest dimension ({strongest_score:.3f}), "
+            f"while **{self._format_dimension_name(weakest_dim)}** ({weakest_score:.3f}) requires attention. "
         )
 
         # Add specific guidance based on weakest dimension
@@ -671,6 +721,8 @@ class MarkdownReportGenerator:
 
 {trust_stack_table}
 
+{visuals_block}
+
 ---
 
 ### Key Insights
@@ -678,8 +730,6 @@ class MarkdownReportGenerator:
 {interp}
 
 {examples_md}
-
-{visuals_block}
 
 """
 
@@ -733,7 +783,121 @@ class MarkdownReportGenerator:
         summary = f"""## Authenticity Ratio Analysis\n\n**Total:** {total_items:,} | **Authentic:** {authentic_items} | **Suspect:** {suspect_items} | **Inauthentic:** {inauthentic_items}\n\n**Core AR:** {ar_data.get('authenticity_ratio_pct', 0.0):.1f}% | **Extended AR:** {ar_data.get('extended_ar_pct', 0.0):.1f}%\n\n{dimension_text}"""
 
         return summary
-    
+
+    def _format_notable_examples(self, report_data: Dict[str, Any]) -> str:
+        """Generate a Notable Content Examples section showing high and low trust items."""
+        items = report_data.get('items', [])
+        if not items:
+            return ""
+
+        lines = ["## Notable Content Examples\n"]
+
+        # Sort items by score
+        scored_items = []
+        for item in items:
+            score = item.get('final_score') or item.get('score')
+            if score is not None:
+                scored_items.append((float(score), item))
+
+        if not scored_items:
+            return ""
+
+        scored_items.sort(key=lambda x: x[0], reverse=True)
+
+        # Get high trust items (top 1-2, score >= 70)
+        high_trust = [item for score, item in scored_items if score >= 0.70][:2]
+
+        # Get low trust items (bottom 2-3, score < 50)
+        low_trust = [item for score, item in scored_items if score < 0.50][:3]
+
+        # Format high trust section
+        if high_trust:
+            lines.append("### High Trust Content\n")
+            for item in high_trust:
+                # Extract fields safely
+                meta = item.get('meta', {})
+                if isinstance(meta, str):
+                    try:
+                        import json
+                        meta = json.loads(meta) if meta else {}
+                    except:
+                        meta = {}
+
+                title = (
+                    item.get('title') or
+                    meta.get('title') or
+                    meta.get('name') or
+                    meta.get('headline') or
+                    'Untitled'
+                )
+                score = float(item.get('final_score') or item.get('score', 0))
+                dims = item.get('dimension_scores', {})
+                url = item.get('url') or item.get('visited_url') or meta.get('source_url') or meta.get('url') or ''
+
+                # Get strongest and weakest dimensions
+                if dims and isinstance(dims, dict):
+                    try:
+                        dims_parsed = {k: float(v) for k, v in dims.items() if v is not None}
+                        if dims_parsed:
+                            strongest = max(dims_parsed.items(), key=lambda x: x[1])
+                            weakest = min(dims_parsed.items(), key=lambda x: x[1])
+
+                            lines.append(f"- **{title}** ({score:.2f})")
+                            lines.append(f"  - Strongest: {self._format_dimension_name(strongest[0])} ({strongest[1]:.2f})")
+                            lines.append(f"  - Weakest: {self._format_dimension_name(weakest[0])} ({weakest[1]:.2f})")
+                            if url:
+                                lines.append(f"  - Link: {url}")
+                            lines.append("")
+                    except Exception:
+                        pass
+
+        # Format low trust section
+        if low_trust:
+            lines.append("### Low Trust Content\n")
+            for item in low_trust:
+                # Extract fields safely
+                meta = item.get('meta', {})
+                if isinstance(meta, str):
+                    try:
+                        import json
+                        meta = json.loads(meta) if meta else {}
+                    except:
+                        meta = {}
+
+                title = (
+                    item.get('title') or
+                    meta.get('title') or
+                    meta.get('name') or
+                    meta.get('headline') or
+                    'Untitled'
+                )
+                score = float(item.get('final_score') or item.get('score', 0))
+                dims = item.get('dimension_scores', {})
+                url = item.get('url') or item.get('visited_url') or meta.get('source_url') or meta.get('url') or ''
+
+                # Get strongest and weakest dimensions
+                if dims and isinstance(dims, dict):
+                    try:
+                        dims_parsed = {k: float(v) for k, v in dims.items() if v is not None}
+                        if dims_parsed:
+                            strongest = max(dims_parsed.items(), key=lambda x: x[1])
+                            weakest_two = sorted(dims_parsed.items(), key=lambda x: x[1])[:2]
+
+                            lines.append(f"- **{title}** ({score:.2f})")
+                            lines.append(f"  - Strongest: {self._format_dimension_name(strongest[0])} ({strongest[1]:.2f})")
+                            weak_str = ', '.join([f"{self._format_dimension_name(k)} ({v:.2f})" for k, v in weakest_two])
+                            lines.append(f"  - Weakest: {weak_str}")
+                            if url:
+                                lines.append(f"  - Link: {url}")
+                            lines.append("")
+                    except Exception:
+                        pass
+
+        # Only return if we have content
+        if len(lines) > 1:
+            return "\n".join(lines)
+        return ""
+
     def _create_dimension_breakdown(self, report_data: Dict[str, Any]) -> str:
         """Create dimension breakdown section"""
         dimension_data = report_data.get('dimension_breakdown', {})
@@ -746,7 +910,7 @@ class MarkdownReportGenerator:
         table_rows.append("|-----------|---------|-----|-----|---------|")
         
         for dimension, stats in dimension_data.items():
-            table_rows.append(f"| {dimension.title()} | {stats.get('average', 0):.3f} | {stats.get('min', 0):.3f} | {stats.get('max', 0):.3f} | {stats.get('std_dev', 0):.3f} |")
+            table_rows.append(f"| {self._format_dimension_name(dimension)} | {stats.get('average', 0):.3f} | {stats.get('min', 0):.3f} | {stats.get('max', 0):.3f} | {stats.get('std_dev', 0):.3f} |")
         
         dimension_table = "\n".join(table_rows)
         
@@ -775,7 +939,7 @@ class MarkdownReportGenerator:
             else:
                 indicator = "🔴 Poor"
             
-            dimension_details.append(f"**{dimension.title()}** ({indicator}): {description}")
+            dimension_details.append(f"**{self._format_dimension_name(dimension)}** ({indicator}): {description}")
         
         return f"""## 6D Trust Dimensions Analysis
 
@@ -796,6 +960,94 @@ Each dimension is scored on a scale of 0.0 to 1.0:
 - **0.0-0.4**: Poor performance
 
 Each dimension is independently scored and combined to form a comprehensive trust profile, with equal weighting (16.7% each) across all six dimensions."""
+
+    def _format_critical_attributes(self, report_data: Dict[str, Any]) -> str:
+        """Generate a summary table of top 5 most critical attributes across all dimensions."""
+        appendix = report_data.get('appendix', [])
+        if not appendix:
+            return ""
+
+        # Extract all detected attributes from appendix items
+        all_detected_attrs = []
+        for item in appendix:
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    import json
+                    meta = json.loads(meta) if meta else {}
+                except:
+                    meta = {}
+
+            detected = meta.get('detected_attributes', [])
+            all_detected_attrs.extend(detected)
+
+        if not all_detected_attrs:
+            return ""
+
+        # Group by dimension and attribute to calculate stats
+        attr_performance = {}
+        for attr in all_detected_attrs:
+            dim_name = attr.get('dimension', 'unknown')
+            attr_id = attr.get('attribute_id', 'unknown')
+            attr_label = attr.get('label', attr_id)
+            value = attr.get('value', 0)
+
+            key = (dim_name, attr_id, attr_label)
+            if key not in attr_performance:
+                attr_performance[key] = []
+            attr_performance[key].append(value)
+
+        if not attr_performance:
+            return ""
+
+        # Calculate stats for each attribute
+        all_attrs = []
+        for (dim_name, attr_id, attr_label), values in attr_performance.items():
+            avg_score = sum(values) / len(values)
+            detection_rate = (len(values) / len(appendix)) * 100
+
+            # Determine status
+            if avg_score >= 8.0:
+                status = "✅ Excellent"
+            elif avg_score >= 6.0:
+                status = "🟢 Good"
+            elif avg_score >= 4.0:
+                status = "🟡 Fair"
+            else:
+                status = "🔴 Needs Work"
+
+            all_attrs.append({
+                'name': attr_label,
+                'dimension': dim_name,
+                'avg_score': avg_score,
+                'detection_rate': detection_rate,
+                'status': status
+            })
+
+        if not all_attrs:
+            return ""
+
+        # Sort by a combination of score and detection rate
+        # Prioritize attributes that are frequently detected and have extreme scores (very high or very low)
+        all_attrs.sort(key=lambda x: (abs(x['avg_score'] - 5.0) * (x['detection_rate'] / 100)), reverse=True)
+
+        # Take top 5
+        top_attrs = all_attrs[:5]
+
+        # Build table
+        lines = ["### Critical Attributes (Top 5)\n"]
+        lines.append("| Attribute | Dimension | Avg Score | Detection Rate | Status |")
+        lines.append("|-----------|-----------|-----------|----------------|--------|")
+
+        for attr in top_attrs:
+            dim_display = self._format_dimension_name(attr['dimension'])
+            lines.append(
+                f"| {attr['name']} | {dim_display} | {attr['avg_score']:.1f} | "
+                f"{attr['detection_rate']:.0f}% | {attr['status']} |"
+            )
+
+        lines.append("")
+        return "\n".join(lines)
 
     def _create_attribute_analysis(self, report_data: Dict[str, Any]) -> str:
         """Create attribute-level analysis section"""
@@ -862,6 +1114,9 @@ Enable attribute detection in your next run to see granular scoring."""
         total_detected = len(all_detected_attrs)
         coverage_pct = (total_detected / (total_possible_attrs * len(appendix))) * 100 if appendix else 0
 
+        # Get critical attributes summary
+        critical_attrs = self._format_critical_attributes(report_data)
+
         # Build the markdown section
         md = f"""## Attribute-Level Analysis
 
@@ -875,6 +1130,11 @@ Analyzed **{len(appendix):,} content items** across **{total_possible_attrs} Tru
 
 ---
 
+{critical_attrs if critical_attrs else ''}
+
+<details>
+<summary><b>📊 Complete Attribute Performance by Dimension</b> (click to expand)</summary>
+
 ### Attribute Performance by Dimension
 
 """
@@ -886,7 +1146,7 @@ Analyzed **{len(appendix):,} content items** across **{total_possible_attrs} Tru
             if not dim_attrs:
                 continue
 
-            md += f"\n#### {dimension.title()} Attributes\n\n"
+            md += f"\n#### {self._format_dimension_name(dimension)} Attributes\n\n"
             md += "| Attribute | Avg Score | Min | Max | Detection Rate | Status |\n"
             md += "|-----------|-----------|-----|-----|----------------|--------|\n"
 
@@ -927,7 +1187,8 @@ Analyzed **{len(appendix):,} content items** across **{total_possible_attrs} Tru
         md += "### Interpretation\n\n"
         md += "- **Avg Score**: Average score for this attribute across all content (1-10 scale)\n"
         md += "- **Detection Rate**: Percentage of content items where this attribute was detected\n"
-        md += "- **Status**: ✅ Excellent (8-10), 🟢 Good (6-8), 🟡 Fair (4-6), 🔴 Needs Work (<4)\n"
+        md += "- **Status**: ✅ Excellent (8-10), 🟢 Good (6-8), 🟡 Fair (4-6), 🔴 Needs Work (<4)\n\n"
+        md += "</details>\n"
 
         return md
 
@@ -1849,6 +2110,47 @@ The following attribute improvements are prioritized by **impact score** (gap ×
 
         return section
 
+    def _format_success_metrics(self, report_data: Dict[str, Any]) -> str:
+        """Generate success metrics table from recommendations."""
+        dims = report_data.get('dimension_breakdown', {})
+        if not dims:
+            return ""
+
+        lines = ["### Success Metrics (6-Month Targets)\n"]
+        lines.append("| Metric | Current | Target | Timeline |")
+        lines.append("|--------|---------|--------|----------|")
+
+        # Build metrics from dimension data
+        dim_avgs = {k: v.get('average', 0.0) for k, v in dims.items()}
+
+        for dim_name, current in sorted(dim_avgs.items()):
+            display_name = self._format_dimension_name(dim_name) + " Score"
+
+            # Calculate target (add 0.05-0.075 to current, cap at 1.0)
+            if current < 0.55:
+                target = min(current + 0.075, 1.0)
+                timeline = "6 weeks"
+            elif current < 0.65:
+                target = min(current + 0.06, 1.0)
+                timeline = "3 months"
+            else:
+                target = min(current + 0.024, 1.0)
+                timeline = "1 month"
+
+            lines.append(f"| {display_name} | {current:.3f} | {target:.2f} | {timeline} |")
+
+        # Add aggregate metrics
+        items = report_data.get('items', [])
+        if items:
+            low_trust_count = sum(1 for item in items if float(item.get('final_score') or item.get('score', 1.0)) < 0.50)
+            overall_avg = sum(float(item.get('final_score') or item.get('score', 0)) for item in items) / len(items) if items else 0
+
+            lines.append(f"| Low Trust Items | {low_trust_count} | 0 | 3 months |")
+            lines.append(f"| Overall Trust Average | {overall_avg:.3f} | {min(overall_avg + 0.04, 1.0):.2f} | 6 months |")
+
+        lines.append("")
+        return "\n".join(lines)
+
     def _create_recommendations(self, report_data: Dict[str, Any]) -> str:
         """Create recommendations section using LLM for rich, contextual insights"""
         # Prepare context
@@ -1864,16 +2166,19 @@ The following attribute improvements are prioritized by **impact score** (gap ×
             focus = "Maintain current trust standards"
         elif weakest_score >= 0.50:
             priority = "Medium"
-            focus = f"Strengthen {context['weakest_dimension'].title()} dimension"
+            focus = f"Strengthen {self._format_dimension_name(context['weakest_dimension'])} dimension"
         elif weakest_score >= 0.30:
             priority = "High"
-            focus = f"Address critical gaps in {context['weakest_dimension'].title()}"
+            focus = f"Address critical gaps in {self._format_dimension_name(context['weakest_dimension'])}"
         else:
             priority = "Critical"
-            focus = f"Emergency intervention on {context['weakest_dimension'].title()}"
+            focus = f"Emergency intervention on {self._format_dimension_name(context['weakest_dimension'])}"
 
         # Generate data-driven attribute recommendations
         attribute_recommendations = self._create_attribute_recommendations_section(report_data)
+
+        # Generate success metrics table
+        success_metrics = self._format_success_metrics(report_data)
 
         # Try LLM-enhanced recommendations with specified model
         llm_recommendations = self._llm_generate_recommendations(context, model=recommendations_model)
@@ -1885,8 +2190,12 @@ The following attribute improvements are prioritized by **impact score** (gap ×
 ### Priority Level: {priority}
 **Focus Area**: {focus}
 
-**Weakest Dimension**: {context['weakest_dimension'].title()} ({weakest_score:.3f})
+**Weakest Dimension**: {self._format_dimension_name(context['weakest_dimension'])} ({weakest_score:.3f})
 **Overall Trust Average**: {context['overall_average']:.3f}
+
+{success_metrics}
+
+---
 
 {llm_recommendations}
 
@@ -1910,39 +2219,36 @@ The following attribute improvements are prioritized by **impact score** (gap ×
 ### Priority Level: {priority}
 **Focus Area**: {focus}
 
-**Weakest Dimension**: {context['weakest_dimension'].title()} ({weakest_score:.3f})
+**Weakest Dimension**: {self._format_dimension_name(context['weakest_dimension'])} ({weakest_score:.3f})
 **Overall Trust Average**: {context['overall_average']:.3f}
+
+{success_metrics}
+
+---
 
 ### Recommended Actions
 
-- Focus on improving {context['weakest_dimension'].title()} scores (currently {weakest_score:.2f})
+- Focus on improving {self._format_dimension_name(context['weakest_dimension'])} scores (currently {weakest_score:.2f})
 - {dimension_guidance.get(context['weakest_dimension'], 'Improve trust across all dimensions')}
 - Review and remediate {context['classification_counts']['low_trust']} low-trust items
 - Implement enhanced verification for {context['classification_counts']['moderate_trust']} moderate-trust items
 
-### Next Steps (concrete)
+### Implementation Timeline
 
 **Low Trust items (examples):**
 {low_items_text}
 
-- Immediate (1-7 days):
-  - Review {len(low_items)} low-trust items and develop remediation plan
-  - Implement monitoring alerts for {context['weakest_dimension']} dimension
+**Immediate Actions (1-7 days):**
+1. Review {len(low_items)} low-trust items and develop remediation plan
+2. Implement monitoring alerts for {self._format_dimension_name(context['weakest_dimension'])} dimension
 
-- Short-term (1-4 weeks):
-  - Develop {context['weakest_dimension']}-specific content guidelines
-  - Train teams on Trust Stack standards
+**Short-term Actions (1-4 weeks):**
+1. Develop {self._format_dimension_name(context['weakest_dimension'])}-specific content guidelines
+2. Train teams on Trust Stack standards
 
-- Medium (4-12 weeks):
-  - Establish Trust Stack monitoring dashboards
-  - Target overall trust average improvement to {context['overall_average'] + 0.15:.2f}
-
-### Success Metrics
-
-- Improve {context['weakest_dimension'].title()} dimension score from {weakest_score:.2f} to {min(weakest_score + 0.10, 1.0):.2f}
-- Reduce low trust items from {context['classification_counts']['low_trust']} to {max(0, context['classification_counts']['low_trust'] - 5)}
-- Increase overall Trust average from {context['overall_average']:.2f} to {min(context['overall_average'] + 0.15, 1.0):.2f}
-- Achieve minimum 0.60 score across all six dimensions
+**Medium-term Actions (4-12 weeks):**
+1. Establish Trust Stack monitoring dashboards
+2. Target overall trust average improvement to {context['overall_average'] + 0.15:.2f}
 
 {attribute_recommendations}"""
     
@@ -2238,38 +2544,27 @@ This report provides actionable insights for brand health and content strategy b
 
             rationale = ' '.join(rationale_sentences) if rationale_sentences else ''
 
-            # Build trust assessment explanation instead of content description
-            trust_assessment = ""
+            # Build dimensional performance summary
+            dim_performance = ""
             if dims:
                 try:
-                    # Parse dimension scores
                     dims_parsed = {k: float(v) for k, v in dims.items() if v is not None}
                     if dims_parsed:
-                        sorted_dims = sorted(dims_parsed.items(), key=lambda x: x[1])
-                        weakest_dims = sorted_dims[:2] if len(sorted_dims) >= 2 else sorted_dims
-                        strongest_dims = sorted(dims_parsed.items(), key=lambda x: x[1], reverse=True)[:1]
+                        strongest = max(dims_parsed.items(), key=lambda x: x[1])
+                        weakest_two = sorted(dims_parsed.items(), key=lambda x: x[1])[:2]
 
-                        # Determine trust level
-                        if float(score) >= 0.70:
-                            trust_level = "High Trust"
-                        elif float(score) >= 0.50:
-                            trust_level = "Moderate Trust"
-                        else:
-                            trust_level = "Low Trust"
+                        # Helper to format dimension names (will be enhanced in Phase 1, Change #5)
+                        def format_dim_name(dim_name):
+                            if dim_name.lower() in ('ai_readiness', 'aireadiness'):
+                                return 'AI Readiness'
+                            return dim_name.replace('_', ' ').title()
 
-                        trust_assessment = f"{trust_level} rating based on score of {float(score):.2f}. "
+                        strongest_str = f"{format_dim_name(strongest[0])} ({strongest[1]:.2f})"
+                        weakest_str = ', '.join([f"{format_dim_name(k)} ({v:.2f})" for k, v in weakest_two])
 
-                        if weakest_dims:
-                            weak_str = ', '.join([f"{k.title()} ({v:.2f})" for k, v in weakest_dims])
-                            trust_assessment += f"Weaker dimensions: {weak_str}. "
-
-                        if strongest_dims:
-                            strong_str = ', '.join([f"{k.title()} ({v:.2f})" for k, v in strongest_dims])
-                            trust_assessment += f"Strongest: {strong_str}."
+                        dim_performance = f"**Dimensional Performance**:\n- Strongest: {strongest_str}\n- Weakest: {weakest_str}\n\n"
                 except Exception:
-                    trust_assessment = f"Score: {float(score):.2f}"
-            else:
-                trust_assessment = f"Score: {float(score):.2f}"
+                    pass
 
             # Format visited URL
             visited_display = visited_url if visited_url else 'Not available'
@@ -2283,12 +2578,12 @@ This report provides actionable insights for brand health and content strategy b
 
             lines.append(
                 f"### {title}\n\n"
-                f"- **Source**: {source.title()}\n"
-                f"- **Title**: {title}\n"
-                f"- **Trust Assessment**: {trust_assessment}\n"
-                f"- **Visited URL**: {visited_display}\n"
-                f"- **Score**: {float(score):.2f} | **Trust Level**: {label}\n"
-                f"- **Rationale**: {rationale if rationale else 'No detailed rationale available.'}\n\n---\n"
+                f"**Source**: {source.title()}  \n"
+                f"**Score**: {float(score):.2f} ({label})  \n"
+                f"**URL**: {visited_display}\n\n"
+                f"{dim_performance}"
+                f"**Rationale**: {rationale if rationale else 'No detailed rationale available.'}\n\n"
+                f"---\n\n"
             )
 
         return "\n".join(lines)
@@ -2305,23 +2600,32 @@ This report provides actionable insights for brand health and content strategy b
         if not dims:
             return ""
 
-        labels = ['Provenance', 'Verification', 'Transparency', 'Coherence', 'Resonance']
-        values = [dims.get(k.lower(), {}).get('average', 0.0) for k in labels]
+        labels = ['Provenance', 'Verification', 'Transparency', 'Coherence', 'Resonance', 'AI Readiness']
+        # Map labels to dimension keys (AI Readiness -> ai_readiness)
+        label_to_key = {
+            'Provenance': 'provenance',
+            'Verification': 'verification',
+            'Transparency': 'transparency',
+            'Coherence': 'coherence',
+            'Resonance': 'resonance',
+            'AI Readiness': 'ai_readiness'
+        }
+        values = [dims.get(label_to_key[k], {}).get('average', 0.0) for k in labels]
         if sum(values) == 0:
             return ""
 
         out_dir = self._ensure_output_dir(report_data)
         img_path = os.path.join(out_dir, f"heatmap_{report_data.get('run_id','run')}.png")
 
-        # heatmap as a 1x5 colored bar
-        fig, ax = plt.subplots(figsize=(6, 1.5))
+        # heatmap as a 1x6 colored bar
+        fig, ax = plt.subplots(figsize=(7, 1.5))
         cmap = plt.get_cmap('RdYlGn')
         norm = plt.Normalize(0, 1)
         ax.imshow([values], aspect='auto', cmap=cmap, norm=norm)
         ax.set_yticks([])
         ax.set_xticks(range(len(labels)))
         ax.set_xticklabels(labels, rotation=45, ha='right')
-        ax.set_title('5D Trust Dimensions (average scores)')
+        ax.set_title('6D Trust Dimensions (average scores)')
         plt.tight_layout()
         fig.savefig(img_path, dpi=150)
         plt.close(fig)
