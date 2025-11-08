@@ -324,7 +324,8 @@ class ContentScorer:
             'resonance': llm_scores.resonance * 100,
             'coherence': llm_scores.coherence * 100,
             'transparency': llm_scores.transparency * 100,
-            'verification': llm_scores.verification * 100
+            'verification': llm_scores.verification * 100,
+            'ai_readiness': llm_scores.ai_readiness * 100
         }
 
         # Group attributes by dimension
@@ -375,7 +376,8 @@ class ContentScorer:
             resonance=adjusted['resonance'] / 100,
             coherence=adjusted['coherence'] / 100,
             transparency=adjusted['transparency'] / 100,
-            verification=adjusted['verification'] / 100
+            verification=adjusted['verification'] / 100,
+            ai_readiness=adjusted['ai_readiness'] / 100
         )
     
     def _get_llm_score(self, prompt: str) -> float:
