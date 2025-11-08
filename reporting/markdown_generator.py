@@ -351,7 +351,8 @@ class MarkdownReportGenerator:
             'verification': 'Alignment with authoritative brand data',
             'transparency': 'Clarity of ownership and disclosure',
             'coherence': 'Consistency with brand messaging',
-            'resonance': 'Authentic audience engagement'
+            'resonance': 'Authentic audience engagement',
+            'ai_readiness': 'Machine discoverability and LLM-readable signals'
         }
 
         weakest_dim = None
@@ -359,7 +360,7 @@ class MarkdownReportGenerator:
         strongest_dim = None
         strongest_score = 0.0
 
-        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
+        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
             stats = dimension_breakdown.get(dim, {})
             avg = stats.get('average', 0.0)
 
@@ -388,7 +389,7 @@ class MarkdownReportGenerator:
 
         # Build interpretation paragraph focused on dimensions
         interp = (
-            f"Analysis of {total_items:,} brand-related content items reveals trust patterns across five dimensions. "
+            f"Analysis of {total_items:,} brand-related content items reveals trust patterns across six dimensions. "
             f"**{strongest_dim.title()}** is the strongest dimension ({strongest_score:.3f}), "
             f"while **{weakest_dim.title()}** ({weakest_score:.3f}) requires attention. "
         )
@@ -404,6 +405,8 @@ class MarkdownReportGenerator:
             interp += "The low coherence scores indicate inconsistent messaging that may signal unofficial content."
         elif weakest_dim == 'resonance':
             interp += "The low resonance scores suggest engagement patterns don't align with authentic brand communities."
+        elif weakest_dim == 'ai_readiness':
+            interp += "The low AI readiness scores indicate missing structured data, schema markup, or metadata that limits machine discoverability."
 
         # Build images (heatmap, trendline, channel breakdown) and include them if created
         visuals_md = []
@@ -727,7 +730,7 @@ class MarkdownReportGenerator:
         dimension_data = report_data.get('dimension_breakdown', {})
         
         if not dimension_data:
-            return "## 5D Trust Dimensions Analysis\n\n*No dimension data available*"
+            return "## 6D Trust Dimensions Analysis\n\n*No dimension data available*"
         
         # Create dimension scores table
         table_rows = ["| Dimension | Average | Min | Max | Std Dev |"]
@@ -744,7 +747,8 @@ class MarkdownReportGenerator:
             'verification': 'Factual accuracy and consistency with trusted sources',
             'transparency': 'Clear disclosures and honest communication',
             'coherence': 'Consistency with brand messaging and professional quality',
-            'resonance': 'Cultural fit and authentic engagement patterns'
+            'resonance': 'Cultural fit and authentic engagement patterns',
+            'ai_readiness': 'Machine-readable structured data, schema markup, and LLM discoverability'
         }
         
         dimension_details = []
@@ -764,7 +768,7 @@ class MarkdownReportGenerator:
             
             dimension_details.append(f"**{dimension.title()}** ({indicator}): {description}")
         
-        return f"""## 5D Trust Dimensions Analysis
+        return f"""## 6D Trust Dimensions Analysis
 
 ### Dimension Scores
 
@@ -782,7 +786,7 @@ Each dimension is scored on a scale of 0.0 to 1.0:
 - **0.4-0.6**: Moderate performance
 - **0.0-0.4**: Poor performance
 
-Each dimension is independently scored and combined to form a comprehensive trust profile, with equal weighting (20% each) across all five dimensions."""
+Each dimension is independently scored and combined to form a comprehensive trust profile, with equal weighting (16.7% each) across all six dimensions."""
     
     def _create_classification_analysis(self, report_data: Dict[str, Any]) -> str:
         """Create classification analysis section"""
@@ -814,7 +818,7 @@ Each dimension is independently scored and combined to form a comprehensive trus
 
 ### Classification Definitions
 
-- **High Trust**: Content that meets trust standards across all five dimensions with high confidence (score ≥0.70)
+- **High Trust**: Content that meets trust standards across all six dimensions with high confidence (score ≥0.70)
 - **Moderate Trust**: Content that shows mixed trust signals and requires additional verification (score 0.50-0.69)
 - **Low Trust**: Content that fails trust criteria or shows weak dimensional scores (score <0.50)
 
@@ -1164,7 +1168,7 @@ CRITICAL INSTRUCTIONS:
 - Improve {context['weakest_dimension'].title()} dimension score from {weakest_score:.2f} to {min(weakest_score + 0.10, 1.0):.2f}
 - Reduce low trust items from {context['classification_counts']['low_trust']} to {max(0, context['classification_counts']['low_trust'] - 5)}
 - Increase overall Trust average from {context['overall_average']:.2f} to {min(context['overall_average'] + 0.15, 1.0):.2f}
-- Achieve minimum 0.60 score across all five dimensions"""
+- Achieve minimum 0.60 score across all six dimensions"""
     
     def _create_footer(self, report_data: Dict[str, Any]) -> str:
         """Create report footer"""

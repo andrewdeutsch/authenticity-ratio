@@ -2,16 +2,19 @@
   "version": "2.0-trust-stack",
   "source": "imported_from_github_csv",
   "dimension_weights": {
-    "provenance": 0.14705882352941177,
-    "resonance": 0.17647058823529413,
-    "coherence": 0.2647058823529412,
-    "transparency": 0.16176470588235295,
-    "verification": 0.25
+    "provenance": 0.16666666666666666,
+    "resonance": 0.16666666666666666,
+    "coherence": 0.16666666666666666,
+    "transparency": 0.16666666666666666,
+    "verification": 0.16666666666666666,
+    "ai_readiness": 0.16666666666666666
   },
   "thresholds": {
     "authentic": 75,
     "suspect": 40
   },
+  "modality_support": ["text", "image", "video", "audio"],
+  "channel_types": ["owned", "social", "marketplace", "email"],
   "attributes": [
     {
       "id": "ai_vs_human_labeling_clarity",
@@ -2171,6 +2174,209 @@
         "description": "map % to 1–10"
       },
       "detection_method": "Pull reviews; check 'verified purchase'"
+    },
+    {
+      "id": "schema_compliance",
+      "label": "Schema.org Compliance",
+      "match_meta": [
+        "schema",
+        "compliance",
+        "structured",
+        "data"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "AI Readiness",
+        "Attribute (Objective Signal)": "Schema.org Compliance",
+        "How to Collect (API/Scrape)": "Parse HTML for JSON-LD, microdata, or RDFa; validate against schema.org specs",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if complete & valid schema; 7 if partial; 1 if absent",
+        "Thresholds / Flags": "Flag: missing or invalid schema",
+        "Frequency": "per page",
+        "Notes / Example Tools": "extruct, schema.org validators",
+        "Modality": "Text",
+        "Channel/ Platform": "Web",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned"
+      },
+      "dimension": "ai_readiness",
+      "scoring_rule_parsed": {
+        "type": "integer",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if complete & valid schema; 7 if partial; 1 if absent"
+      },
+      "detection_method": "Parse HTML for JSON-LD, microdata, or RDFa; validate against schema.org specs"
+    },
+    {
+      "id": "metadata_completeness",
+      "label": "Metadata Completeness",
+      "match_meta": [
+        "metadata",
+        "completeness",
+        "tags",
+        "meta"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "AI Readiness",
+        "Attribute (Objective Signal)": "Metadata Completeness",
+        "How to Collect (API/Scrape)": "Extract and score presence of: title, description, author, date, keywords, OG tags",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if all key metadata present; scale down based on missing fields",
+        "Thresholds / Flags": "Flag: <50% metadata fields present",
+        "Frequency": "per page",
+        "Notes / Example Tools": "BeautifulSoup, meta tag parsers",
+        "Modality": "Text/Image/Video",
+        "Channel/ Platform": "All",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned/Social"
+      },
+      "dimension": "ai_readiness",
+      "scoring_rule_parsed": {
+        "type": "continuous",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if all key metadata present; scale down based on missing fields"
+      },
+      "detection_method": "Extract and score presence of: title, description, author, date, keywords, OG tags"
+    },
+    {
+      "id": "llm_retrievability",
+      "label": "LLM Retrievability",
+      "match_meta": [
+        "llm",
+        "retrievability",
+        "indexable",
+        "discoverable"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "AI Readiness",
+        "Attribute (Objective Signal)": "LLM Retrievability",
+        "How to Collect (API/Scrape)": "Check robots.txt, meta robots tags, sitemap presence, and indexability signals",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if fully indexable with no blocks; 1 if blocked from indexing",
+        "Thresholds / Flags": "Flag: robots.txt blocks crawlers",
+        "Frequency": "per domain",
+        "Notes / Example Tools": "robots.txt parser, meta tag checker",
+        "Modality": "Text",
+        "Channel/ Platform": "Web",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned"
+      },
+      "dimension": "ai_readiness",
+      "scoring_rule_parsed": {
+        "type": "integer",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if fully indexable with no blocks; 1 if blocked from indexing"
+      },
+      "detection_method": "Check robots.txt, meta robots tags, sitemap presence, and indexability signals"
+    },
+    {
+      "id": "canonical_linking",
+      "label": "Canonical Linking",
+      "match_meta": [
+        "canonical",
+        "url",
+        "linking"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "AI Readiness",
+        "Attribute (Objective Signal)": "Canonical Linking",
+        "How to Collect (API/Scrape)": "Extract <link rel='canonical'> and verify it matches current URL or points to authoritative source",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if canonical present and valid; 5 if present but inconsistent; 1 if missing",
+        "Thresholds / Flags": "Flag: missing or mismatched canonical",
+        "Frequency": "per page",
+        "Notes / Example Tools": "HTML parser, URL validation",
+        "Modality": "Text",
+        "Channel/ Platform": "Web",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned"
+      },
+      "dimension": "ai_readiness",
+      "scoring_rule_parsed": {
+        "type": "integer",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if canonical present and valid; 5 if present but inconsistent; 1 if missing"
+      },
+      "detection_method": "Extract <link rel='canonical'> and verify it matches current URL or points to authoritative source"
+    },
+    {
+      "id": "indexing_visibility",
+      "label": "Indexing Visibility",
+      "match_meta": [
+        "indexing",
+        "visibility",
+        "search",
+        "sitemap"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "AI Readiness",
+        "Attribute (Objective Signal)": "Indexing Visibility",
+        "How to Collect (API/Scrape)": "Check for sitemap.xml, robots.txt directives, and meta indexing tags",
+        "Field Type": "integer",
+        "Scoring Rule (1–10)": "10 if sitemap present, properly configured robots.txt, and no noindex; lower for issues",
+        "Thresholds / Flags": "Flag: noindex tag present or missing sitemap",
+        "Frequency": "per domain",
+        "Notes / Example Tools": "Sitemap validators, SEO audit tools",
+        "Modality": "Text",
+        "Channel/ Platform": "Web",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned"
+      },
+      "dimension": "ai_readiness",
+      "scoring_rule_parsed": {
+        "type": "integer",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if sitemap present, properly configured robots.txt, and no noindex; lower for issues"
+      },
+      "detection_method": "Check for sitemap.xml, robots.txt directives, and meta indexing tags"
+    },
+    {
+      "id": "ethical_training_signals",
+      "label": "Ethical Training Signals",
+      "match_meta": [
+        "ethical",
+        "training",
+        "signals",
+        "ai"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "AI Readiness",
+        "Attribute (Objective Signal)": "Ethical Training Signals",
+        "How to Collect (API/Scrape)": "Detect presence of AI training opt-out signals, TDM (Text and Data Mining) reservations",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if clear opt-in/opt-out signals present; 5 if ambiguous; 1 if missing",
+        "Thresholds / Flags": "Flag: no TDM reservation or AI training policy",
+        "Frequency": "per domain",
+        "Notes / Example Tools": "robots.txt TDM directives, meta tags, policy pages",
+        "Modality": "Text",
+        "Channel/ Platform": "Web",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned"
+      },
+      "dimension": "ai_readiness",
+      "scoring_rule_parsed": {
+        "type": "integer",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if clear opt-in/opt-out signals present; 5 if ambiguous; 1 if missing"
+      },
+      "detection_method": "Detect presence of AI training opt-out signals, TDM (Text and Data Mining) reservations"
     }
   ],
   "defaults": {
