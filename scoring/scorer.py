@@ -475,6 +475,11 @@ class ContentScorer:
                         "title": getattr(content, 'title', '') or None,
                         "description": getattr(content, 'body', '') or None,
                         "source_url": (cm.get('source_url') if isinstance(cm, dict) else None) or getattr(content, 'platform_id', None),
+                        # Enhanced Trust Stack metadata
+                        "modality": getattr(content, 'modality', 'text'),
+                        "channel": getattr(content, 'channel', 'unknown'),
+                        "platform_type": getattr(content, 'platform_type', 'unknown'),
+                        "url": getattr(content, 'url', ''),
                         # Include detected attributes for downstream analysis
                         "detected_attributes": [
                             {
