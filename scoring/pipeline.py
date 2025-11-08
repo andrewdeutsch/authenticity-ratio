@@ -761,7 +761,7 @@ class ScoringPipeline:
                     'ai_readiness': getattr(s, 'score_ai_readiness', None),
                 }
 
-                # Compute a simple mean-based final score when rubric weights are not available here
+                # Compute a simple mean-based final score when rubric weights are not available here (6D)
                 try:
                     vals = [
                         float(getattr(s, 'score_provenance', 0.0) or 0.0),
@@ -769,6 +769,7 @@ class ScoringPipeline:
                         float(getattr(s, 'score_coherence', 0.0) or 0.0),
                         float(getattr(s, 'score_transparency', 0.0) or 0.0),
                         float(getattr(s, 'score_verification', 0.0) or 0.0),
+                        float(getattr(s, 'score_ai_readiness', 0.0) or 0.0),
                     ]
                     from statistics import mean as _mean
                     final_score = float(_mean(vals) * 100.0)
@@ -782,6 +783,7 @@ class ScoringPipeline:
                     'label': getattr(s, 'class_label', None) or '',
                     'meta': meta_obj,
                     'dimension_scores': dims,
+                    'dimensions': dims,  # Alias for markdown_generator compatibility
                 }
 
                 # If a breakdown exists from the AR calc, merge its richer fields
