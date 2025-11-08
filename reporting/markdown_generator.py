@@ -1353,6 +1353,225 @@ Trust performance analysis across different platforms and channel types.
             'moderate_trust': moderate_trust[:limit]
         }
 
+    def _analyze_attribute_gaps(self, report_data: Dict[str, Any]) -> list:
+        """
+        Analyze attribute performance and identify gaps with impact scoring
+
+        Returns list of recommendations with impact scores, sorted by priority
+        """
+        appendix = report_data.get('appendix', [])
+
+        if not appendix:
+            return []
+
+        # Load rubric for attribute metadata
+        try:
+            import json
+            with open('config/rubric.json', 'r') as f:
+                rubric = json.load(f)
+            attributes = {attr['id']: attr for attr in rubric.get('attributes', [])}
+            dimension_weights = rubric.get('dimension_weights', {})
+        except Exception as e:
+            logger.warning(f"Could not load rubric for recommendations: {e}")
+            return []
+
+        # Collect all detected attributes
+        all_detected = {}  # attr_id -> list of scores
+
+        for item in appendix:
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except:
+                    meta = {}
+
+            detected = meta.get('detected_attributes', [])
+            for attr in detected:
+                attr_id = attr.get('attribute_id')
+                value = attr.get('value', 0)
+
+                if attr_id not in all_detected:
+                    all_detected[attr_id] = []
+                all_detected[attr_id].append(value)
+
+        # Calculate gaps and impact scores
+        recommendations = []
+
+        for attr_id, scores in all_detected.items():
+            if attr_id not in attributes:
+                continue
+
+            attr_config = attributes[attr_id]
+            dimension = attr_config.get('dimension', 'unknown')
+            threshold = attr_config.get('scoring_rule_parsed', {}).get('threshold', 7.0)
+
+            avg_score = sum(scores) / len(scores)
+            detection_rate = len(scores) / len(appendix)
+
+            # Only recommend if score is below threshold
+            if avg_score < threshold:
+                gap = threshold - avg_score
+                dim_weight = dimension_weights.get(dimension, 0.167)
+
+                # Impact = gap × dimension_weight × detection_rate
+                # Higher impact = more important to fix
+                impact = gap * dim_weight * detection_rate
+
+                recommendations.append({
+                    'attribute_id': attr_id,
+                    'label': attr_config.get('label', attr_id),
+                    'dimension': dimension,
+                    'avg_score': avg_score,
+                    'threshold': threshold,
+                    'gap': gap,
+                    'detection_rate': detection_rate,
+                    'impact': impact,
+                    'affected_items': len(scores),
+                    'remediation': self._get_remediation_guidance(attr_id, attr_config)
+                })
+
+        # Sort by impact (highest first)
+        recommendations.sort(key=lambda x: x['impact'], reverse=True)
+
+        return recommendations
+
+    def _get_remediation_guidance(self, attr_id: str, attr_config: dict) -> dict:
+        """Get specific remediation guidance for an attribute"""
+
+        # Remediation database
+        remediation_db = {
+            # Provenance
+            'ai_vs_human_labeling_clarity': {
+                'action': 'Add clear AI disclosure labels to all AI-generated content',
+                'tools': ['Label templates', 'Content management system tags'],
+                'timeline': '1-2 weeks',
+                'difficulty': 'Easy',
+                'success_criteria': 'All AI content explicitly labeled'
+            },
+            'c2pa_cai_manifest_present': {
+                'action': 'Implement C2PA content credentials for images and videos',
+                'tools': ['C2PA tool (content-credentials.org)', 'Adobe Content Authenticity'],
+                'timeline': '4-8 weeks',
+                'difficulty': 'Hard',
+                'success_criteria': 'C2PA manifests on 80%+ of media'
+            },
+            'schema_compliance': {
+                'action': 'Add schema.org structured data markup to all pages',
+                'tools': ['Schema.org validator', 'JSON-LD generator', 'Google Rich Results Test'],
+                'timeline': '2-4 weeks',
+                'difficulty': 'Medium',
+                'success_criteria': 'Valid schema.org markup on all content'
+            },
+            'metadata_completeness': {
+                'action': 'Ensure all content has title, description, author, date, and keywords',
+                'tools': ['CMS metadata fields', 'Meta tag checkers'],
+                'timeline': '1-2 weeks',
+                'difficulty': 'Easy',
+                'success_criteria': '5/5 metadata fields present on all content'
+            },
+            'llm_retrievability': {
+                'action': 'Remove noindex tags, add sitemap, ensure robots.txt allows crawling',
+                'tools': ['Robots.txt validator', 'XML sitemap generators'],
+                'timeline': '1 week',
+                'difficulty': 'Easy',
+                'success_criteria': 'All content indexable by search engines and LLMs'
+            },
+            'canonical_linking': {
+                'action': 'Add canonical URL tags to all pages',
+                'tools': ['HTML head tag editor', 'CMS plugins'],
+                'timeline': '1 week',
+                'difficulty': 'Easy',
+                'success_criteria': 'Canonical URL on every page'
+            },
+            'indexing_visibility': {
+                'action': 'Create XML sitemap and submit to search engines',
+                'tools': ['Sitemap generators', 'Google Search Console'],
+                'timeline': '1 week',
+                'difficulty': 'Easy',
+                'success_criteria': 'Sitemap indexed by major search engines'
+            },
+            'ai_generated_assisted_disclosure_present': {
+                'action': 'Add "AI-generated" or "AI-assisted" disclosures to relevant content',
+                'tools': ['Disclosure templates', 'CMS disclosure fields'],
+                'timeline': '1-2 weeks',
+                'difficulty': 'Easy',
+                'success_criteria': 'All AI content properly disclosed'
+            },
+            'privacy_policy_link_availability_clarity': {
+                'action': 'Add visible privacy policy link to all pages',
+                'tools': ['Privacy policy generators', 'Footer templates'],
+                'timeline': '1 week',
+                'difficulty': 'Easy',
+                'success_criteria': 'Privacy policy link on every page'
+            },
+            'ad_sponsored_label_consistency': {
+                'action': 'Label all sponsored content with "Ad" or "Sponsored" tags',
+                'tools': ['Ad disclosure templates', 'FTC compliance checkers'],
+                'timeline': '1-2 weeks',
+                'difficulty': 'Easy',
+                'success_criteria': 'All ads clearly labeled'
+            },
+        }
+
+        # Get specific guidance or use generic
+        if attr_id in remediation_db:
+            return remediation_db[attr_id]
+        else:
+            # Generic guidance based on dimension
+            dimension = attr_config.get('dimension', 'unknown')
+            generic = {
+                'provenance': {
+                    'action': 'Improve source attribution and metadata tracking',
+                    'tools': ['Metadata management systems', 'Content tracking tools'],
+                    'timeline': '2-4 weeks',
+                    'difficulty': 'Medium',
+                    'success_criteria': 'Attribute score above 7.0'
+                },
+                'verification': {
+                    'action': 'Strengthen fact-checking and source validation',
+                    'tools': ['Fact-checking services', 'Citation validators'],
+                    'timeline': '2-4 weeks',
+                    'difficulty': 'Medium',
+                    'success_criteria': 'Attribute score above 7.0'
+                },
+                'transparency': {
+                    'action': 'Enhance disclosure practices and authorship clarity',
+                    'tools': ['Disclosure templates', 'Author attribution systems'],
+                    'timeline': '1-3 weeks',
+                    'difficulty': 'Easy',
+                    'success_criteria': 'Attribute score above 7.0'
+                },
+                'coherence': {
+                    'action': 'Ensure consistent messaging across channels',
+                    'tools': ['Brand style guides', 'Content review workflows'],
+                    'timeline': '2-4 weeks',
+                    'difficulty': 'Medium',
+                    'success_criteria': 'Attribute score above 7.0'
+                },
+                'resonance': {
+                    'action': 'Foster authentic engagement and cultural alignment',
+                    'tools': ['Community management tools', 'Sentiment analysis'],
+                    'timeline': '4-8 weeks',
+                    'difficulty': 'Hard',
+                    'success_criteria': 'Attribute score above 7.0'
+                },
+                'ai_readiness': {
+                    'action': 'Add structured data and improve machine readability',
+                    'tools': ['Schema.org tools', 'Metadata validators'],
+                    'timeline': '2-4 weeks',
+                    'difficulty': 'Medium',
+                    'success_criteria': 'Attribute score above 7.0'
+                }
+            }
+            return generic.get(dimension, {
+                'action': 'Review and improve this attribute',
+                'tools': ['Manual review'],
+                'timeline': '2-4 weeks',
+                'difficulty': 'Medium',
+                'success_criteria': 'Attribute score above 7.0'
+            })
+
     def _prepare_recommendation_context(self, report_data: Dict[str, Any]) -> Dict[str, Any]:
         """Prepare comprehensive context for LLM recommendation generation"""
         dimension_breakdown = report_data.get('dimension_breakdown', {})
@@ -1550,6 +1769,73 @@ CRITICAL INSTRUCTIONS:
             logger.warning(f"LLM recommendation generation failed: {e}")
             return None
 
+    def _create_attribute_recommendations_section(self, report_data: Dict[str, Any]) -> str:
+        """Create data-driven attribute recommendations section with impact scores"""
+        # Get prioritized attribute recommendations
+        recommendations = self._analyze_attribute_gaps(report_data)
+
+        if not recommendations:
+            return ""
+
+        # Display top 8 recommendations (or fewer if not available)
+        top_recommendations = recommendations[:8]
+
+        section = """
+---
+
+### Priority Attribute Improvements (Data-Driven)
+
+The following attribute improvements are prioritized by **impact score** (gap × dimension weight × detection rate), providing the highest ROI for Trust Stack enhancement:
+
+"""
+
+        # Create recommendations table
+        section += "| Priority | Attribute | Dimension | Current | Target | Gap | Impact | Items |\n"
+        section += "|----------|-----------|-----------|---------|--------|-----|--------|-------|\n"
+
+        for i, rec in enumerate(top_recommendations, 1):
+            priority_emoji = "🔴" if i <= 3 else "🟡" if i <= 6 else "🟢"
+            dimension_short = rec['dimension'][:4].upper()
+
+            section += f"| {priority_emoji} #{i} | **{rec['label']}** | {dimension_short} | "
+            section += f"{rec['avg_score']:.2f} | {rec['threshold']:.2f} | "
+            section += f"{rec['gap']:.2f} | {rec['impact']:.3f} | {rec['affected_items']} |\n"
+
+        section += "\n"
+
+        # Add detailed remediation for top 3
+        section += "#### Top 3 Recommended Actions\n\n"
+
+        for i, rec in enumerate(top_recommendations[:3], 1):
+            remediation = rec.get('remediation', {})
+
+            section += f"**{i}. {rec['label']}** ({rec['dimension'].title()} dimension)\n\n"
+            section += f"- **Current Performance**: {rec['avg_score']:.2f}/10 (affects {rec['affected_items']} items)\n"
+            section += f"- **Gap**: {rec['gap']:.2f} points below threshold\n"
+            section += f"- **Impact Score**: {rec['impact']:.3f}\n"
+
+            if remediation:
+                section += f"- **Action**: {remediation.get('action', 'See dimension guidance')}\n"
+                section += f"- **Tools**: {remediation.get('tools', 'Standard tools')}\n"
+                section += f"- **Timeline**: {remediation.get('timeline', 'TBD')}\n"
+                section += f"- **Difficulty**: {remediation.get('difficulty', 'Medium')}\n"
+                section += f"- **Success Criteria**: {remediation.get('success_criteria', 'Achieve target threshold')}\n"
+
+            section += "\n"
+
+        # Add quick wins section if there are easy items
+        easy_wins = [r for r in top_recommendations if r.get('remediation', {}).get('difficulty') == 'Easy']
+        if easy_wins:
+            section += "#### Quick Wins (Easy Difficulty)\n\n"
+            section += "The following improvements can be implemented quickly with high impact:\n\n"
+
+            for rec in easy_wins[:3]:
+                section += f"- **{rec['label']}**: {rec.get('remediation', {}).get('action', 'Improve attribute detection')}\n"
+
+            section += "\n"
+
+        return section
+
     def _create_recommendations(self, report_data: Dict[str, Any]) -> str:
         """Create recommendations section using LLM for rich, contextual insights"""
         # Prepare context
@@ -1573,11 +1859,14 @@ CRITICAL INSTRUCTIONS:
             priority = "Critical"
             focus = f"Emergency intervention on {context['weakest_dimension'].title()}"
 
+        # Generate data-driven attribute recommendations
+        attribute_recommendations = self._create_attribute_recommendations_section(report_data)
+
         # Try LLM-enhanced recommendations with specified model
         llm_recommendations = self._llm_generate_recommendations(context, model=recommendations_model)
 
         if llm_recommendations:
-            # LLM succeeded - use rich contextual recommendations
+            # LLM succeeded - use rich contextual recommendations with attribute analysis
             return f"""## Recommendations
 
 ### Priority Level: {priority}
@@ -1586,7 +1875,9 @@ CRITICAL INSTRUCTIONS:
 **Weakest Dimension**: {context['weakest_dimension'].title()} ({weakest_score:.3f})
 **Overall Trust Average**: {context['overall_average']:.3f}
 
-{llm_recommendations}"""
+{llm_recommendations}
+
+{attribute_recommendations}"""
 
         # Fallback to basic recommendations if LLM fails
         dimension_guidance = {
@@ -1638,7 +1929,9 @@ CRITICAL INSTRUCTIONS:
 - Improve {context['weakest_dimension'].title()} dimension score from {weakest_score:.2f} to {min(weakest_score + 0.10, 1.0):.2f}
 - Reduce low trust items from {context['classification_counts']['low_trust']} to {max(0, context['classification_counts']['low_trust'] - 5)}
 - Increase overall Trust average from {context['overall_average']:.2f} to {min(context['overall_average'] + 0.15, 1.0):.2f}
-- Achieve minimum 0.60 score across all six dimensions"""
+- Achieve minimum 0.60 score across all six dimensions
+
+{attribute_recommendations}"""
     
     def _create_footer(self, report_data: Dict[str, Any]) -> str:
         """Create report footer"""
