@@ -27,8 +27,8 @@ from config.settings import APIConfig
 
 # Page configuration
 st.set_page_config(
-    page_title="Authenticity Ratio™ Tool",
-    page_icon="🔍",
+    page_title="Trust Stack Rating Tool",
+    page_icon="⭐",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -80,32 +80,33 @@ st.markdown("""
 
 def show_home_page():
     """Display the home/overview page"""
-    st.markdown('<div class="main-header">🔍 Authenticity Ratio™</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Measure and monitor brand content authenticity across digital channels</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">⭐ Trust Stack Rating</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Measure and monitor brand content quality across digital channels</div>', unsafe_allow_html=True)
 
     st.divider()
 
-    # What is AR section
+    # What is Trust Stack Rating section
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.markdown("### 📊 What is Authenticity Ratio?")
+        st.markdown("### 📊 What is Trust Stack Rating?")
         st.markdown("""
-        **Authenticity Ratio (AR)** is a KPI that measures authentic vs. inauthentic brand-linked content
-        across channels. It reframes authenticity as a brand health metric for CMOs and boards.
+        **Trust Stack Rating** is a comprehensive scoring system that evaluates brand-linked content
+        across six trust dimensions. Each piece of content receives a **0-100 rating** based on
+        signals detected in metadata, structure, and provenance.
 
-        #### Core Formula
-        ```
-        AR = (Verified Authentic Content ÷ Total Brand-Linked Content) × 100
-        ```
+        #### Rating Scale (0-100)
+        - **80-100** (🟢 Excellent): High-quality, verified content
+        - **60-79** (🟡 Good): Solid content with minor improvements needed
+        - **40-59** (🟠 Fair): Moderate quality requiring attention
+        - **0-39** (🔴 Poor): Low-quality content needing immediate review
 
-        #### Extended Formula (with suspect content)
+        #### Comprehensive Rating
         ```
-        AR = (A + 0.5S) ÷ (A + S + I) × 100
+        Rating = Weighted average across 6 dimensions
         ```
-        - **A** = Authentic
-        - **S** = Suspect
-        - **I** = Inauthentic
+        Each dimension contributes based on configurable weights, with detected attributes
+        providing bonuses or penalties.
         """)
 
     with col2:
@@ -113,7 +114,7 @@ def show_home_page():
         st.markdown("""
         1. **Configure** your brand and sources
         2. **Run** the analysis pipeline
-        3. **Review** AR scores and insights
+        3. **Review** Trust Stack Ratings
         4. **Export** reports for stakeholders
         """)
 
@@ -125,7 +126,7 @@ def show_home_page():
 
     # 6D Trust Dimensions
     st.markdown("### 🔍 6D Trust Dimensions")
-    st.markdown("Content is scored across six dimensions to determine authenticity:")
+    st.markdown("Each piece of content is scored 0-100 on six dimensions:")
 
     dimensions_cols = st.columns(3)
 
@@ -152,9 +153,9 @@ def show_home_page():
         ("1. Ingest", "Collect content from Reddit, YouTube, Web, Amazon"),
         ("2. Normalize", "Standardize data format and extract metadata"),
         ("3. Enrich", "Add metadata, fact-check signals, provenance data"),
-        ("4. Score", "Apply 6D rubric to each content item"),
-        ("5. Classify", "Label as Authentic, Suspect, or Inauthentic"),
-        ("6. Calculate", "Compute AR and generate insights"),
+        ("4. Score", "Apply 6D rubric to each content item (0-100)"),
+        ("5. Detect", "Identify trust attributes and signals"),
+        ("6. Rate", "Calculate comprehensive rating (weighted avg)"),
         ("7. Report", "Export PDF/Markdown with visualizations")
     ]
 
@@ -456,10 +457,22 @@ def show_results_page():
         return
 
     report = run_data.get('scoring_report', {})
-    ar_data = report.get('authenticity_ratio', {})
+    items = report.get('items', [])
+
+    # Calculate average comprehensive rating
+    if items:
+        avg_rating = sum(item.get('final_score', 0) for item in items) / len(items)
+    else:
+        avg_rating = 0
+
+    # Calculate rating distribution
+    excellent = sum(1 for item in items if item.get('final_score', 0) >= 80)
+    good = sum(1 for item in items if 60 <= item.get('final_score', 0) < 80)
+    fair = sum(1 for item in items if 40 <= item.get('final_score', 0) < 60)
+    poor = sum(1 for item in items if item.get('final_score', 0) < 40)
 
     # Header
-    st.markdown('<div class="main-header">📊 Analysis Results</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">⭐ Trust Stack Results</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="sub-header">Brand: {run_data.get("brand_id")} | Run: {run_data.get("run_id")}</div>', unsafe_allow_html=True)
 
     st.divider()
@@ -470,42 +483,41 @@ def show_results_page():
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        ar_pct = ar_data.get('authenticity_ratio_pct', 0)
         st.metric(
-            label="Authenticity Ratio",
-            value=f"{ar_pct:.1f}%",
+            label="Average Rating",
+            value=f"{avg_rating:.1f}/100",
             delta=None
         )
 
     with col2:
         st.metric(
             label="Total Content",
-            value=f"{ar_data.get('total_items', 0):,}"
+            value=f"{len(items):,}"
         )
 
     with col3:
         st.metric(
-            label="Authentic",
-            value=f"{ar_data.get('authentic_items', 0):,}",
-            delta=None
+            label="Excellent (80+)",
+            value=f"{excellent:,}",
+            delta=f"{(excellent/len(items)*100):.0f}%" if items else "0%"
         )
 
     with col4:
         st.metric(
-            label="Inauthentic",
-            value=f"{ar_data.get('inauthentic_items', 0):,}",
-            delta=None
+            label="Poor (<40)",
+            value=f"{poor:,}",
+            delta=f"{(poor/len(items)*100):.0f}%" if items else "0%"
         )
 
-    # AR Interpretation
-    if ar_pct >= 80:
-        st.markdown('<div class="success-box">🟢 <b>Excellent</b> - Your brand has excellent content authenticity. Continue maintaining high standards.</div>', unsafe_allow_html=True)
-    elif ar_pct >= 60:
-        st.markdown('<div class="info-box">🟡 <b>Good</b> - Good authenticity with room for improvement. Focus on verification processes.</div>', unsafe_allow_html=True)
-    elif ar_pct >= 40:
-        st.markdown('<div class="warning-box">🟠 <b>Moderate</b> - Moderate authenticity requiring attention. Implement stricter content guidelines.</div>', unsafe_allow_html=True)
+    # Rating Interpretation
+    if avg_rating >= 80:
+        st.markdown('<div class="success-box">🟢 <b>Excellent</b> - Your brand content demonstrates high quality and trust signals. Continue maintaining these standards.</div>', unsafe_allow_html=True)
+    elif avg_rating >= 60:
+        st.markdown('<div class="info-box">🟡 <b>Good</b> - Solid content quality with opportunities for improvement. Focus on verification and transparency.</div>', unsafe_allow_html=True)
+    elif avg_rating >= 40:
+        st.markdown('<div class="warning-box">🟠 <b>Fair</b> - Moderate quality requiring attention. Review content guidelines and enhance trust signals.</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div class="warning-box">🔴 <b>Poor</b> - Poor authenticity requiring immediate action. Review and remove inauthentic content.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="warning-box">🔴 <b>Poor</b> - Low content quality requiring immediate action. Conduct comprehensive content audit and improvement plan.</div>', unsafe_allow_html=True)
 
     st.divider()
 
@@ -513,20 +525,17 @@ def show_results_page():
     col1, col2 = st.columns(2)
 
     with col1:
-        # Classification Distribution Pie Chart
-        st.markdown("#### Content Classification Distribution")
+        # Rating Distribution Pie Chart
+        st.markdown("#### Rating Distribution")
 
         fig_pie = px.pie(
-            values=[
-                ar_data.get('authentic_items', 0),
-                ar_data.get('suspect_items', 0),
-                ar_data.get('inauthentic_items', 0)
-            ],
-            names=['Authentic', 'Suspect', 'Inauthentic'],
+            values=[excellent, good, fair, poor],
+            names=['Excellent (80+)', 'Good (60-79)', 'Fair (40-59)', 'Poor (<40)'],
             color_discrete_map={
-                'Authentic': '#2ecc71',
-                'Suspect': '#f39c12',
-                'Inauthentic': '#e74c3c'
+                'Excellent (80+)': '#2ecc71',
+                'Good (60-79)': '#3498db',
+                'Fair (40-59)': '#f39c12',
+                'Poor (<40)': '#e74c3c'
             },
             hole=0.3
         )
@@ -534,32 +543,35 @@ def show_results_page():
         st.plotly_chart(fig_pie, use_container_width=True)
 
     with col2:
-        # AR Comparison Bar Chart
-        st.markdown("#### Authenticity Ratio Comparison")
+        # Rating Score Distribution Histogram
+        st.markdown("#### Score Distribution")
 
-        core_ar = ar_data.get('authenticity_ratio_pct', 0)
-        extended_ar = ar_data.get('extended_ar_pct', 0)
+        scores = [item.get('final_score', 0) for item in items]
 
-        fig_bar = go.Figure(data=[
-            go.Bar(
-                x=['Core AR', 'Extended AR'],
-                y=[core_ar, extended_ar],
-                marker_color=['#3498db', '#9b59b6'],
-                text=[f"{core_ar:.1f}%", f"{extended_ar:.1f}%"],
-                textposition='auto'
+        fig_hist = go.Figure(data=[
+            go.Histogram(
+                x=scores,
+                nbinsx=20,
+                marker_color='#3498db',
+                opacity=0.7
             )
         ])
-        fig_bar.update_layout(
-            yaxis_title="Percentage (%)",
+        fig_hist.update_layout(
+            xaxis_title="Rating Score (0-100)",
+            yaxis_title="Number of Items",
             showlegend=False,
             height=350
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        # Add threshold lines
+        fig_hist.add_vline(x=80, line_dash="dash", line_color="green", annotation_text="Excellent")
+        fig_hist.add_vline(x=60, line_dash="dash", line_color="blue", annotation_text="Good")
+        fig_hist.add_vline(x=40, line_dash="dash", line_color="orange", annotation_text="Fair")
+        st.plotly_chart(fig_hist, use_container_width=True)
 
     st.divider()
 
     # 6D Trust Dimensions Analysis
-    st.markdown("### 🔍 6D Trust Dimensions Analysis")
+    st.markdown("### 🔍 6D Trust Dimensions Breakdown")
 
     dimension_breakdown = report.get('dimension_breakdown', {})
 
@@ -620,7 +632,6 @@ def show_results_page():
     # Content Items Detail
     st.markdown("### 📝 Content Items Detail")
 
-    items = report.get('items', [])
     appendix = report.get('appendix', [])
 
     if items:
@@ -628,27 +639,41 @@ def show_results_page():
         items_data = []
         for item in items:
             meta = item.get('meta', {})
+            score = item.get('final_score', 0)
+
+            # Determine rating band
+            if score >= 80:
+                rating_band = '🟢 Excellent'
+            elif score >= 60:
+                rating_band = '🟡 Good'
+            elif score >= 40:
+                rating_band = '🟠 Fair'
+            else:
+                rating_band = '🔴 Poor'
+
             items_data.append({
                 'Source': item.get('source', '').upper(),
                 'Title': meta.get('title', meta.get('name', ''))[:50] + '...' if meta.get('title') or meta.get('name') else 'N/A',
-                'Score': f"{item.get('final_score', 0):.1f}",
-                'Classification': item.get('label', 'Unknown').title(),
+                'Score': f"{score:.1f}",
+                'Rating': rating_band,
                 'URL': meta.get('source_url', meta.get('url', 'N/A'))
             })
 
         df = pd.DataFrame(items_data)
 
-        # Color-code by classification
-        def color_classification(val):
-            if val == 'Authentic':
+        # Color-code by rating band
+        def color_rating(val):
+            if '🟢' in val:
                 return 'background-color: #d4edda'
-            elif val == 'Suspect':
+            elif '🟡' in val:
+                return 'background-color: #d1ecf1'
+            elif '🟠' in val:
                 return 'background-color: #fff3cd'
-            elif val == 'Inauthentic':
+            elif '🔴' in val:
                 return 'background-color: #f8d7da'
             return ''
 
-        styled_df = df.style.applymap(color_classification, subset=['Classification'])
+        styled_df = df.style.applymap(color_rating, subset=['Rating'])
         st.dataframe(styled_df, use_container_width=True, height=400)
 
         # Detailed view expander
@@ -660,9 +685,19 @@ def show_results_page():
                 col_a, col_b = st.columns([1, 2])
 
                 with col_a:
+                    item_score = item_detail.get('final_score', 0)
+                    if item_score >= 80:
+                        rating_band = '🟢 Excellent'
+                    elif item_score >= 60:
+                        rating_band = '🟡 Good'
+                    elif item_score >= 40:
+                        rating_band = '🟠 Fair'
+                    else:
+                        rating_band = '🔴 Poor'
+
                     st.write(f"**Source:** {item_detail.get('source', 'N/A')}")
-                    st.write(f"**Final Score:** {item_detail.get('final_score', 0):.2f}")
-                    st.write(f"**Classification:** {item_detail.get('label', 'Unknown').title()}")
+                    st.write(f"**Rating Score:** {item_score:.1f}/100")
+                    st.write(f"**Rating Band:** {rating_band}")
 
                 with col_b:
                     st.write("**Dimension Scores:**")
@@ -674,6 +709,42 @@ def show_results_page():
                                 st.metric(dim_name.title(), f"{score:.3f}")
 
                 st.divider()
+
+    st.divider()
+
+    # Legacy AR Metrics (optional)
+    with st.expander("📊 Legacy Metrics (Authenticity Ratio)"):
+        st.caption("These metrics are provided for backward compatibility. The primary focus is Trust Stack Ratings.")
+
+        ar_data = report.get('authenticity_ratio', {})
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                label="Core AR",
+                value=f"{ar_data.get('authenticity_ratio_pct', 0):.1f}%"
+            )
+
+        with col2:
+            st.metric(
+                label="Extended AR",
+                value=f"{ar_data.get('extended_ar_pct', 0):.1f}%"
+            )
+
+        with col3:
+            st.metric(
+                label="Authentic Items",
+                value=f"{ar_data.get('authentic_items', 0):,}"
+            )
+
+        with col4:
+            st.metric(
+                label="Inauthentic Items",
+                value=f"{ar_data.get('inauthentic_items', 0):,}"
+            )
+
+        st.caption("**Note:** AR classifies content as Authentic/Suspect/Inauthentic using fixed thresholds. Trust Stack Ratings provide more nuanced 0-100 scores across 6 dimensions.")
 
     st.divider()
 
@@ -719,7 +790,7 @@ def show_results_page():
 
 def show_history_page():
     """Display analysis history"""
-    st.markdown('<div class="main-header">📚 Analysis History</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">📚 Rating History</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-header">View past analysis runs</div>', unsafe_allow_html=True)
 
     st.divider()
@@ -756,9 +827,15 @@ def show_history_page():
     # Display runs
     for run in runs:
         report = run.get('scoring_report', {})
-        ar_data = report.get('authenticity_ratio', {})
+        items = report.get('items', [])
 
-        with st.expander(f"🔍 {run.get('brand_id')} - {run.get('timestamp')} (AR: {ar_data.get('authenticity_ratio_pct', 0):.1f}%)"):
+        # Calculate average rating for this run
+        if items:
+            avg_rating = sum(item.get('final_score', 0) for item in items) / len(items)
+        else:
+            avg_rating = 0
+
+        with st.expander(f"⭐ {run.get('brand_id')} - {run.get('timestamp')} (Avg Rating: {avg_rating:.1f}/100)"):
             col1, col2, col3 = st.columns(3)
 
             with col1:
@@ -769,7 +846,7 @@ def show_history_page():
             with col2:
                 st.write(f"**Sources:** {', '.join(run.get('sources', []))}")
                 st.write(f"**Total Items:** {run.get('total_items', 0)}")
-                st.write(f"**AR:** {ar_data.get('authenticity_ratio_pct', 0):.1f}%")
+                st.write(f"**Avg Rating:** {avg_rating:.1f}/100")
 
             with col3:
                 if st.button(f"View Results", key=f"view_{run.get('run_id')}"):
@@ -816,8 +893,8 @@ def main():
         st.write("📹 YouTube:", "✅" if cfg.youtube_api_key else "❌")
 
         st.divider()
-        st.caption("Authenticity Ratio™ v2.0")
-        st.caption("Trust Stack Framework")
+        st.caption("Trust Stack Rating v2.0")
+        st.caption("6D Trust Framework")
 
     # Route to appropriate page
     page = st.session_state.get('page', 'home')

@@ -1,13 +1,14 @@
-# Authenticity Ratio™ Web Application
+# Trust Stack Rating Web Application
 
-A comprehensive web interface for analyzing and visualizing brand content authenticity across digital channels.
+A comprehensive web interface for analyzing and rating brand content quality across digital channels using the 6D Trust Framework.
 
 ## Features
 
 ### 🏠 Home Page
-- **Overview** of Authenticity Ratio concept and formulas
-- **6D Trust Dimensions** explanation
-- **Pipeline visualization** showing the analysis workflow
+- **Overview** of Trust Stack Rating system and scoring methodology
+- **6D Trust Dimensions** explanation with rating scale (0-100)
+- **Rating bands** (Excellent/Good/Fair/Poor)
+- **Pipeline visualization** showing the 7-step analysis workflow
 - Quick start guide
 
 ### 🚀 Analysis Page
@@ -20,27 +21,30 @@ A comprehensive web interface for analyzing and visualizing brand content authen
 
 ### 📊 Results Page
 - **Key Metrics Dashboard**:
-  - Authenticity Ratio percentage
+  - Average rating score (0-100)
   - Total content analyzed
-  - Authentic vs. Inauthentic counts
+  - Rating distribution (Excellent/Good/Fair/Poor)
 - **Rich Visualizations**:
-  - Pie chart showing content classification distribution
-  - Bar chart comparing Core AR vs. Extended AR
+  - Pie chart showing rating distribution
+  - Histogram showing score distribution with threshold lines
   - Radar chart displaying 6D Trust Dimensions scores
   - Progress bars for individual dimension performance
 - **Detailed Content Analysis**:
   - Sortable table of all analyzed content items
-  - Color-coded classification (Authentic, Suspect, Inauthentic)
+  - Color-coded rating bands (Excellent/Good/Fair/Poor)
   - Expandable detailed breakdown with per-dimension scores
 - **Export Capabilities**:
   - Download PDF report
   - Download Markdown report
   - Export raw data as JSON
+- **Legacy Metrics** (optional):
+  - Authenticity Ratio (backward compatibility)
+  - Expandable section for traditional AR metrics
 
 ### 📚 History Page
-- View all past analysis runs
+- View all past rating runs
 - Quick access to historical results
-- Compare performance across different runs
+- Compare average ratings across different runs
 
 ## Getting Started
 
@@ -88,14 +92,15 @@ A comprehensive web interface for analyzing and visualizing brand content authen
 
 ### Understanding Results
 
-#### Authenticity Ratio (AR)
-- **80-100%**: 🟢 Excellent - High content authenticity
-- **60-79%**: 🟡 Good - Solid performance with room for improvement
-- **40-59%**: 🟠 Moderate - Requires attention and action
-- **0-39%**: 🔴 Poor - Immediate action needed
+#### Trust Stack Rating (0-100 scale)
+Each piece of content receives a comprehensive rating:
+- **80-100** (🟢 Excellent): High-quality, verified content with strong trust signals
+- **60-79** (🟡 Good): Solid content with minor improvements needed
+- **40-59** (🟠 Fair): Moderate quality requiring attention
+- **0-39** (🔴 Poor): Low-quality content needing immediate review
 
 #### 6D Trust Dimensions
-Each content item is scored on six dimensions (0-1 scale):
+Each content item is scored 0-100 on six dimensions:
 - **Provenance** (🔗): Origin, traceability, metadata integrity
 - **Verification** (✓): Factual accuracy vs. trusted databases
 - **Transparency** (👁): Disclosures, clarity, attribution
@@ -103,10 +108,16 @@ Each content item is scored on six dimensions (0-1 scale):
 - **Resonance** (📢): Cultural fit, organic engagement
 - **AI Readiness** (🤖): Machine discoverability, LLM-readable signals
 
-#### Content Classification
-- **Authentic**: High-quality, verified content (Score ≥ 75)
-- **Suspect**: Uncertain content requiring review (40 ≤ Score < 75)
-- **Inauthentic**: Low-quality or misleading content (Score < 40)
+#### Comprehensive Rating
+The final score is calculated as a weighted average across all 6 dimensions, with bonuses/penalties applied based on detected trust attributes (e.g., SSL certificates, schema markup, author attribution).
+
+#### Legacy Authenticity Ratio (Optional)
+For backward compatibility, the tool still calculates AR metrics:
+- **Authentic**: Content rated ≥ 75
+- **Suspect**: Content rated 40-74
+- **Inauthentic**: Content rated < 40
+
+Note: The primary focus is Trust Stack Ratings, which provide more nuanced scoring than binary classifications.
 
 ### Exporting Reports
 
@@ -204,4 +215,4 @@ For issues, questions, or feature requests, refer to the main project README or 
 
 ---
 
-**Authenticity Ratio™ v2.0** | Trust Stack Framework
+**Trust Stack Rating v2.0** | 6D Trust Framework
