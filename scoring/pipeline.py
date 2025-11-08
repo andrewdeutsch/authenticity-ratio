@@ -72,6 +72,24 @@ class ScoringPipeline:
                     # Create neutral ContentScores for demoted items to keep them in reports
                     neutral_scores = []
                     for c in demoted:
+                        # Smart fallback: derive channel/platform_type from src if unknown
+                        channel = getattr(c, 'channel', 'unknown')
+                        platform_type = getattr(c, 'platform_type', 'unknown')
+
+                        if channel == 'unknown' or not channel:
+                            # Derive from src field
+                            src_to_channel = {
+                                'reddit': ('reddit', 'social'),
+                                'youtube': ('youtube', 'social'),
+                                'amazon': ('amazon', 'marketplace'),
+                                'brave': ('web', 'web'),
+                            }
+                            if c.src in src_to_channel:
+                                channel, platform_type = src_to_channel[c.src]
+                            else:
+                                channel = c.src  # Use src as channel
+                                platform_type = 'unknown'
+
                         neutral = ContentScores(
                             content_id=c.content_id,
                             brand=brand_config.get('brand_id', 'unknown'),
@@ -82,10 +100,14 @@ class ScoringPipeline:
                             score_coherence=0.5,
                             score_transparency=0.5,
                             score_verification=0.5,
+                            score_ai_readiness=0.5,
                             class_label='pending',
                             is_authentic=False,
                             rubric_version=self.scorer.rubric_version,
                             run_id=run_id,
+                            modality=getattr(c, 'modality', 'text'),
+                            channel=channel,
+                            platform_type=platform_type,
                             meta='{"triage": "demoted"}'
                         )
                         neutral_scores.append(neutral)
@@ -232,12 +254,13 @@ class ScoringPipeline:
 
         per_item_breakdowns = []
         for s in scores_list:
-            # Defensive defaults for missing scores
+            # Defensive defaults for missing scores (6D)
             p = getattr(s, 'score_provenance', 0.0) or 0.0
             r = getattr(s, 'score_resonance', 0.0) or 0.0
             c = getattr(s, 'score_coherence', 0.0) or 0.0
             t = getattr(s, 'score_transparency', 0.0) or 0.0
             v = getattr(s, 'score_verification', 0.0) or 0.0
+            ai = getattr(s, 'score_ai_readiness', 0.0) or 0.0
 
             # Base weighted score (0-100). Use weights.get to be resilient.
             base = (
@@ -245,7 +268,8 @@ class ScoringPipeline:
                 r * weights.get('resonance', 0.0) +
                 c * weights.get('coherence', 0.0) +
                 t * weights.get('transparency', 0.0) +
-                v * weights.get('verification', 0.0)
+                v * weights.get('verification', 0.0) +
+                ai * weights.get('ai_readiness', 0.0)
             ) * 100.0
 
             # Metadata bonuses/penalties applied from attributes_cfg
@@ -257,12 +281,22 @@ class ScoringPipeline:
                     meta_title = meta.get('title') or getattr(s, 'title', None) or meta.get('name')
                     meta_desc = meta.get('description') or meta.get('snippet') or getattr(s, 'body', None)
                     meta_url = meta.get('source_url') or meta.get('url') or getattr(s, 'platform_id', None)
+                    meta_modality = meta.get('modality') or getattr(s, 'modality', 'text')
+                    meta_channel = meta.get('channel') or getattr(s, 'channel', 'unknown')
+                    meta_platform_type = meta.get('platform_type') or getattr(s, 'platform_type', 'unknown')
+
                     if meta_title:
                         meta['title'] = meta_title
                     if meta_desc:
                         meta['description'] = meta_desc
                     if meta_url:
                         meta['source_url'] = meta_url
+                    if meta_modality:
+                        meta['modality'] = meta_modality
+                    if meta_channel:
+                        meta['channel'] = meta_channel
+                    if meta_platform_type:
+                        meta['platform_type'] = meta_platform_type
                 else:
                     meta = {}
             except Exception:
@@ -354,17 +388,22 @@ class ScoringPipeline:
             except Exception:
                 pass
 
+            # Build dimension scores dict (6D)
+            dim_scores = {
+                'provenance': p,
+                'resonance': r,
+                'coherence': c,
+                'transparency': t,
+                'verification': v,
+                'ai_readiness': ai,
+            }
+
             per_item_breakdowns.append({
                 'content_id': s.content_id,
                 'source': getattr(s, 'src', ''),
                 'event_ts': getattr(s, 'event_ts', ''),
-                'dimension_scores': {
-                    'provenance': p,
-                    'resonance': r,
-                    'coherence': c,
-                    'transparency': t,
-                    'verification': v,
-                },
+                'dimension_scores': dim_scores,
+                'dimensions': dim_scores,  # Alias for compatibility with markdown_generator
                 'base_score': base,
                 'applied_rules': applied_rules,
                 'final_score': item_score,
@@ -731,6 +770,30 @@ class ScoringPipeline:
                 except Exception:
                     meta_obj = {}
 
+                # Smart fallback: ensure channel/platform_type are set
+                if not meta_obj.get('channel') or meta_obj.get('channel') == 'unknown':
+                    # Try to get from ContentScores attributes first
+                    channel = getattr(s, 'channel', 'unknown')
+                    platform_type = getattr(s, 'platform_type', 'unknown')
+
+                    # If still unknown, derive from src
+                    if channel == 'unknown' or not channel:
+                        src_to_channel = {
+                            'reddit': ('reddit', 'social'),
+                            'youtube': ('youtube', 'social'),
+                            'amazon': ('amazon', 'marketplace'),
+                            'brave': ('web', 'web'),
+                        }
+                        src = getattr(s, 'src', '')
+                        if src in src_to_channel:
+                            channel, platform_type = src_to_channel[src]
+                        else:
+                            channel = src if src else 'unknown'
+                            platform_type = 'unknown'
+
+                    meta_obj['channel'] = channel
+                    meta_obj['platform_type'] = platform_type
+
                 dims = {
                     'provenance': getattr(s, 'score_provenance', None),
                     'resonance': getattr(s, 'score_resonance', None),
@@ -740,7 +803,7 @@ class ScoringPipeline:
                     'ai_readiness': getattr(s, 'score_ai_readiness', None),
                 }
 
-                # Compute a simple mean-based final score when rubric weights are not available here
+                # Compute a simple mean-based final score when rubric weights are not available here (6D)
                 try:
                     vals = [
                         float(getattr(s, 'score_provenance', 0.0) or 0.0),
@@ -748,6 +811,7 @@ class ScoringPipeline:
                         float(getattr(s, 'score_coherence', 0.0) or 0.0),
                         float(getattr(s, 'score_transparency', 0.0) or 0.0),
                         float(getattr(s, 'score_verification', 0.0) or 0.0),
+                        float(getattr(s, 'score_ai_readiness', 0.0) or 0.0),
                     ]
                     from statistics import mean as _mean
                     final_score = float(_mean(vals) * 100.0)
@@ -761,6 +825,7 @@ class ScoringPipeline:
                     'label': getattr(s, 'class_label', None) or '',
                     'meta': meta_obj,
                     'dimension_scores': dims,
+                    'dimensions': dims,  # Alias for markdown_generator compatibility
                 }
 
                 # If a breakdown exists from the AR calc, merge its richer fields

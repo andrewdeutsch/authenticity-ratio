@@ -324,7 +324,8 @@ class ContentScorer:
             'resonance': llm_scores.resonance * 100,
             'coherence': llm_scores.coherence * 100,
             'transparency': llm_scores.transparency * 100,
-            'verification': llm_scores.verification * 100
+            'verification': llm_scores.verification * 100,
+            'ai_readiness': llm_scores.ai_readiness * 100
         }
 
         # Group attributes by dimension
@@ -375,7 +376,8 @@ class ContentScorer:
             resonance=adjusted['resonance'] / 100,
             coherence=adjusted['coherence'] / 100,
             transparency=adjusted['transparency'] / 100,
-            verification=adjusted['verification'] / 100
+            verification=adjusted['verification'] / 100,
+            ai_readiness=adjusted['ai_readiness'] / 100
         )
     
     def _get_llm_score(self, prompt: str) -> float:
@@ -461,6 +463,10 @@ class ContentScorer:
                 is_authentic=False,  # Optional - for backward compatibility
                 rubric_version=self.rubric_version,
                 run_id=content.run_id,
+                # Enhanced Trust Stack fields
+                modality=getattr(content, 'modality', 'text'),
+                channel=getattr(content, 'channel', 'unknown'),
+                platform_type=getattr(content, 'platform_type', 'unknown'),
                 meta=json.dumps(
                     # Build a meta dict that includes scoring info and detected attributes
                     (lambda cm: {
@@ -469,6 +475,11 @@ class ContentScorer:
                         "title": getattr(content, 'title', '') or None,
                         "description": getattr(content, 'body', '') or None,
                         "source_url": (cm.get('source_url') if isinstance(cm, dict) else None) or getattr(content, 'platform_id', None),
+                        # Enhanced Trust Stack metadata
+                        "modality": getattr(content, 'modality', 'text'),
+                        "channel": getattr(content, 'channel', 'unknown'),
+                        "platform_type": getattr(content, 'platform_type', 'unknown'),
+                        "url": getattr(content, 'url', ''),
                         # Include detected attributes for downstream analysis
                         "detected_attributes": [
                             {

@@ -65,7 +65,7 @@ class ContentNormalizer:
             if not cleaned_title and not cleaned_body:
                 continue
             
-            # Create cleaned content object
+            # Create cleaned content object (preserve all fields including enhanced Trust Stack metadata)
             cleaned_content.append(NormalizedContent(
                 content_id=content.content_id,
                 src=content.src,
@@ -78,7 +78,13 @@ class ContentNormalizer:
                 helpful_count=content.helpful_count,
                 event_ts=content.event_ts,
                 run_id=content.run_id,
-                meta=content.meta
+                meta=content.meta,
+                # Preserve enhanced Trust Stack fields
+                url=content.url,
+                published_at=content.published_at,
+                modality=content.modality,
+                channel=content.channel,
+                platform_type=content.platform_type
             ))
         
         return cleaned_content
@@ -97,14 +103,17 @@ class ContentNormalizer:
                         src=content.src
                     )
 
-                # Extract channel info if not already set
-                if content.url and (not content.channel or content.channel == "unknown"):
+                # Extract channel info if not already set (preserve explicitly set channels like 'web')
+                if content.url and (not content.channel or content.channel in ["unknown", ""]):
                     channel, platform_type = self.metadata_extractor.extract_channel_info(
                         content.url,
                         content.src
                     )
                     content.channel = channel
                     content.platform_type = platform_type
+                    logger.debug(f"Enriched {content.content_id}: channel={channel}, platform_type={platform_type}")
+                else:
+                    logger.debug(f"Preserving {content.content_id}: channel={content.channel}, platform_type={content.platform_type}")
 
                 enriched_content.append(content)
 

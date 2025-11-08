@@ -1146,7 +1146,7 @@ Trust performance analysis across different platforms and channel types.
         md += "| Platform Type | Channels | Items | Avg Trust | Status |\n"
         md += "|---------------|----------|-------|-----------|--------|\n"
 
-        for platform_type in ['owned', 'social', 'marketplace', 'email', 'unknown']:
+        for platform_type in ['owned', 'social', 'marketplace', 'email', 'web', 'unknown']:
             if platform_type not in platform_type_data:
                 continue
 
@@ -1175,6 +1175,7 @@ Trust performance analysis across different platforms and channel types.
                 'social': '👥',
                 'marketplace': '🛒',
                 'email': '📧',
+                'web': '🌐',
                 'unknown': '❓'
             }
             icon = icons.get(platform_type, '📄')
@@ -1205,7 +1206,7 @@ Trust performance analysis across different platforms and channel types.
             overall = sum(dim_avgs.values()) / len(dim_avgs) if dim_avgs else 0
 
             # Platform type icon
-            icons = {'owned': '🏢', 'social': '👥', 'marketplace': '🛒', 'email': '📧', 'unknown': '❓'}
+            icons = {'owned': '🏢', 'social': '👥', 'marketplace': '🛒', 'email': '📧', 'web': '🌐', 'unknown': '❓'}
             type_icon = icons.get(platform_type, '📄')
 
             md += f"| {channel} | {type_icon} {platform_type} | {count:,} | "
@@ -1330,9 +1331,21 @@ Trust performance analysis across different platforms and channel types.
             final_score = float(item.get('final_score', 0.0))
             label = (item.get('label') or '').lower()
 
+            # Extract title and URL from meta dict
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    import json
+                    meta = json.loads(meta)
+                except:
+                    meta = {}
+
+            title = meta.get('title') or item.get('title', 'No title')
+            url = meta.get('source_url') or meta.get('url') or item.get('url', 'Unknown URL')
+
             item_data = {
-                'url': item.get('url', 'Unknown URL'),
-                'title': item.get('title', 'No title'),
+                'url': url,
+                'title': title,
                 'score': final_score,
                 'label': label,
                 'source': item.get('source', 'Unknown'),

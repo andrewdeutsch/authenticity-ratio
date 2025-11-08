@@ -272,6 +272,7 @@ def main():
                 for i, c in enumerate(collected):
                     url = c.get('url')
                     content_id = f"brave_{i}_{abs(hash(url or ''))}"
+                    logger.info(f"Creating Brave content: url={url}, setting channel='web', platform_type='web'")
                     meta = {
                         'source_url': url or '',
                         'content_type': 'web'
@@ -294,7 +295,12 @@ def main():
                         body=c.get('body', '') or '',
                         run_id=run_id,
                         event_ts=datetime.now().isoformat(),
-                        meta=meta
+                        meta=meta,
+                        # Enhanced Trust Stack fields
+                        url=url or '',
+                        modality='text',
+                        channel='web',
+                        platform_type='web'
                     )
                     brave_items.append(nc)
                 all_content.extend(brave_items)
@@ -407,7 +413,12 @@ def run_pipeline_for_contents(urls: list, output_dir: str = './output', brand_id
                 body=page.get('body', '') or '',
                 run_id=run_id,
                 event_ts=datetime.now().isoformat(),
-                meta={'content_type': 'web', 'source_url': u, 'terms': page.get('terms',''), 'privacy': page.get('privacy','')}
+                meta={'content_type': 'web', 'source_url': u, 'terms': page.get('terms',''), 'privacy': page.get('privacy','')},
+                # Enhanced Trust Stack fields
+                url=u,
+                modality='text',
+                channel='web',
+                platform_type='web'
             )
             fetched.append(nc)
 
