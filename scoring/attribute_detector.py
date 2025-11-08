@@ -94,6 +94,14 @@ class TrustStackAttributeDetector:
             "review_authenticity_confidence": self._detect_review_authenticity,
             "seller_product_verification_rate": self._detect_seller_verification,
             "verified_purchaser_review_rate": self._detect_verified_purchaser,
+
+            # AI Readiness
+            "schema_compliance": self._detect_schema_compliance,
+            "metadata_completeness": self._detect_metadata_completeness,
+            "llm_retrievability": self._detect_llm_retrievability,
+            "canonical_linking": self._detect_canonical_linking,
+            "indexing_visibility": self._detect_indexing_visibility,
+            "ethical_training_signals": self._detect_ethical_training_signals,
         }
 
         for attr_id, detection_func in detection_methods.items():
@@ -803,3 +811,192 @@ class TrustStackAttributeDetector:
                 evidence="No verified purchase badge",
                 confidence=1.0
             )
+
+    # ===== AI READINESS DETECTORS =====
+
+    def _detect_schema_compliance(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect schema.org compliance"""
+        meta = content.meta or {}
+
+        # Check for schema.org structured data
+        has_schema = any(key in meta for key in ["schema_org", "json_ld", "microdata", "rdfa"])
+        schema_valid = meta.get("schema_valid") != "false"
+
+        if has_schema and schema_valid:
+            value = 10.0
+            evidence = "Complete and valid schema.org markup present"
+        elif has_schema:
+            value = 7.0
+            evidence = "Schema.org markup present but may be incomplete"
+        else:
+            value = 1.0
+            evidence = "No schema.org structured data detected"
+
+        return DetectedAttribute(
+            attribute_id="schema_compliance",
+            dimension="ai_readiness",
+            label="Schema.org Compliance",
+            value=value,
+            evidence=evidence,
+            confidence=0.9
+        )
+
+    def _detect_metadata_completeness(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect metadata completeness"""
+        meta = content.meta or {}
+
+        # Check for key metadata fields
+        required_fields = ["title", "description", "author", "date", "keywords"]
+        present_fields = []
+
+        if content.title and len(content.title.strip()) > 0:
+            present_fields.append("title")
+        if content.body and len(content.body.strip()) > 100:  # Assume body contains description
+            present_fields.append("description")
+        if content.author and len(content.author.strip()) > 0:
+            present_fields.append("author")
+        if content.published_at:
+            present_fields.append("date")
+        if meta.get("keywords") or meta.get("tags"):
+            present_fields.append("keywords")
+
+        # Check OG tags
+        has_og_tags = any(key.startswith("og_") for key in meta.keys())
+        if has_og_tags:
+            present_fields.append("og_tags")
+
+        completeness = len(present_fields) / len(required_fields)
+        value = 1.0 + (completeness * 9.0)  # Scale 1-10
+
+        return DetectedAttribute(
+            attribute_id="metadata_completeness",
+            dimension="ai_readiness",
+            label="Metadata Completeness",
+            value=value,
+            evidence=f"{len(present_fields)}/{len(required_fields)} key metadata fields present",
+            confidence=1.0
+        )
+
+    def _detect_llm_retrievability(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect LLM retrievability (indexability)"""
+        meta = content.meta or {}
+
+        # Check robots meta tag
+        robots_content = meta.get("robots", "").lower()
+        has_noindex = "noindex" in robots_content
+        has_nofollow = "nofollow" in robots_content
+
+        # Check if content is indexable
+        if has_noindex:
+            value = 1.0
+            evidence = "Content has noindex directive - not retrievable by LLMs"
+        elif has_nofollow:
+            value = 5.0
+            evidence = "Content has nofollow directive - limited retrievability"
+        else:
+            # Check if sitemap or other indexing signals exist
+            has_sitemap = meta.get("in_sitemap") == "true"
+            if has_sitemap:
+                value = 10.0
+                evidence = "Fully indexable with sitemap presence"
+            else:
+                value = 8.0
+                evidence = "Indexable but no explicit sitemap signal"
+
+        return DetectedAttribute(
+            attribute_id="llm_retrievability",
+            dimension="ai_readiness",
+            label="LLM Retrievability",
+            value=value,
+            evidence=evidence,
+            confidence=0.9
+        )
+
+    def _detect_canonical_linking(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect canonical URL presence and validity"""
+        meta = content.meta or {}
+
+        canonical_url = meta.get("canonical_url") or meta.get("canonical")
+        current_url = content.url
+
+        if canonical_url:
+            # Check if canonical matches current URL
+            if canonical_url == current_url or canonical_url.rstrip('/') == current_url.rstrip('/'):
+                value = 10.0
+                evidence = "Canonical URL present and matches current URL"
+            else:
+                value = 5.0
+                evidence = f"Canonical URL present but points elsewhere: {canonical_url}"
+        else:
+            value = 1.0
+            evidence = "No canonical URL specified"
+
+        return DetectedAttribute(
+            attribute_id="canonical_linking",
+            dimension="ai_readiness",
+            label="Canonical Linking",
+            value=value,
+            evidence=evidence,
+            confidence=1.0
+        )
+
+    def _detect_indexing_visibility(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect indexing visibility (sitemap, robots.txt)"""
+        meta = content.meta or {}
+
+        has_sitemap = meta.get("has_sitemap") == "true" or meta.get("in_sitemap") == "true"
+        robots_allowed = meta.get("robots_txt_allowed") != "false"
+        has_noindex = "noindex" in meta.get("robots", "").lower()
+
+        # Calculate score based on indexing signals
+        if has_sitemap and robots_allowed and not has_noindex:
+            value = 10.0
+            evidence = "Sitemap present, robots.txt allows crawling, no noindex tag"
+        elif robots_allowed and not has_noindex:
+            value = 7.0
+            evidence = "Indexable but no sitemap detected"
+        elif has_noindex:
+            value = 1.0
+            evidence = "Noindex tag prevents indexing"
+        else:
+            value = 3.0
+            evidence = "Limited indexing signals"
+
+        return DetectedAttribute(
+            attribute_id="indexing_visibility",
+            dimension="ai_readiness",
+            label="Indexing Visibility",
+            value=value,
+            evidence=evidence,
+            confidence=0.8
+        )
+
+    def _detect_ethical_training_signals(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect AI training opt-out/ethical signals"""
+        meta = content.meta or {}
+
+        # Check for TDM (Text and Data Mining) reservations
+        has_tdm_reservation = any(key in meta for key in ["tdm_reservation", "ai_training_optout", "robots_tdm"])
+
+        # Check robots.txt for AI crawler directives
+        robots_txt = meta.get("robots_txt", "").lower()
+        has_ai_directive = any(bot in robots_txt for bot in ["gptbot", "ccbot", "anthropic-ai", "claude-web"])
+
+        if has_tdm_reservation or has_ai_directive:
+            value = 10.0
+            evidence = "Clear AI training opt-out or TDM reservation signals present"
+        elif meta.get("copyright") or meta.get("rights"):
+            value = 5.0
+            evidence = "Copyright/rights metadata present (ambiguous AI training policy)"
+        else:
+            value = 1.0
+            evidence = "No AI training policy or TDM reservation signals"
+
+        return DetectedAttribute(
+            attribute_id="ethical_training_signals",
+            dimension="ai_readiness",
+            label="Ethical Training Signals",
+            value=value,
+            evidence=evidence,
+            confidence=0.7
+        )
