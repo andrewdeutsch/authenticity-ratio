@@ -65,7 +65,7 @@ class ContentNormalizer:
             if not cleaned_title and not cleaned_body:
                 continue
             
-            # Create cleaned content object
+            # Create cleaned content object (preserve all fields including enhanced Trust Stack metadata)
             cleaned_content.append(NormalizedContent(
                 content_id=content.content_id,
                 src=content.src,
@@ -78,7 +78,13 @@ class ContentNormalizer:
                 helpful_count=content.helpful_count,
                 event_ts=content.event_ts,
                 run_id=content.run_id,
-                meta=content.meta
+                meta=content.meta,
+                # Preserve enhanced Trust Stack fields
+                url=content.url,
+                published_at=content.published_at,
+                modality=content.modality,
+                channel=content.channel,
+                platform_type=content.platform_type
             ))
         
         return cleaned_content

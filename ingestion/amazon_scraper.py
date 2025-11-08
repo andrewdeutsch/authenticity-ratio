@@ -231,7 +231,12 @@ class AmazonScraper:
                 helpful_count=float(review.helpful_count),
                 event_ts=review.review_date,
                 run_id=run_id,
-                meta=meta
+                meta=meta,
+                # Enhanced Trust Stack fields
+                url=f"https://www.amazon.com/dp/{review.product_id}",
+                modality="text",
+                channel="amazon",
+                platform_type="marketplace"
             ))
         
         return normalized_content

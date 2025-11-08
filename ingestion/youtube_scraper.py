@@ -203,7 +203,12 @@ class YouTubeScraper:
                 helpful_count=None,
                 event_ts=event_ts,
                 run_id=run_id,
-                meta={**meta, 'content_type': 'video'}
+                meta={**meta, 'content_type': 'video'},
+                # Enhanced Trust Stack fields
+                url=youtube_url,
+                modality="video",
+                channel="youtube",
+                platform_type="social"
             ))
 
             # Respect global setting if not explicitly provided
@@ -236,7 +241,12 @@ class YouTubeScraper:
                         helpful_count=None,
                         event_ts=comment_ts,
                         run_id=run_id,
-                        meta={**meta_comment, 'content_type': 'comment'}
+                        meta={**meta_comment, 'content_type': 'comment'},
+                        # Enhanced Trust Stack fields
+                        url=youtube_url,
+                        modality="text",
+                        channel="youtube",
+                        platform_type="social"
                     ))
 
         return normalized
