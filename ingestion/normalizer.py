@@ -103,14 +103,17 @@ class ContentNormalizer:
                         src=content.src
                     )
 
-                # Extract channel info if not already set
-                if content.url and (not content.channel or content.channel == "unknown"):
+                # Extract channel info if not already set (preserve explicitly set channels like 'web')
+                if content.url and (not content.channel or content.channel in ["unknown", ""]):
                     channel, platform_type = self.metadata_extractor.extract_channel_info(
                         content.url,
                         content.src
                     )
                     content.channel = channel
                     content.platform_type = platform_type
+                    logger.debug(f"Enriched {content.content_id}: channel={channel}, platform_type={platform_type}")
+                else:
+                    logger.debug(f"Preserving {content.content_id}: channel={content.channel}, platform_type={content.platform_type}")
 
                 enriched_content.append(content)
 

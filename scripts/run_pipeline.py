@@ -272,6 +272,7 @@ def main():
                 for i, c in enumerate(collected):
                     url = c.get('url')
                     content_id = f"brave_{i}_{abs(hash(url or ''))}"
+                    logger.info(f"Creating Brave content: url={url}, setting channel='web', platform_type='web'")
                     meta = {
                         'source_url': url or '',
                         'content_type': 'web'
