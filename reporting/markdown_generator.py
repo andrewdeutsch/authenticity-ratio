@@ -266,20 +266,20 @@ class MarkdownReportGenerator:
     def _format_dimension_name(self, dim_name: str) -> str:
         """
         Format dimension names consistently for display.
-        Handles special case of AI Readiness.
+        Handles special case of .
 
         Args:
-            dim_name: Raw dimension name (e.g., 'ai_readiness', 'Ai_Readiness')
+            dim_name: Raw dimension name (e.g., 'Ai_Readiness')
 
         Returns:
-            Properly formatted name (e.g., 'AI Readiness')
+            Properly formatted name (e.g., '')
         """
         if not dim_name:
             return ""
 
-        # Special case for AI Readiness
-        if dim_name.lower() in ('ai_readiness', 'aireadiness'):
-            return "AI Readiness"
+        # Special case for 
+        if dim_name.lower() in ('aireadiness'):
+            return ""
 
         # General case: replace underscores and title case
         return dim_name.replace('_', ' ').title()
@@ -305,7 +305,7 @@ class MarkdownReportGenerator:
         if notable_examples:
             content.append(notable_examples)
 
-        # Attribute-level analysis (NEW: 6D Trust Stack enhancement)
+        # Attribute-level analysis (NEW: 5D Trust Stack enhancement)
         content.append(self._create_attribute_analysis(report_data))
 
         # Modality breakdown (NEW: Content type analysis)
@@ -410,8 +410,7 @@ class MarkdownReportGenerator:
             'verification': 'Alignment with authoritative brand data',
             'transparency': 'Clarity of ownership and disclosure',
             'coherence': 'Consistency with brand messaging',
-            'resonance': 'Authentic audience engagement',
-            'ai_readiness': 'Machine discoverability and LLM-readable signals'
+            'resonance': 'Authentic audience engagement'
         }
 
         weakest_dim = None
@@ -419,7 +418,7 @@ class MarkdownReportGenerator:
         strongest_dim = None
         strongest_score = 0.0
 
-        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
             stats = dimension_breakdown.get(dim, {})
             avg = stats.get('average', 0.0)
 
@@ -448,7 +447,7 @@ class MarkdownReportGenerator:
 
         # Build interpretation paragraph focused on dimensions
         interp = (
-            f"Analysis of {total_items:,} brand-related content items reveals trust patterns across six dimensions. "
+            f"Analysis of {total_items:,} brand-related content items reveals trust patterns across five dimensions. "
             f"**{self._format_dimension_name(strongest_dim)}** is the strongest dimension ({strongest_score:.3f}), "
             f"while **{self._format_dimension_name(weakest_dim)}** ({weakest_score:.3f}) requires attention. "
         )
@@ -464,9 +463,7 @@ class MarkdownReportGenerator:
             interp += "The low coherence scores indicate inconsistent messaging that may signal unofficial content."
         elif weakest_dim == 'resonance':
             interp += "The low resonance scores suggest engagement patterns don't align with authentic brand communities."
-        elif weakest_dim == 'ai_readiness':
-            interp += "The low AI readiness scores indicate missing structured data, schema markup, or metadata that limits machine discoverability."
-
+        
         # Build images (heatmap, trendline, channel breakdown) and include them if created
         visuals_md = []
         # Heatmap from dimension breakdown
@@ -903,7 +900,7 @@ class MarkdownReportGenerator:
         dimension_data = report_data.get('dimension_breakdown', {})
         
         if not dimension_data:
-            return "## 6D Trust Dimensions Analysis\n\n*No dimension data available*"
+            return "## 5D Trust Dimensions Analysis\n\n*No dimension data available*"
         
         # Create dimension scores table
         table_rows = ["| Dimension | Average | Min | Max | Std Dev |"]
@@ -920,8 +917,7 @@ class MarkdownReportGenerator:
             'verification': 'Factual accuracy and consistency with trusted sources',
             'transparency': 'Clear disclosures and honest communication',
             'coherence': 'Consistency with brand messaging and professional quality',
-            'resonance': 'Cultural fit and authentic engagement patterns',
-            'ai_readiness': 'Machine-readable structured data, schema markup, and LLM discoverability'
+            'resonance': 'Cultural fit and authentic engagement patterns'
         }
         
         dimension_details = []
@@ -941,7 +937,7 @@ class MarkdownReportGenerator:
             
             dimension_details.append(f"**{self._format_dimension_name(dimension)}** ({indicator}): {description}")
         
-        return f"""## 6D Trust Dimensions Analysis
+        return f"""## 5D Trust Dimensions Analysis
 
 ### Dimension Scores
 
@@ -959,7 +955,7 @@ Each dimension is scored on a scale of 0.0 to 1.0:
 - **0.4-0.6**: Moderate performance
 - **0.0-0.4**: Poor performance
 
-Each dimension is independently scored and combined to form a comprehensive trust profile, with equal weighting (16.7% each) across all six dimensions."""
+Each dimension is independently scored and combined to form a comprehensive trust profile, with equal weighting (16.7% each) across all five dimensions."""
 
     def _format_critical_attributes(self, report_data: Dict[str, Any]) -> str:
         """Generate a summary table of top 5 most critical attributes across all dimensions."""
@@ -1097,7 +1093,7 @@ Attribute detection analyzes specific trust signals such as:
 - **Coherence** (18 attributes): Brand voice consistency, claim consistency, temporal continuity, etc.
 - **Transparency** (10 attributes): AI disclosure, bot disclosure, data citations, privacy policies, etc.
 - **Verification** (19 attributes): Ad labels, engagement authenticity, review authenticity, etc.
-- **AI Readiness** (6 attributes): Schema.org compliance, metadata completeness, LLM retrievability, etc.
+- ****: Schema.org compliance, metadata completeness, LLM retrievability, etc.
 
 Enable attribute detection in your next run to see granular scoring."""
 
@@ -1140,7 +1136,7 @@ Analyzed **{len(appendix):,} content items** across **{total_possible_attrs} Tru
 """
 
         # Create tables for each dimension
-        for dimension in ['provenance', 'resonance', 'coherence', 'transparency', 'verification', 'ai_readiness']:
+        for dimension in ['provenance', 'resonance', 'coherence', 'transparency', 'verification']:
             dim_attrs = attrs_by_dimension.get(dimension, [])
 
             if not dim_attrs:
@@ -1217,14 +1213,14 @@ Analyzed **{len(appendix):,} content items** across **{total_possible_attrs} Tru
             if modality not in modality_data:
                 modality_data[modality] = {
                     'count': 0,
-                    'dimensions': {dim: [] for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']}
+                    'dimensions': {dim: [] for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']}
                 }
 
             modality_data[modality]['count'] += 1
 
             # Extract dimension scores
             dimensions = item.get('dimensions', {})
-            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
                 score = dimensions.get(dim)
                 if score is not None:
                     modality_data[modality]['dimensions'][dim].append(score)
@@ -1301,7 +1297,7 @@ Analysis of trust performance across different content types (text, image, video
             md += "| Dimension | Avg Score | Min | Max | Samples |\n"
             md += "|-----------|-----------|-----|-----|----------|\n"
 
-            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
                 scores = data['dimensions'][dim]
                 if not scores:
                     continue
@@ -1366,7 +1362,7 @@ Analysis of trust performance across different content types (text, image, video
                 channel_data[channel] = {
                     'count': 0,
                     'platform_type': platform_type,
-                    'dimensions': {dim: [] for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']}
+                    'dimensions': {dim: [] for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']}
                 }
 
             channel_data[channel]['count'] += 1
@@ -1376,7 +1372,7 @@ Analysis of trust performance across different content types (text, image, video
                 platform_type_data[platform_type] = {
                     'count': 0,
                     'channels': set(),
-                    'dimensions': {dim: [] for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']}
+                    'dimensions': {dim: [] for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']}
                 }
 
             platform_type_data[platform_type]['count'] += 1
@@ -1384,7 +1380,7 @@ Analysis of trust performance across different content types (text, image, video
 
             # Extract dimension scores
             dimensions = item.get('dimensions', {})
-            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
                 score = dimensions.get(dim)
                 if score is not None:
                     channel_data[channel]['dimensions'][dim].append(score)
@@ -1445,7 +1441,7 @@ Trust performance analysis across different platforms and channel types.
 
         # Channel detail table
         md += "\n---\n\n### Trust Scores by Channel\n\n"
-        md += "| Channel | Type | Items | Provenance | Verification | Transparency | Coherence | Resonance | AI Readiness | Overall |\n"
+        md += "| Channel | Type | Items | Provenance | Verification | Transparency | Coherence | Resonance | Overall |\n"
         md += "|---------|------|-------|------------|--------------|--------------|-----------|-----------|--------------|----------|\n"
 
         # Sort channels by count (descending)
@@ -1460,7 +1456,7 @@ Trust performance analysis across different platforms and channel types.
 
             # Calculate dimension averages
             dim_avgs = {}
-            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+            for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
                 scores = data['dimensions'][dim]
                 dim_avgs[dim] = sum(scores) / len(scores) if scores else 0
 
@@ -1476,7 +1472,7 @@ Trust performance analysis across different platforms and channel types.
             md += f"{dim_avgs.get('transparency', 0):.2f} | "
             md += f"{dim_avgs.get('coherence', 0):.2f} | "
             md += f"{dim_avgs.get('resonance', 0):.2f} | "
-            md += f"{dim_avgs.get('ai_readiness', 0):.2f} | "
+            md += f"{dim_avgs.get(0):.2f} | "
             md += f"**{overall:.2f}** |\n"
 
         md += "\n---\n\n### Key Insights\n\n"
@@ -1549,7 +1545,7 @@ Trust performance analysis across different platforms and channel types.
 
 ### Classification Definitions
 
-- **High Trust**: Content that meets trust standards across all six dimensions with high confidence (score ≥0.70)
+- **High Trust**: Content that meets trust standards across all five dimensions with high confidence (score ≥0.70)
 - **Moderate Trust**: Content that shows mixed trust signals and requires additional verification (score 0.50-0.69)
 - **Low Trust**: Content that fails trust criteria or shows weak dimensional scores (score <0.50)
 
@@ -1830,14 +1826,7 @@ Trust performance analysis across different platforms and channel types.
                     'difficulty': 'Hard',
                     'success_criteria': 'Attribute score above 7.0'
                 },
-                'ai_readiness': {
-                    'action': 'Add structured data and improve machine readability',
-                    'tools': ['Schema.org tools', 'Metadata validators'],
-                    'timeline': '2-4 weeks',
-                    'difficulty': 'Medium',
-                    'success_criteria': 'Attribute score above 7.0'
                 }
-            }
             return generic.get(dimension, {
                 'action': 'Review and improve this attribute',
                 'tools': ['Manual review'],
@@ -1857,7 +1846,7 @@ Trust performance analysis across different platforms and channel types.
         weakest_dim = None
         weakest_score = 1.0
 
-        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']:
+        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
             stats = dimension_breakdown.get(dim, {})
             avg = stats.get('average', 0.0)
             dimension_scores[dim] = avg
@@ -2208,8 +2197,7 @@ The following attribute improvements are prioritized by **impact score** (gap ×
             'transparency': "Enhance disclosure practices, authorship clarity, and ownership transparency",
             'coherence': "Ensure brand messaging consistency, professional quality, and tone alignment",
             'resonance': "Foster authentic engagement patterns and cultural fit with brand values",
-            'ai_readiness': "Add schema.org markup, improve metadata completeness, and enhance LLM discoverability"
-        }
+            }
 
         low_items = context['low_trust_items'][:3]
         low_items_text = "\n".join([f"- {item['title']} — {item['url']}" for item in low_items]) if low_items else "- No low trust items found"
@@ -2263,7 +2251,7 @@ The following attribute improvements are prioritized by **impact score** (gap ×
 
 **Trust Stack™** is a 6-dimensional framework for evaluating brand content authenticity across digital channels.
 
-This report provides actionable insights for brand health and content strategy based on comprehensive trust dimension analysis: **Provenance**, **Verification**, **Transparency**, **Coherence**, **Resonance**, and **AI Readiness**.
+This report provides actionable insights for brand health and content strategy based on comprehensive trust dimension analysis: **Provenance**, **Verification**, **Transparency**, **Coherence**, **Resonance**, and ****.
 
 ### Learn More
 
@@ -2555,8 +2543,8 @@ This report provides actionable insights for brand health and content strategy b
 
                         # Helper to format dimension names (will be enhanced in Phase 1, Change #5)
                         def format_dim_name(dim_name):
-                            if dim_name.lower() in ('ai_readiness', 'aireadiness'):
-                                return 'AI Readiness'
+                            if dim_name.lower() in ('aireadiness'):
+                                return ''
                             return dim_name.replace('_', ' ').title()
 
                         strongest_str = f"{format_dim_name(strongest[0])} ({strongest[1]:.2f})"
@@ -2600,16 +2588,15 @@ This report provides actionable insights for brand health and content strategy b
         if not dims:
             return ""
 
-        labels = ['Provenance', 'Verification', 'Transparency', 'Coherence', 'Resonance', 'AI Readiness']
-        # Map labels to dimension keys (AI Readiness -> ai_readiness)
+        labels = ['Provenance', 'Verification', 'Transparency', 'Coherence', 'Resonance', '']
+        # Map labels to dimension keys (dimension labels to keys)
         label_to_key = {
             'Provenance': 'provenance',
             'Verification': 'verification',
             'Transparency': 'transparency',
             'Coherence': 'coherence',
             'Resonance': 'resonance',
-            'AI Readiness': 'ai_readiness'
-        }
+            }
         values = [dims.get(label_to_key[k], {}).get('average', 0.0) for k in labels]
         if sum(values) == 0:
             return ""
@@ -2625,7 +2612,7 @@ This report provides actionable insights for brand health and content strategy b
         ax.set_yticks([])
         ax.set_xticks(range(len(labels)))
         ax.set_xticklabels(labels, rotation=45, ha='right')
-        ax.set_title('6D Trust Dimensions (average scores)')
+        ax.set_title('5D Trust Dimensions (average scores)')
         plt.tight_layout()
         fig.savefig(img_path, dpi=150)
         plt.close(fig)

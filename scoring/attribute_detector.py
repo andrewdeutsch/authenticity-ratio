@@ -95,7 +95,7 @@ class TrustStackAttributeDetector:
             "seller_product_verification_rate": self._detect_seller_verification,
             "verified_purchaser_review_rate": self._detect_verified_purchaser,
 
-            # AI Readiness
+            # 
             "schema_compliance": self._detect_schema_compliance,
             "metadata_completeness": self._detect_metadata_completeness,
             "llm_retrievability": self._detect_llm_retrievability,
@@ -832,9 +832,6 @@ class TrustStackAttributeDetector:
             value = 1.0
             evidence = "No schema.org structured data detected"
 
-        return DetectedAttribute(
-            attribute_id="schema_compliance",
-            dimension="ai_readiness",
             label="Schema.org Compliance",
             value=value,
             evidence=evidence,
@@ -870,7 +867,6 @@ class TrustStackAttributeDetector:
 
         return DetectedAttribute(
             attribute_id="metadata_completeness",
-            dimension="ai_readiness",
             label="Metadata Completeness",
             value=value,
             evidence=f"{len(present_fields)}/{len(required_fields)} key metadata fields present",
@@ -905,7 +901,6 @@ class TrustStackAttributeDetector:
 
         return DetectedAttribute(
             attribute_id="llm_retrievability",
-            dimension="ai_readiness",
             label="LLM Retrievability",
             value=value,
             evidence=evidence,
@@ -933,7 +928,6 @@ class TrustStackAttributeDetector:
 
         return DetectedAttribute(
             attribute_id="canonical_linking",
-            dimension="ai_readiness",
             label="Canonical Linking",
             value=value,
             evidence=evidence,
@@ -964,7 +958,6 @@ class TrustStackAttributeDetector:
 
         return DetectedAttribute(
             attribute_id="indexing_visibility",
-            dimension="ai_readiness",
             label="Indexing Visibility",
             value=value,
             evidence=evidence,
@@ -994,7 +987,6 @@ class TrustStackAttributeDetector:
 
         return DetectedAttribute(
             attribute_id="ethical_training_signals",
-            dimension="ai_readiness",
             label="Ethical Training Signals",
             value=value,
             evidence=evidence,

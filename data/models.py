@@ -71,7 +71,6 @@ class ContentScores:
     score_coherence: float
     score_transparency: float
     score_verification: float
-    score_ai_readiness: float = 0.5  # Default to neutral if not provided for backward compatibility
     class_label: str = ""  # Legacy field - optional for backward compatibility
     is_authentic: bool = False  # Legacy field - optional
     rubric_version: str = "v2.0-trust-stack"
@@ -94,8 +93,7 @@ class ContentScores:
             self.score_resonance * weights.resonance +
             self.score_coherence * weights.coherence +
             self.score_transparency * weights.transparency +
-            self.score_verification * weights.verification +
-            self.score_ai_readiness * weights.ai_readiness
+            self.score_verification * weights.verification
         )
 
     # Trust Stack Rating properties (0-100 scale)
@@ -125,11 +123,6 @@ class ContentScores:
         return self.score_verification * 100
 
     @property
-    def rating_ai_readiness(self) -> float:
-        """AI Readiness rating on 0-100 scale"""
-        return self.score_ai_readiness * 100
-
-    @property
     def rating_comprehensive(self) -> float:
         """Comprehensive rating (weighted average) on 0-100 scale"""
         return self.overall_score * 100
@@ -154,7 +147,7 @@ ContentRatings = ContentScores
 class DetectedAttribute:
     """Represents a Trust Stack attribute detected in content"""
     attribute_id: str
-    dimension: str  # provenance, resonance, coherence, transparency, verification
+    dimension: str  # provenance, resonance, coherence, transparency, verification (5 dimensions)
     label: str
     value: float  # 1-10 rating from Trust Stack scoring rules
     evidence: str  # What triggered the detection

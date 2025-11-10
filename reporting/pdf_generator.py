@@ -61,16 +61,11 @@ def generate_rating_recommendation_pdf(avg_rating: float, dimension_breakdown: D
             'name': 'Resonance',
             'recommendation': 'increase authentic engagement with your audience, reduce promotional language, and ensure cultural relevance in messaging',
             'description': 'audience engagement'
-        },
-        'ai_readiness': {
-            'name': 'AI Readiness',
-            'recommendation': 'optimize content for LLM discovery by adding structured data, improving semantic HTML markup, and including machine-readable metadata',
-            'description': 'machine discoverability'
         }
     }
 
     # Find lowest-performing dimension
-    dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']
+    dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance']
     dimension_scores = {
         key: dimension_breakdown.get(key, {}).get('average', 0.5) * 100  # Convert to 0-100 scale
         for key in dimension_keys
@@ -336,8 +331,7 @@ class PDFReportGenerator:
                         'verification': 'add citations to authoritative sources and fact-check all claims',
                         'transparency': 'add disclosure statements and clear attribution for all sourced information',
                         'coherence': 'ensure messaging aligns with your brand voice across all channels',
-                        'resonance': 'reduce promotional language and increase authentic, culturally relevant messaging',
-                        'ai_readiness': 'add structured data markup and improve semantic HTML for better machine discoverability'
+                        'resonance': 'reduce promotional language and increase authentic, culturally relevant messaging': 'add structured data markup and improve semantic HTML for better machine discoverability'
                     }
 
                     action = dim_actions.get(weakest_dim[0], 'improve trust signals')
@@ -381,7 +375,7 @@ class PDFReportGenerator:
                 f"<b>Overall Assessment: Excellent</b><br/><br/>"
                 f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
                 f"of <b>{avg_rating:.1f}/100</b>, placing it in the Excellent category. This indicates high-quality, "
-                f"verified content with strong trust signals across all six dimensions. "
+                f"verified content with strong trust signals across all five dimensions. "
                 f"{excellent} items ({excellent/max(total_items, 1)*100:.1f}%) achieved excellent ratings (80+), "
                 f"demonstrating consistent quality standards.<br/><br/>"
                 f"<b>Key Recommendation:</b> {recommendation}"
@@ -450,8 +444,8 @@ class PDFReportGenerator:
             "Each content item is evaluated across six trust dimensions using a comprehensive 0-100 scoring rubric. "
             "The dimensions measure: <b>Provenance</b> (origin and traceability), <b>Verification</b> (factual accuracy), "
             "<b>Transparency</b> (disclosure and clarity), <b>Coherence</b> (cross-channel consistency), "
-            "<b>Resonance</b> (audience engagement), and <b>AI Readiness</b> (machine discoverability). "
-            "The comprehensive rating is calculated as a weighted average across all six dimensions."
+            "<b>Resonance</b> (audience engagement), and <b></b> (machine discoverability). "
+            "The comprehensive rating is calculated as a weighted average across all five dimensions."
         )
         story.append(Paragraph(framework_text, self.styles['Normal']))
 
@@ -491,7 +485,7 @@ class PDFReportGenerator:
         story.append(Spacer(1, 15))
 
         # Dimension scores chart
-        story.append(Paragraph("<b>6D Trust Dimensions Scores</b>", self.styles['Heading3']))
+        story.append(Paragraph("<b>5D Trust Dimensions Scores</b>", self.styles['Heading3']))
         story.append(Paragraph(
             "The radar chart below visualizes your brand's performance across all six trust dimensions. "
             "Scores closer to the outer edge indicate stronger performance in that dimension.",
@@ -599,16 +593,7 @@ class PDFReportGenerator:
                     'medium': 'Reduce overly promotional language and increase authentic engagement.',
                     'low': 'Increase authentic engagement with your audience, reduce promotional language significantly, and ensure cultural relevance in messaging.'
                 }
-            },
-            'ai_readiness': {
-                'name': 'AI Readiness',
-                'description': 'Assesses machine discoverability and LLM-readability.',
-                'icon': '🤖',
-                'actions': {
-                    'high': 'Your content is well-optimized for AI discovery - continue using structured data.',
-                    'medium': 'Add more structured data and improve semantic HTML markup.',
-                    'low': 'Optimize content for LLM discovery by adding structured data, improving semantic HTML markup, and including machine-readable metadata.'
-                }
+            }
             }
         }
 
@@ -811,7 +796,7 @@ class PDFReportGenerator:
             trans = dim_scores.get('transparency', 0) * 100 if dim_scores.get('transparency') is not None else 0
             coher = dim_scores.get('coherence', 0) * 100 if dim_scores.get('coherence') is not None else 0
             reson = dim_scores.get('resonance', 0) * 100 if dim_scores.get('resonance') is not None else 0
-            ai = dim_scores.get('ai_readiness', 0) * 100 if dim_scores.get('ai_readiness') is not None else 0
+            ai = dim_scores.get(0) * 100 if dim_scores.get() is not None else 0
 
             table_data.append([
                 title,
@@ -1094,7 +1079,7 @@ class PDFReportGenerator:
         explanation = (
             "Each content item receives a comprehensive rating (0-100) calculated as a weighted average "
             "across six trust dimensions: Provenance, Verification, Transparency, Coherence, Resonance, "
-            "and AI Readiness. Detected trust attributes (e.g., SSL certificates, schema markup, author "
+            ". Detected trust attributes (e.g., SSL certificates, schema markup, author "
             "attribution) provide bonuses or penalties to the base dimensional scores."
         )
         story.append(Paragraph(explanation, self.styles['Normal']))
@@ -1197,7 +1182,7 @@ class PDFReportGenerator:
         """Create dimension breakdown section"""
         story = []
 
-        story.append(Paragraph("6D Trust Dimensions Analysis", self.styles['SectionHeader']))
+        story.append(Paragraph("5D Trust Dimensions Analysis", self.styles['SectionHeader']))
         
         dimension_data = report_data.get('dimension_breakdown', {})
         
@@ -1382,7 +1367,7 @@ class PDFReportGenerator:
             # Customize chart
             ax.set_ylim(0, 1)
             ax.set_ylabel('Average Score')
-            ax.set_title('6D Trust Dimensions - Average Scores', fontsize=14, fontweight='bold')
+            ax.set_title('5D Trust Dimensions - Average Scores', fontsize=14, fontweight='bold')
             ax.grid(True, alpha=0.3)
             
             # Add value labels on bars

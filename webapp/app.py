@@ -64,16 +64,11 @@ def generate_rating_recommendation(avg_rating: float, dimension_breakdown: Dict[
             'name': 'Resonance',
             'recommendation': 'increase authentic engagement with your audience, reduce promotional language, and ensure cultural relevance in messaging',
             'description': 'audience engagement'
-        },
-        'ai_readiness': {
-            'name': 'AI Readiness',
-            'recommendation': 'optimize content for LLM discovery by adding structured data, improving semantic HTML markup, and including machine-readable metadata',
-            'description': 'machine discoverability'
         }
     }
 
     # Find lowest-performing dimension
-    dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']
+    dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance']
     dimension_scores = {
         key: dimension_breakdown.get(key, {}).get('average', 0.5) * 100  # Convert to 0-100 scale
         for key in dimension_keys
@@ -208,9 +203,9 @@ def show_home_page():
 
     st.divider()
 
-    # 6D Trust Dimensions
-    st.markdown("### 🔍 6D Trust Dimensions")
-    st.markdown("Each piece of content is scored 0-100 on six dimensions:")
+    # 5D Trust Dimensions
+    st.markdown("### 🔍 5D Trust Dimensions")
+    st.markdown("Each piece of content is scored 0-100 on five dimensions:")
 
     dimensions_cols = st.columns(3)
 
@@ -219,8 +214,7 @@ def show_home_page():
         ("Verification", "✓", "Factual accuracy vs. trusted databases"),
         ("Transparency", "👁", "Disclosures, clarity, attribution"),
         ("Coherence", "🔄", "Consistency across channels and time"),
-        ("Resonance", "📢", "Cultural fit, organic engagement"),
-        ("AI Readiness", "🤖", "Machine discoverability, LLM-readable signals")
+        ("Resonance", "📢", "Cultural fit, organic engagement")
     ]
 
     for idx, (name, icon, desc) in enumerate(dimensions):
@@ -290,7 +284,7 @@ def show_analyze_page():
 
             # Brave (always available)
             use_brave = st.checkbox("🌐 Web Search (Brave)", value=True, help="Search web content via Brave Search")
-            brave_pages = st.number_input("Web pages to fetch", min_value=1, max_value=20, value=10, step=1) if use_brave else 10
+            brave_pages = st.number_input("Web pages to fetch", min_value=1, max_value=100, value=10, step=1) if use_brave else 10
 
             # Reddit
             reddit_available = bool(cfg.reddit_client_id and cfg.reddit_client_secret)
@@ -313,13 +307,77 @@ def show_analyze_page():
 
         st.divider()
 
-        col_submit, col_clear = st.columns([1, 4])
+        col_search, col_submit, col_clear = st.columns([1, 1, 3])
+        with col_search:
+            search_urls = st.form_submit_button("🔍 Search URLs", use_container_width=True)
         with col_submit:
             submit = st.form_submit_button("▶️ Run Analysis", type="primary", use_container_width=True)
         with col_clear:
             if st.form_submit_button("Clear Results", use_container_width=True):
                 st.session_state['last_run'] = None
+                st.session_state['found_urls'] = None
                 st.rerun()
+
+    # Handle URL search
+    if search_urls:
+        # Validate inputs
+        if not brand_id or not keywords:
+            st.error("⚠️ Brand ID and Keywords are required")
+            return
+
+        # Build sources list
+        sources = []
+        if use_brave:
+            sources.append('brave')
+        if use_reddit:
+            sources.append('reddit')
+        if use_youtube:
+            sources.append('youtube')
+
+        if not sources:
+            st.error("⚠️ Please select at least one data source")
+            return
+
+        # Search for URLs without running analysis
+        search_for_urls(brand_id, keywords.split(), sources, brave_pages)
+
+    # Display found URLs for selection
+    if 'found_urls' in st.session_state and st.session_state['found_urls']:
+        st.markdown("### 📋 Found URLs")
+        st.markdown("Select the URLs you want to include in the analysis:")
+
+        found_urls = st.session_state['found_urls']
+
+        # Add select all / deselect all buttons
+        col_sel_all, col_desel_all = st.columns(2)
+        with col_sel_all:
+            if st.button("✓ Select All"):
+                for url_data in found_urls:
+                    url_data['selected'] = True
+                st.rerun()
+        with col_desel_all:
+            if st.button("✗ Deselect All"):
+                for url_data in found_urls:
+                    url_data['selected'] = False
+                st.rerun()
+
+        # Display URLs with checkboxes
+        for idx, url_data in enumerate(found_urls):
+            col1, col2 = st.columns([1, 10])
+            with col1:
+                url_data['selected'] = st.checkbox(
+                    "Select",
+                    value=url_data.get('selected', True),
+                    key=f"url_{idx}",
+                    label_visibility="collapsed"
+                )
+            with col2:
+                # Show brand-owned indicator
+                brand_indicator = "🏢 Brand-owned" if url_data.get('is_brand_owned', False) else "🌐 Third-party"
+                st.markdown(f"**{brand_indicator}** | {url_data['title'][:80]}...")
+                st.caption(f"🔗 {url_data['url']}")
+
+        st.info(f"📊 Selected {sum(1 for u in found_urls if u.get('selected', True))} of {len(found_urls)} URLs")
 
     if submit:
         # Validate inputs
@@ -340,11 +398,71 @@ def show_analyze_page():
             st.error("⚠️ Please select at least one data source")
             return
 
+        # Check if URLs were searched and selected
+        selected_urls = None
+        if 'found_urls' in st.session_state and st.session_state['found_urls']:
+            selected_urls = [u for u in st.session_state['found_urls'] if u.get('selected', True)]
+            if not selected_urls:
+                st.error("⚠️ Please select at least one URL to analyze")
+                return
+
         # Run pipeline
-        run_analysis(brand_id, keywords.split(), sources, max_items, brave_pages, include_comments)
+        run_analysis(brand_id, keywords.split(), sources, max_items, brave_pages, include_comments, selected_urls)
 
 
-def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_items: int, brave_pages: int, include_comments: bool):
+def detect_brand_owned_url(url: str, brand_id: str) -> bool:
+    """
+    Detect if a URL is a brand-owned property.
+
+    Simple heuristic: check if brand_id appears in the domain name.
+    Can be enhanced with more sophisticated logic.
+    """
+    from urllib.parse import urlparse
+    try:
+        domain = urlparse(url).netloc.lower()
+        # Remove www. prefix
+        domain = domain.replace('www.', '')
+        # Check if brand_id is in domain
+        return brand_id.lower() in domain
+    except:
+        return False
+
+
+def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brave_pages: int):
+    """Search for URLs and store them in session state for user selection"""
+    from ingestion.brave_search import search_brave
+
+    with st.spinner("🔍 Searching for URLs..."):
+        found_urls = []
+
+        # For now, only implement Brave search (Reddit and YouTube can be added later)
+        if 'brave' in sources:
+            query = ' '.join(keywords)
+            try:
+                search_results = search_brave(query, size=brave_pages)
+
+                for result in search_results:
+                    url = result.get('url', '')
+                    if url:
+                        is_brand_owned = detect_brand_owned_url(url, brand_id)
+                        found_urls.append({
+                            'url': url,
+                            'title': result.get('title', 'No title'),
+                            'description': result.get('description', ''),
+                            'is_brand_owned': is_brand_owned,
+                            'selected': True,  # Default to selected
+                            'source': 'brave'
+                        })
+
+                st.session_state['found_urls'] = found_urls
+                st.success(f"✓ Found {len(found_urls)} URLs")
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"Error searching for URLs: {str(e)}")
+
+
+def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_items: int, brave_pages: int, include_comments: bool, selected_urls: List[Dict] = None):
     """Execute the analysis pipeline"""
 
     # Create output directory
@@ -389,17 +507,48 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
 
         # Brave ingestion
         if 'brave' in sources:
-            query = ' '.join(keywords)
-            collected = collect_brave_pages(query, target_count=brave_pages)
+            # If URLs were pre-selected, use only those
+            if selected_urls:
+                from ingestion.brave_search import fetch_page
 
+                selected_brave_urls = [u for u in selected_urls if u['source'] == 'brave']
+                collected = []
+
+                for url_data in selected_brave_urls:
+                    try:
+                        page_data = fetch_page(url_data['url'])
+                        if page_data and page_data.get('body'):
+                            # Add brand-owned flag to metadata
+                            page_data['is_brand_owned'] = url_data.get('is_brand_owned', False)
+                            collected.append(page_data)
+                    except Exception as e:
+                        st.warning(f"⚠️ Could not fetch {url_data['url']}: {str(e)}")
+
+                st.info(f"✓ Fetched {len(collected)} of {len(selected_brave_urls)} selected web pages")
+            else:
+                # Original behavior: search and fetch automatically
+                query = ' '.join(keywords)
+                collected = collect_brave_pages(query, target_count=brave_pages)
+
+                # Add brand-owned detection for each URL
+                for c in collected:
+                    url = c.get('url', '')
+                    c['is_brand_owned'] = detect_brand_owned_url(url, brand_id)
+
+                st.info(f"✓ Collected {len(collected)} web pages")
+
+            # Convert to NormalizedContent
             for i, c in enumerate(collected):
                 url = c.get('url')
                 content_id = f"brave_{i}_{abs(hash(url or ''))}"
+                is_brand_owned = c.get('is_brand_owned', False)
+
                 meta = {
                     'source_url': url or '',
                     'content_type': 'web',
                     'title': c.get('title', ''),
-                    'description': c.get('body', '')[:200]
+                    'description': c.get('body', '')[:200],
+                    'is_brand_owned': is_brand_owned  # Add brand-owned flag to metadata
                 }
                 if c.get('terms'):
                     meta['terms'] = c.get('terms')
@@ -422,8 +571,6 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                     platform_type='web'
                 )
                 all_content.append(nc)
-
-            st.info(f"✓ Collected {len(collected)} web pages")
 
         # Reddit ingestion
         if 'reddit' in sources and RedditCrawler:
@@ -657,8 +804,8 @@ def show_results_page():
 
     st.divider()
 
-    # 6D Trust Dimensions Analysis
-    st.markdown("### 🔍 6D Trust Dimensions Breakdown")
+    # 5D Trust Dimensions Analysis
+    st.markdown("### 🔍 5D Trust Dimensions Breakdown")
 
     dimension_breakdown = report.get('dimension_breakdown', {})
 
@@ -666,8 +813,8 @@ def show_results_page():
 
     with col1:
         # Radar Chart
-        dimensions = ['Provenance', 'Verification', 'Transparency', 'Coherence', 'Resonance', 'AI Readiness']
-        dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']
+        dimensions = ['Provenance', 'Verification', 'Transparency', 'Coherence', 'Resonance']
+        dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance']
 
         scores = [dimension_breakdown.get(key, {}).get('average', 0) for key in dimension_keys]
 
