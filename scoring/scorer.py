@@ -1,6 +1,6 @@
 """
-6D Trust Dimensions scorer for Trust Stack Rating tool
-Scores content on Provenance, Verification, Transparency, Coherence, Resonance, AI Readiness
+5D Trust Dimensions scorer for Trust Stack Rating tool
+Scores content on Provenance, Verification, Transparency, Coherence, Resonance
 Integrates with TrustStackAttributeDetector for comprehensive ratings
 """
 
@@ -24,11 +24,10 @@ class DimensionScores:
     transparency: float
     coherence: float
     resonance: float
-    ai_readiness: float
 
 class ContentScorer:
     """
-    Scores content on 6D Trust Dimensions
+    Scores content on 5D Trust Dimensions
     Combines LLM-based scoring with Trust Stack attribute detection
     """
 
@@ -59,7 +58,7 @@ class ContentScorer:
     
     def score_content(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> DimensionScores:
         """
-        Score content on all 6 dimensions
+        Score content on all 5 dimensions
 
         Args:
             content: Content to score
@@ -74,21 +73,19 @@ class ContentScorer:
             transparency_score = self._score_transparency(content, brand_context)
             coherence_score = self._score_coherence(content, brand_context)
             resonance_score = self._score_resonance(content, brand_context)
-            ai_readiness_score = self._score_ai_readiness(content, brand_context)
 
             return DimensionScores(
                 provenance=provenance_score,
                 verification=verification_score,
                 transparency=transparency_score,
                 coherence=coherence_score,
-                resonance=resonance_score,
-                ai_readiness=ai_readiness_score
+                resonance=resonance_score
             )
 
         except Exception as e:
             logger.error(f"Error scoring content {content.content_id}: {e}")
             # Return neutral scores on error
-            return DimensionScores(0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+            return DimensionScores(0.5, 0.5, 0.5, 0.5, 0.5)
     
     def _score_provenance(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
         """Score Provenance dimension: origin, traceability, metadata"""
@@ -263,49 +260,6 @@ class ContentScorer:
 
         return min(1.0, max(0.0, score))
 
-    def _score_ai_readiness(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
-        """Score AI Readiness dimension: machine discoverability, LLM-readable signals"""
-
-        prompt = f"""
-        Score the AI READINESS / DISCOVERABILITY of this content on a scale of 0.0 to 1.0.
-
-        AI Readiness evaluates: machine-readable structured data, schema markup, metadata completeness, LLM discoverability
-
-        Content:
-        Title: {content.title}
-        URL: {content.url}
-        Author: {content.author}
-        Published: {content.published_at}
-
-        Metadata indicators:
-        - Has structured metadata: {bool(content.meta)}
-        - Has author: {bool(content.author)}
-        - Has publish date: {bool(content.published_at)}
-        - Has URL: {bool(content.url)}
-
-        Scoring criteria:
-        - 0.8-1.0: Complete schema.org markup, full metadata, optimized for LLM retrieval
-        - 0.6-0.8: Good metadata presence, some structured data
-        - 0.4-0.6: Basic metadata, limited structured data
-        - 0.2-0.4: Minimal metadata, poor machine readability
-        - 0.0-0.2: No structured data, missing key metadata
-
-        Return only a number between 0.0 and 1.0:
-        """
-
-        llm_score = self._get_llm_score(prompt)
-
-        # Boost score based on presence of key metadata fields
-        metadata_boost = 0.0
-        if content.meta:
-            # Each metadata field adds a small boost
-            metadata_fields = len(content.meta)
-            metadata_boost = min(0.1, metadata_fields * 0.01)
-
-        combined_score = llm_score + metadata_boost
-
-        return min(1.0, max(0.0, combined_score))
-
     def _adjust_scores_with_attributes(self, llm_scores: DimensionScores,
                                       detected_attrs: List[DetectedAttribute]) -> DimensionScores:
         """
@@ -324,8 +278,7 @@ class ContentScorer:
             'resonance': llm_scores.resonance * 100,
             'coherence': llm_scores.coherence * 100,
             'transparency': llm_scores.transparency * 100,
-            'verification': llm_scores.verification * 100,
-            'ai_readiness': llm_scores.ai_readiness * 100
+            'verification': llm_scores.verification * 100
         }
 
         # Group attributes by dimension
@@ -376,8 +329,7 @@ class ContentScorer:
             resonance=adjusted['resonance'] / 100,
             coherence=adjusted['coherence'] / 100,
             transparency=adjusted['transparency'] / 100,
-            verification=adjusted['verification'] / 100,
-            ai_readiness=adjusted['ai_readiness'] / 100
+            verification=adjusted['verification'] / 100
         )
     
     def _get_llm_score(self, prompt: str) -> float:
@@ -458,7 +410,6 @@ class ContentScorer:
                 score_coherence=dimension_scores.coherence,
                 score_transparency=dimension_scores.transparency,
                 score_verification=dimension_scores.verification,
-                score_ai_readiness=dimension_scores.ai_readiness,
                 class_label="",  # Optional - for backward compatibility
                 is_authentic=False,  # Optional - for backward compatibility
                 rubric_version=self.rubric_version,
