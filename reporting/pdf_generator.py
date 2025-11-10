@@ -179,16 +179,17 @@ class PDFReportGenerator:
     def generate_report(self, report_data: Dict[str, Any], output_path: str, include_items_table: bool = False) -> str:
         """
         Generate PDF report from report data
-        
+
         Args:
             report_data: Dictionary containing report data
             output_path: Path to save the PDF file
-            
+            include_items_table: Whether to include detailed items table (deprecated, always included in appendix)
+
         Returns:
             Path to generated PDF file
         """
         logger.info(f"Generating PDF report: {output_path}")
-        
+
         doc = SimpleDocTemplate(
             output_path,
             pagesize=A4,
@@ -197,31 +198,31 @@ class PDFReportGenerator:
             topMargin=72,
             bottomMargin=18
         )
-        
+
         story = []
-        
-        # Title page
+
+        # 1. Title page
         story.extend(self._create_title_page(report_data))
         story.append(PageBreak())
 
-        # Executive Summary
-        story.extend(self._create_executive_summary(report_data, include_items_table=include_items_table))
+        # 2. Executive Summary (robust analysis with data-driven recommendations)
+        story.extend(self._create_executive_summary_enhanced(report_data))
         story.append(PageBreak())
 
-        # Trust Stack Rating Analysis
-        story.extend(self._create_rating_analysis(report_data))
+        # 3. Visual Overview (charts and graphs)
+        story.extend(self._create_visual_overview(report_data))
         story.append(PageBreak())
 
-        # Dimension Breakdown
-        story.extend(self._create_dimension_breakdown(report_data))
+        # 4. Dimension Deep Dive (per-dimension analysis with examples)
+        story.extend(self._create_dimension_deep_dive(report_data))
         story.append(PageBreak())
 
-        # Legacy AR Analysis (backward compatibility)
-        story.extend(self._create_legacy_ar_section(report_data))
-        
+        # 5. Item-by-Item Diagnostic (detailed appendix)
+        story.extend(self._create_item_diagnostic(report_data))
+
         # Build PDF
         doc.build(story)
-        
+
         logger.info(f"PDF report generated successfully: {output_path}")
         return output_path
     
@@ -304,7 +305,434 @@ class PDFReportGenerator:
         story.append(Paragraph(executive_one_liner, self.styles['Normal']))
 
         return story
-    
+
+    def _create_executive_summary_enhanced(self, report_data: Dict[str, Any]) -> List:
+        """Create enhanced executive summary with robust analysis and recommendations"""
+        story = []
+        story.append(Paragraph("Executive Summary", self.styles['SectionHeader']))
+        story.append(Spacer(1, 10))
+
+        items = report_data.get('items', [])
+        total_items = len(items)
+
+        # Calculate metrics
+        if items:
+            avg_rating = sum(item.get('final_score', 0) for item in items) / len(items)
+        else:
+            avg_rating = 0
+
+        excellent = sum(1 for item in items if item.get('final_score', 0) >= 80)
+        good = sum(1 for item in items if 60 <= item.get('final_score', 0) < 80)
+        fair = sum(1 for item in items if 40 <= item.get('final_score', 0) < 60)
+        poor = sum(1 for item in items if item.get('final_score', 0) < 40)
+
+        # Get data-driven recommendation
+        dimension_breakdown = report_data.get('dimension_breakdown', {})
+        recommendation = generate_rating_recommendation_pdf(avg_rating, dimension_breakdown)
+
+        # Comprehensive analysis paragraph
+        if avg_rating >= 80:
+            analysis = (
+                f"<b>Overall Assessment: Excellent</b><br/><br/>"
+                f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
+                f"of <b>{avg_rating:.1f}/100</b>, placing it in the Excellent category. This indicates high-quality, "
+                f"verified content with strong trust signals across all six dimensions. "
+                f"{excellent} items ({excellent/max(total_items, 1)*100:.1f}%) achieved excellent ratings (80+), "
+                f"demonstrating consistent quality standards.<br/><br/>"
+                f"<b>Key Recommendation:</b> {recommendation}"
+            )
+        elif avg_rating >= 60:
+            analysis = (
+                f"<b>Overall Assessment: Good</b><br/><br/>"
+                f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
+                f"of <b>{avg_rating:.1f}/100</b>, indicating good content quality with room for improvement. "
+                f"{excellent + good} items ({(excellent + good)/max(total_items, 1)*100:.1f}%) achieved good or "
+                f"excellent ratings, while {poor} items require attention to meet higher standards.<br/><br/>"
+                f"<b>Key Recommendation:</b> {recommendation}"
+            )
+        elif avg_rating >= 40:
+            analysis = (
+                f"<b>Overall Assessment: Fair</b><br/><br/>"
+                f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
+                f"of <b>{avg_rating:.1f}/100</b>, indicating fair content quality that requires attention. "
+                f"Only {excellent} items ({excellent/max(total_items, 1)*100:.1f}%) achieved excellent ratings, "
+                f"while {poor} items ({poor/max(total_items, 1)*100:.1f}%) demonstrate poor quality. Significant "
+                f"improvements are needed to enhance trust signals and content credibility.<br/><br/>"
+                f"<b>Key Recommendation:</b> {recommendation}"
+            )
+        else:
+            analysis = (
+                f"<b>Overall Assessment: Poor (Immediate Action Required)</b><br/><br/>"
+                f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
+                f"of <b>{avg_rating:.1f}/100</b>, indicating poor content quality requiring immediate action. "
+                f"{poor} items ({poor/max(total_items, 1)*100:.1f}%) demonstrate poor quality, suggesting widespread "
+                f"issues with trust signals, verification, or transparency. A comprehensive content audit and "
+                f"improvement plan is essential.<br/><br/>"
+                f"<b>Critical Recommendation:</b> {recommendation}"
+            )
+
+        story.append(Paragraph(analysis, self.styles['Normal']))
+        story.append(Spacer(1, 15))
+
+        # Rating scale reference
+        story.append(Paragraph("<b>Trust Stack Rating Scale</b>", self.styles['Heading3']))
+        scale_data = [
+            ['Rating Band', 'Score Range', 'Description'],
+            ['🟢 Excellent', '80-100', 'High-quality, verified content with strong trust signals'],
+            ['🟡 Good', '60-79', 'Solid content with minor improvements needed'],
+            ['🟠 Fair', '40-59', 'Moderate quality requiring attention and improvements'],
+            ['🔴 Poor', '0-39', 'Low-quality content needing immediate review and action']
+        ]
+
+        scale_table = Table(scale_data, colWidths=[1.3*inch, 1.2*inch, 3.5*inch])
+        scale_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+        ]))
+
+        story.append(scale_table)
+        story.append(Spacer(1, 15))
+
+        # 6D Trust Framework overview
+        story.append(Paragraph("<b>6D Trust Framework Overview</b>", self.styles['Heading3']))
+        framework_text = (
+            "Each content item is evaluated across six trust dimensions using a comprehensive 0-100 scoring rubric. "
+            "The dimensions measure: <b>Provenance</b> (origin and traceability), <b>Verification</b> (factual accuracy), "
+            "<b>Transparency</b> (disclosure and clarity), <b>Coherence</b> (cross-channel consistency), "
+            "<b>Resonance</b> (audience engagement), and <b>AI Readiness</b> (machine discoverability). "
+            "The comprehensive rating is calculated as a weighted average across all six dimensions."
+        )
+        story.append(Paragraph(framework_text, self.styles['Normal']))
+
+        return story
+
+    def _create_visual_overview(self, report_data: Dict[str, Any]) -> List:
+        """Create visual overview section with charts and graphs"""
+        story = []
+        story.append(Paragraph("Visual Overview", self.styles['SectionHeader']))
+        story.append(Spacer(1, 10))
+
+        items = report_data.get('items', [])
+
+        # Calculate metrics
+        if items:
+            avg_rating = sum(item.get('final_score', 0) for item in items) / len(items)
+        else:
+            avg_rating = 0
+
+        excellent = sum(1 for item in items if item.get('final_score', 0) >= 80)
+        good = sum(1 for item in items if 60 <= item.get('final_score', 0) < 80)
+        fair = sum(1 for item in items if 40 <= item.get('final_score', 0) < 60)
+        poor = sum(1 for item in items if item.get('final_score', 0) < 40)
+
+        # Rating distribution chart
+        story.append(Paragraph("<b>Rating Distribution</b>", self.styles['Heading3']))
+        story.append(Paragraph(
+            f"The chart below shows how your {len(items)} content items are distributed across rating bands.",
+            self.styles['Normal']
+        ))
+        story.append(Spacer(1, 10))
+
+        chart_path = self._create_rating_chart(excellent, good, fair, poor)
+        if chart_path:
+            story.append(Image(chart_path, width=6*inch, height=4*inch))
+
+        story.append(Spacer(1, 15))
+
+        # Dimension scores chart
+        story.append(Paragraph("<b>6D Trust Dimensions Scores</b>", self.styles['Heading3']))
+        story.append(Paragraph(
+            "The radar chart below visualizes your brand's performance across all six trust dimensions. "
+            "Scores closer to the outer edge indicate stronger performance in that dimension.",
+            self.styles['Normal']
+        ))
+        story.append(Spacer(1, 10))
+
+        dimension_data = report_data.get('dimension_breakdown', {})
+        if dimension_data:
+            chart_path = self._create_dimension_chart(dimension_data)
+            if chart_path:
+                story.append(Image(chart_path, width=6*inch, height=4*inch))
+
+        story.append(Spacer(1, 15))
+
+        # Summary statistics table
+        story.append(Paragraph("<b>Summary Statistics</b>", self.styles['Heading3']))
+
+        stats_data = [
+            ['Metric', 'Value'],
+            ['Total Content Items', f"{len(items):,}"],
+            ['Average Rating', f"{avg_rating:.1f}/100"],
+            ['Excellent Items (80+)', f"{excellent:,} ({excellent/max(len(items), 1)*100:.1f}%)"],
+            ['Good Items (60-79)', f"{good:,} ({good/max(len(items), 1)*100:.1f}%)"],
+            ['Fair Items (40-59)', f"{fair:,} ({fair/max(len(items), 1)*100:.1f}%)"],
+            ['Poor Items (0-39)', f"{poor:,} ({poor/max(len(items), 1)*100:.1f}%)"]
+        ]
+
+        stats_table = Table(stats_data, colWidths=[2.5*inch, 3.5*inch])
+        stats_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+        ]))
+
+        story.append(stats_table)
+
+        return story
+
+    def _create_dimension_deep_dive(self, report_data: Dict[str, Any]) -> List:
+        """Create per-dimension breakdown with content examples"""
+        story = []
+        story.append(Paragraph("Dimension Deep Dive", self.styles['SectionHeader']))
+        story.append(Paragraph(
+            "This section provides a detailed analysis of each trust dimension, showing how your brand performed "
+            "and highlighting specific content examples that demonstrate high or low scores in each area.",
+            self.styles['Normal']
+        ))
+        story.append(Spacer(1, 15))
+
+        # Define dimensions with detailed descriptions
+        dimensions_info = {
+            'provenance': {
+                'name': 'Provenance',
+                'description': 'Measures the origin, traceability, and metadata integrity of content. High scores indicate clear authorship, publication timestamps, and structured metadata (e.g., schema.org markup).',
+                'icon': '🔗'
+            },
+            'verification': {
+                'name': 'Verification',
+                'description': 'Evaluates factual accuracy and verifiability against trusted databases. Content with citations, references to authoritative sources, and fact-checked claims scores higher.',
+                'icon': '✓'
+            },
+            'transparency': {
+                'name': 'Transparency',
+                'description': 'Assesses disclosure practices, clarity, and attribution. High scores reflect clear disclosure of sponsored content, transparent sourcing, and explicit attribution of information.',
+                'icon': '👁'
+            },
+            'coherence': {
+                'name': 'Coherence',
+                'description': 'Measures consistency across channels and over time. Evaluates whether messaging, branding, and positioning remain unified across different platforms and content types.',
+                'icon': '🔄'
+            },
+            'resonance': {
+                'name': 'Resonance',
+                'description': 'Evaluates cultural fit and organic engagement. High scores indicate authentic audience engagement, culturally relevant messaging, and reduced promotional language.',
+                'icon': '📢'
+            },
+            'ai_readiness': {
+                'name': 'AI Readiness',
+                'description': 'Assesses machine discoverability and LLM-readability. Content with structured data, semantic HTML markup, and machine-readable metadata scores higher.',
+                'icon': '🤖'
+            }
+        }
+
+        dimension_breakdown = report_data.get('dimension_breakdown', {})
+        items = report_data.get('items', [])
+        items = [_coerce_item_to_dict(it) for it in items]
+
+        # Process each dimension
+        for dim_key, dim_info in dimensions_info.items():
+            dim_data = dimension_breakdown.get(dim_key, {})
+            avg_score = dim_data.get('average', 0) * 100  # Convert to 0-100 scale
+            min_score = dim_data.get('min', 0) * 100
+            max_score = dim_data.get('max', 0) * 100
+
+            # Dimension header
+            story.append(Paragraph(f"{dim_info['icon']} <b>{dim_info['name']}</b>", self.styles['Heading3']))
+            story.append(Paragraph(dim_info['description'], self.styles['Normal']))
+            story.append(Spacer(1, 8))
+
+            # Score summary
+            score_text = f"<b>Average Score:</b> {avg_score:.1f}/100 | <b>Range:</b> {min_score:.1f} - {max_score:.1f}"
+            story.append(Paragraph(score_text, self.styles['Normal']))
+            story.append(Spacer(1, 8))
+
+            # Find best and worst examples for this dimension
+            items_with_dim_scores = []
+            for item in items:
+                dim_scores = item.get('dimension_scores', {})
+                if dim_key in dim_scores and dim_scores[dim_key] is not None:
+                    items_with_dim_scores.append((item, dim_scores[dim_key] * 100))
+
+            if items_with_dim_scores:
+                # Sort by dimension score
+                items_with_dim_scores.sort(key=lambda x: x[1], reverse=True)
+
+                # Get best performing item
+                best_item, best_score = items_with_dim_scores[0]
+
+                story.append(Paragraph("<b>Example Content:</b>", self.styles['Normal']))
+
+                meta = best_item.get('meta', {})
+                title = meta.get('title') or meta.get('source_url') or meta.get('url') or 'Untitled'
+                if len(title) > 80:
+                    title = title[:77] + '...'
+
+                source = best_item.get('source', 'Unknown').upper()
+                final_score = best_item.get('final_score', 0)
+
+                # Determine rating band
+                if final_score >= 80:
+                    rating_band = "🟢 Excellent"
+                elif final_score >= 60:
+                    rating_band = "🟡 Good"
+                elif final_score >= 40:
+                    rating_band = "🟠 Fair"
+                else:
+                    rating_band = "🔴 Poor"
+
+                example_data = [
+                    ['Title', title],
+                    ['Source', source],
+                    [f'{dim_info["name"]} Score', f"{best_score:.1f}/100"],
+                    ['Overall Rating', f"{final_score:.1f}/100 ({rating_band})"]
+                ]
+
+                example_table = Table(example_data, colWidths=[1.5*inch, 4.5*inch])
+                example_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+                    ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                    ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('BACKGROUND', (1, 0), (1, -1), colors.beige),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+                ]))
+
+                story.append(example_table)
+
+                # If there's a significant worst performer, mention it
+                if len(items_with_dim_scores) > 1:
+                    worst_item, worst_score = items_with_dim_scores[-1]
+                    if worst_score < 40 and best_score - worst_score > 30:
+                        story.append(Spacer(1, 6))
+                        story.append(Paragraph(
+                            f"<i>Note: {len([s for _, s in items_with_dim_scores if s < 40])} items scored below 40/100 "
+                            f"in {dim_info['name']}, indicating areas for improvement.</i>",
+                            self.styles['Normal']
+                        ))
+
+            story.append(Spacer(1, 15))
+
+        return story
+
+    def _create_item_diagnostic(self, report_data: Dict[str, Any]) -> List:
+        """Create item-by-item diagnostic appendix"""
+        story = []
+        story.append(Paragraph("Appendix: Item-by-Item Diagnostic", self.styles['SectionHeader']))
+        story.append(Paragraph(
+            "This appendix provides a comprehensive listing of all analyzed content items with their scores across all dimensions. "
+            "Use this detailed breakdown to identify specific content pieces that need improvement or that serve as good examples.",
+            self.styles['Normal']
+        ))
+        story.append(Spacer(1, 15))
+
+        items = report_data.get('items', [])
+        items = [_coerce_item_to_dict(it) for it in items]
+
+        if not items:
+            story.append(Paragraph("No items available for diagnostic analysis.", self.styles['Normal']))
+            return story
+
+        # Create detailed items table
+        # Headers
+        table_data = [[
+            'Title',
+            'Source',
+            'Overall\nRating',
+            'Prov.',
+            'Verif.',
+            'Trans.',
+            'Coher.',
+            'Reson.',
+            'AI'
+        ]]
+
+        # Process each item
+        for item in items[:50]:  # Limit to 50 items to keep PDF manageable
+            meta = item.get('meta', {})
+            title = meta.get('title') or meta.get('url') or 'Untitled'
+            if len(title) > 35:
+                title = title[:32] + '...'
+
+            source = item.get('source', 'N/A').upper()[:6]
+            final_score = item.get('final_score', 0)
+
+            dim_scores = item.get('dimension_scores', {})
+            prov = dim_scores.get('provenance', 0) * 100 if dim_scores.get('provenance') is not None else 0
+            verif = dim_scores.get('verification', 0) * 100 if dim_scores.get('verification') is not None else 0
+            trans = dim_scores.get('transparency', 0) * 100 if dim_scores.get('transparency') is not None else 0
+            coher = dim_scores.get('coherence', 0) * 100 if dim_scores.get('coherence') is not None else 0
+            reson = dim_scores.get('resonance', 0) * 100 if dim_scores.get('resonance') is not None else 0
+            ai = dim_scores.get('ai_readiness', 0) * 100 if dim_scores.get('ai_readiness') is not None else 0
+
+            table_data.append([
+                title,
+                source,
+                f"{final_score:.1f}",
+                f"{prov:.0f}",
+                f"{verif:.0f}",
+                f"{trans:.0f}",
+                f"{coher:.0f}",
+                f"{reson:.0f}",
+                f"{ai:.0f}"
+            ])
+
+        # Create table
+        items_table = Table(table_data, colWidths=[2.2*inch, 0.6*inch, 0.6*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.4*inch])
+
+        # Style the table
+        table_style = [
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 1), (0, -1), 'LEFT'),  # Left align titles
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 7),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+        ]
+
+        # Color code rows based on overall rating
+        for row_idx in range(1, len(table_data)):
+            overall_score = float(table_data[row_idx][2])
+            if overall_score >= 80:
+                bg_color = colors.Color(0.83, 0.93, 0.85)  # Light green
+            elif overall_score >= 60:
+                bg_color = colors.Color(0.82, 0.93, 0.94)  # Light blue
+            elif overall_score >= 40:
+                bg_color = colors.Color(1.0, 0.95, 0.80)   # Light yellow
+            else:
+                bg_color = colors.Color(0.97, 0.84, 0.85)  # Light red
+
+            table_style.append(('BACKGROUND', (0, row_idx), (-1, row_idx), bg_color))
+
+        items_table.setStyle(TableStyle(table_style))
+        story.append(items_table)
+
+        if len(items) > 50:
+            story.append(Spacer(1, 10))
+            story.append(Paragraph(
+                f"<i>Note: Showing first 50 of {len(items)} total items. For complete analysis, refer to the JSON export.</i>",
+                self.styles['Normal']
+            ))
+
+        return story
+
     def _create_executive_summary(self, report_data: Dict[str, Any], include_items_table: bool = False) -> List:
         """Create executive summary section"""
         story = []
