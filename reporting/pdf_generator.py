@@ -23,6 +23,86 @@ from config.settings import SETTINGS
 
 logger = logging.getLogger(__name__)
 
+# Helper function for generating data-driven recommendations
+def generate_rating_recommendation_pdf(avg_rating: float, dimension_breakdown: Dict[str, Any]) -> str:
+    """
+    Generate data-driven recommendation for PDF based on dimension analysis.
+
+    Args:
+        avg_rating: Average rating score (0-100)
+        dimension_breakdown: Dictionary with dimension averages
+
+    Returns:
+        Comprehensive recommendation string
+    """
+    # Define dimension details
+    dimension_info = {
+        'provenance': {
+            'name': 'Provenance',
+            'recommendation': 'implement structured metadata (schema.org markup), add clear author attribution, and include publication timestamps on all content',
+            'description': 'origin tracking and metadata'
+        },
+        'verification': {
+            'name': 'Verification',
+            'recommendation': 'fact-check claims against authoritative sources, add citations and references, and link to verifiable external data',
+            'description': 'factual accuracy'
+        },
+        'transparency': {
+            'name': 'Transparency',
+            'recommendation': 'add disclosure statements, clearly identify sponsored content, and provide detailed attribution for all sources',
+            'description': 'disclosure and clarity'
+        },
+        'coherence': {
+            'name': 'Coherence',
+            'recommendation': 'audit messaging consistency across all channels, align visual branding, and ensure unified voice in customer communications',
+            'description': 'cross-channel consistency'
+        },
+        'resonance': {
+            'name': 'Resonance',
+            'recommendation': 'increase authentic engagement with your audience, reduce promotional language, and ensure cultural relevance in messaging',
+            'description': 'audience engagement'
+        },
+        'ai_readiness': {
+            'name': 'AI Readiness',
+            'recommendation': 'optimize content for LLM discovery by adding structured data, improving semantic HTML markup, and including machine-readable metadata',
+            'description': 'machine discoverability'
+        }
+    }
+
+    # Find lowest-performing dimension
+    dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']
+    dimension_scores = {
+        key: dimension_breakdown.get(key, {}).get('average', 0.5) * 100  # Convert to 0-100 scale
+        for key in dimension_keys
+    }
+
+    # Find the dimension with the lowest score
+    if dimension_scores:
+        lowest_dim_key = min(dimension_scores, key=dimension_scores.get)
+        lowest_dim_score = dimension_scores[lowest_dim_key]
+        lowest_dim_info = dimension_info[lowest_dim_key]
+
+        # Generate comprehensive summary based on rating band
+        if avg_rating >= 80:
+            # Excellent - maintain standards with minor optimization
+            return f"To reach even greater heights, consider optimizing {lowest_dim_info['name']} (currently at {lowest_dim_score:.1f}/100) by continuing to {lowest_dim_info['recommendation']}."
+
+        elif avg_rating >= 60:
+            # Good - focus on improvement area
+            return f"To improve from Good to Excellent, focus on enhancing {lowest_dim_info['name']} (currently at {lowest_dim_score:.1f}/100) by taking action to {lowest_dim_info['recommendation']}."
+
+        elif avg_rating >= 40:
+            # Fair - requires focused attention
+            return f"To mitigate weak {lowest_dim_info['description']}, you should {lowest_dim_info['recommendation']}. This will help move your rating from Fair to Good or Excellent."
+
+        else:
+            # Poor - immediate action needed
+            return f"Critical issue detected in {lowest_dim_info['name']} (scoring only {lowest_dim_score:.1f}/100). You must {lowest_dim_info['recommendation']} to improve trust signals and content quality."
+
+    else:
+        # Fallback if no dimension data available
+        return "Comprehensive dimension analysis is recommended to provide specific improvement actions."
+
 # Helper to coerce item-like objects into dicts so callers can use .get()
 def _coerce_item_to_dict(item):
     if isinstance(item, dict):
@@ -244,34 +324,38 @@ class PDFReportGenerator:
         fair = sum(1 for item in items if 40 <= item.get('final_score', 0) < 60)
         poor = sum(1 for item in items if item.get('final_score', 0) < 40)
 
+        # Get dimension breakdown for data-driven recommendations
+        dimension_breakdown = report_data.get('dimension_breakdown', {})
+        recommendation = generate_rating_recommendation_pdf(avg_rating, dimension_breakdown)
+
         # Interpretation based on average rating
         if avg_rating >= 80:
             interp = (
                 f"Out of {total_items} items analyzed, the average Trust Stack Rating is {avg_rating:.1f}/100, "
                 f"indicating excellent content quality. {excellent} items ({excellent/max(total_items, 1)*100:.1f}%) "
-                f"achieved excellent ratings (80+), demonstrating strong trust signals across provenance, "
-                f"verification, transparency, coherence, resonance, and AI readiness dimensions."
+                f"achieved excellent ratings (80+), demonstrating strong trust signals across the 6D Trust Framework. "
+                f"{recommendation}"
             )
         elif avg_rating >= 60:
             interp = (
                 f"Out of {total_items} items analyzed, the average Trust Stack Rating is {avg_rating:.1f}/100, "
                 f"indicating good content quality with room for improvement. {excellent + good} items "
                 f"({(excellent + good)/max(total_items, 1)*100:.1f}%) achieved good or excellent ratings, "
-                f"while {poor} items require attention."
+                f"while {poor} items require attention. {recommendation}"
             )
         elif avg_rating >= 40:
             interp = (
                 f"Out of {total_items} items analyzed, the average Trust Stack Rating is {avg_rating:.1f}/100, "
                 f"indicating fair content quality requiring attention. Only {excellent} items ({excellent/max(total_items, 1)*100:.1f}%) "
                 f"achieved excellent ratings, while {poor} items ({poor/max(total_items, 1)*100:.1f}%) have poor quality. "
-                f"Focus on improving verification and transparency dimensions."
+                f"{recommendation}"
             )
         else:
             interp = (
                 f"Out of {total_items} items analyzed, the average Trust Stack Rating is {avg_rating:.1f}/100, "
                 f"indicating poor content quality requiring immediate action. {poor} items ({poor/max(total_items, 1)*100:.1f}%) "
-                f"have poor ratings, suggesting widespread issues with provenance, verification, or transparency. "
-                f"A comprehensive content audit and improvement plan is recommended."
+                f"have poor ratings, suggesting widespread trust issues that need to be addressed urgently. "
+                f"{recommendation}"
             )
 
         story.append(Paragraph(interp, self.styles['Normal']))

@@ -25,6 +25,87 @@ import glob as file_glob
 
 from config.settings import APIConfig
 
+# Helper Functions
+def generate_rating_recommendation(avg_rating: float, dimension_breakdown: Dict[str, Any], items: List[Dict[str, Any]]) -> str:
+    """
+    Generate data-driven recommendation based on dimension analysis.
+
+    Args:
+        avg_rating: Average rating score (0-100)
+        dimension_breakdown: Dictionary with dimension averages
+        items: List of analyzed content items
+
+    Returns:
+        Comprehensive recommendation string
+    """
+    # Define dimension details
+    dimension_info = {
+        'provenance': {
+            'name': 'Provenance',
+            'recommendation': 'implement structured metadata (schema.org markup), add clear author attribution, and include publication timestamps on all content',
+            'description': 'origin tracking and metadata'
+        },
+        'verification': {
+            'name': 'Verification',
+            'recommendation': 'fact-check claims against authoritative sources, add citations and references, and link to verifiable external data',
+            'description': 'factual accuracy'
+        },
+        'transparency': {
+            'name': 'Transparency',
+            'recommendation': 'add disclosure statements, clearly identify sponsored content, and provide detailed attribution for all sources',
+            'description': 'disclosure and clarity'
+        },
+        'coherence': {
+            'name': 'Coherence',
+            'recommendation': 'audit messaging consistency across all channels, align visual branding, and ensure unified voice in customer communications',
+            'description': 'cross-channel consistency'
+        },
+        'resonance': {
+            'name': 'Resonance',
+            'recommendation': 'increase authentic engagement with your audience, reduce promotional language, and ensure cultural relevance in messaging',
+            'description': 'audience engagement'
+        },
+        'ai_readiness': {
+            'name': 'AI Readiness',
+            'recommendation': 'optimize content for LLM discovery by adding structured data, improving semantic HTML markup, and including machine-readable metadata',
+            'description': 'machine discoverability'
+        }
+    }
+
+    # Find lowest-performing dimension
+    dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance', 'ai_readiness']
+    dimension_scores = {
+        key: dimension_breakdown.get(key, {}).get('average', 0.5) * 100  # Convert to 0-100 scale
+        for key in dimension_keys
+    }
+
+    # Find the dimension with the lowest score
+    if dimension_scores:
+        lowest_dim_key = min(dimension_scores, key=dimension_scores.get)
+        lowest_dim_score = dimension_scores[lowest_dim_key]
+        lowest_dim_info = dimension_info[lowest_dim_key]
+
+        # Generate comprehensive summary based on rating band
+        if avg_rating >= 80:
+            # Excellent - maintain standards with minor optimization
+            return f"Your brand content demonstrates high quality with an average rating of {avg_rating:.1f}/100. To reach even greater heights, consider optimizing {lowest_dim_info['name']} (currently at {lowest_dim_score:.1f}/100) by continuing to {lowest_dim_info['recommendation']}."
+
+        elif avg_rating >= 60:
+            # Good - focus on improvement area
+            return f"Your content shows solid quality with an average rating of {avg_rating:.1f}/100. To improve from Good to Excellent, focus on enhancing {lowest_dim_info['name']} (currently at {lowest_dim_score:.1f}/100) by taking action to {lowest_dim_info['recommendation']}."
+
+        elif avg_rating >= 40:
+            # Fair - requires focused attention
+            return f"Your content quality is moderate with an average rating of {avg_rating:.1f}/100, requiring attention. To mitigate weak {lowest_dim_info['description']}, you should {lowest_dim_info['recommendation']}. This will help move your rating from Fair to Good or Excellent."
+
+        else:
+            # Poor - immediate action needed
+            return f"Your content quality is low with an average rating of {avg_rating:.1f}/100, requiring immediate action. Critical issue detected in {lowest_dim_info['name']} (scoring only {lowest_dim_score:.1f}/100). You must {lowest_dim_info['recommendation']} to improve trust signals and content quality."
+
+    else:
+        # Fallback if no dimension data available
+        return f"Your content has an average rating of {avg_rating:.1f}/100. Comprehensive dimension analysis is needed to provide specific recommendations."
+
 # Page configuration
 st.set_page_config(
     page_title="Trust Stack Rating Tool",
@@ -512,15 +593,18 @@ def show_results_page():
             delta=f"{(poor/len(items)*100):.0f}%" if items else "0%"
         )
 
-    # Rating Interpretation
+    # Rating Interpretation with Data-Driven Recommendations
+    dimension_breakdown = report.get('dimension_breakdown', {})
+    recommendation = generate_rating_recommendation(avg_rating, dimension_breakdown, items)
+
     if avg_rating >= 80:
-        st.markdown('<div class="success-box">🟢 <b>Excellent</b> - Your brand content demonstrates high quality and trust signals. Continue maintaining these standards.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="success-box">🟢 <b>Excellent</b> - {recommendation}</div>', unsafe_allow_html=True)
     elif avg_rating >= 60:
-        st.markdown('<div class="info-box">🟡 <b>Good</b> - Solid content quality with opportunities for improvement. Focus on verification and transparency.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="info-box">🟡 <b>Good</b> - {recommendation}</div>', unsafe_allow_html=True)
     elif avg_rating >= 40:
-        st.markdown('<div class="warning-box">🟠 <b>Fair</b> - Moderate quality requiring attention. Review content guidelines and enhance trust signals.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="warning-box">🟠 <b>Fair</b> - {recommendation}</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div class="warning-box">🔴 <b>Poor</b> - Low content quality requiring immediate action. Conduct comprehensive content audit and improvement plan.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="warning-box">🔴 <b>Poor</b> - {recommendation}</div>', unsafe_allow_html=True)
 
     st.divider()
 
@@ -667,13 +751,13 @@ def show_results_page():
         # Color-code by rating band
         def color_rating(val):
             if '🟢' in val:
-                return 'background-color: #d4edda'
+                return 'background-color: #d4edda; color: #155724'
             elif '🟡' in val:
-                return 'background-color: #d1ecf1'
+                return 'background-color: #d1ecf1; color: #0c5460'
             elif '🟠' in val:
-                return 'background-color: #fff3cd'
+                return 'background-color: #fff3cd; color: #856404'
             elif '🔴' in val:
-                return 'background-color: #f8d7da'
+                return 'background-color: #f8d7da; color: #721c24'
             return ''
 
         styled_df = df.style.applymap(color_rating, subset=['Rating'])
