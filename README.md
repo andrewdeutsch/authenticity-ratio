@@ -36,6 +36,27 @@ AR/
 ```
 
 ## Quick Start
+
+### 🌐 Web Application (Recommended)
+The easiest way to use the AR tool is through the interactive web application:
+
+```bash
+# Launch the web app
+streamlit run webapp/app.py
+```
+
+The web app provides:
+- **Interactive dashboard** with real-time visualizations
+- **Pipeline execution** with progress tracking
+- **Results analysis** with 6D Trust Dimensions breakdown
+- **Export capabilities** (PDF, Markdown, JSON)
+- **Analysis history** to track runs over time
+
+See [webapp/README.md](webapp/README.md) for detailed usage instructions.
+
+### 📟 Command Line (Advanced)
+For programmatic or batch processing:
+
 1. Set up configuration in `config/`
 2. Run data ingestion: `python -m ingestion.reddit_crawler`
 3. Process and score content: `python -m scoring.pipeline`
@@ -46,7 +67,7 @@ Uses AWS Athena with S3 storage for normalized content and scores.
 
 ## Brave Search integration
 
-This project includes a Brave Search ingestion module and a small Streamlit web UI for quick runs.
+This project includes a Brave Search ingestion module used by both the web application and command-line tools.
 
 Brave API configuration
 
