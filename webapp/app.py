@@ -560,6 +560,11 @@ API Endpoint: {os.getenv('BRAVE_API_ENDPOINT', 'https://api.search.brave.com/res
                             'source': 'brave'
                         })
 
+                # Prioritize brand-owned URLs by sorting them first
+                # This ensures brand domains appear at the top of the list
+                found_urls.sort(key=lambda x: (not x['is_brand_owned'], x['url']))
+                logger.info(f"Sorted {len(found_urls)} URLs with brand-owned URLs prioritized")
+
                 progress_bar.progress(90)
                 st.session_state['found_urls'] = found_urls
 
