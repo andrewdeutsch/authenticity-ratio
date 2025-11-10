@@ -142,7 +142,11 @@ def _extract_footer_links(html: str, base_url: str) -> Dict[str, str]:
 
 
 def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
-    """Search Brave and return a list of result dicts {title, url, snippet}"""
+    """Search Brave and return a list of result dicts {title, url, snippet}
+
+    For requests larger than the API's per-request limit, this function will
+    automatically paginate through multiple requests to collect the desired number of results.
+    """
     # If user has provided a Brave API key, prefer the API endpoint
     api_key = os.getenv('BRAVE_API_KEY')
     api_endpoint = os.getenv('BRAVE_API_ENDPOINT', 'https://api.search.brave.com/res/v1/web/search')
@@ -159,115 +163,158 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
         # Configure via BRAVE_API_AUTH: 'x-api-key' (default), 'bearer', 'both', 'query-param', or 'subscription-token'
         api_auth = os.getenv('BRAVE_API_AUTH', 'subscription-token')
         # Some Brave API plans limit the maximum 'count' per request. Allow an env override
-        # but default to a conservative 10 results per API call to avoid 422 validation errors.
+        # Most Brave API plans have a hard limit of 20 results per request.
+        # Default to 20 to maximize results per request while staying within API limits.
         try:
-            max_api_count = int(os.getenv('BRAVE_API_MAX_COUNT', '10'))
+            max_per_request = int(os.getenv('BRAVE_API_MAX_COUNT', '20'))
         except Exception:
-            max_api_count = 10
-        params = {"q": query, "count": min(size, max_api_count)}
-        # Prepare a results container so we can return it even if the API path fails
-        results = []
-        try:
-            hdrs = headers.copy()
-            if api_auth == 'bearer':
-                hdrs['Authorization'] = f'Bearer {api_key}'
-            elif api_auth == 'x-api-key':
-                hdrs['x-api-key'] = api_key
-            elif api_auth == 'subscription-token':
-                # Brave uses X-Subscription-Token for the provided key in many cases
-                hdrs['X-Subscription-Token'] = api_key
-            elif api_auth == 'both':
-                hdrs['Authorization'] = f'Bearer {api_key}'
-                hdrs['x-api-key'] = api_key
+            max_per_request = 20
 
-            logger.info('Using Brave API endpoint for query=%s (api_auth=%s)', query, api_auth)
-            # Prepare request (if query-param auth, append below)
-            _wait_for_rate_limit()
-            # Use helper-style retry for robustness
-            # Allow timeout override via environment variable
-            api_timeout = int(os.getenv('BRAVE_API_TIMEOUT', '10'))
-            if api_auth == 'query-param':
-                params_with_key = params.copy()
-                params_with_key['apikey'] = api_key
-                # API expects JSON response; ensure Accept header is suitable for the API path
-                hdrs['Accept'] = hdrs.get('Accept', '*/*') if hdrs.get('Accept') == '*/*' else 'application/json'
-                resp = requests.get(api_endpoint, params=params_with_key, headers=hdrs, timeout=api_timeout)
-            else:
-                hdrs['Accept'] = hdrs.get('Accept', '*/*') if hdrs.get('Accept') == '*/*' else 'application/json'
-                resp = requests.get(api_endpoint, params=params, headers=hdrs, timeout=api_timeout)
+        # If user wants more results than the API allows per request, we'll paginate
+        all_results = []
+        offset = 0
 
-            if resp.status_code == 200:
-                try:
-                    body = resp.json()
-                except Exception as e:
-                    # resp.json() may raise AttributeError if the fake response doesn't implement it
-                    logger.warning('Brave API returned non-JSON response: %s; falling back to HTML parsing', e)
-                    body = None
+        while len(all_results) < size:
+            # Calculate how many results to request in this batch
+            remaining = size - len(all_results)
+            batch_size = min(remaining, max_per_request)
 
-                results = []
-                if isinstance(body, dict):
-                    # Log the structure for debugging
-                    logger.debug('Brave API response keys: %s', list(body.keys()) if body else 'None')
+            params = {"q": query, "count": batch_size}
 
-                    # Preferred: Brave API uses body['web']['results'] for web search results
-                    web_results = None
-                    if 'web' in body and isinstance(body['web'], dict):
-                        web_results = body['web'].get('results')
-                        logger.debug('Found web.results with %s items', len(web_results) if isinstance(web_results, list) else 0)
+            # Add offset for pagination (if supported by API)
+            if offset > 0:
+                params["offset"] = offset
 
-                    if isinstance(web_results, list):
-                        for item in web_results[:size]:
-                            if not isinstance(item, dict):
-                                continue
-                            url = item.get('url') or (item.get('meta_url') or {}).get('url') or item.get('link')
-                            title = item.get('title') or item.get('name') or item.get('headline') or ''
-                            snippet = item.get('description') or item.get('snippet') or ''
-                            if url and url.startswith('http'):
-                                results.append({'title': title, 'url': url, 'snippet': snippet})
-                        if results:
-                            logger.info('Brave API returned %s results via web.results', len(results))
-                            return results
+            logger.info('Brave API request: query=%s, batch_size=%s, offset=%s (total collected: %s/%s)',
+                       query, batch_size, offset, len(all_results), size)
 
-                    # Fallback heuristics: look for top-level lists
-                    for key in ('results', 'organic', 'items', 'data'):
-                        if key in body and isinstance(body[key], list):
-                            logger.debug('Found results in body[%s] with %s items', key, len(body[key]))
-                            for item in body[key][:size]:
+            # Prepare a results container for this batch
+            batch_results = []
+            try:
+                hdrs = headers.copy()
+                if api_auth == 'bearer':
+                    hdrs['Authorization'] = f'Bearer {api_key}'
+                elif api_auth == 'x-api-key':
+                    hdrs['x-api-key'] = api_key
+                elif api_auth == 'subscription-token':
+                    # Brave uses X-Subscription-Token for the provided key in many cases
+                    hdrs['X-Subscription-Token'] = api_key
+                elif api_auth == 'both':
+                    hdrs['Authorization'] = f'Bearer {api_key}'
+                    hdrs['x-api-key'] = api_key
+
+                logger.info('Using Brave API endpoint for query=%s (api_auth=%s)', query, api_auth)
+                # Prepare request (if query-param auth, append below)
+                _wait_for_rate_limit()
+                # Use helper-style retry for robustness
+                # Allow timeout override via environment variable
+                api_timeout = int(os.getenv('BRAVE_API_TIMEOUT', '10'))
+                if api_auth == 'query-param':
+                    params_with_key = params.copy()
+                    params_with_key['apikey'] = api_key
+                    # API expects JSON response; ensure Accept header is suitable for the API path
+                    hdrs['Accept'] = hdrs.get('Accept', '*/*') if hdrs.get('Accept') == '*/*' else 'application/json'
+                    resp = requests.get(api_endpoint, params=params_with_key, headers=hdrs, timeout=api_timeout)
+                else:
+                    hdrs['Accept'] = hdrs.get('Accept', '*/*') if hdrs.get('Accept') == '*/*' else 'application/json'
+                    resp = requests.get(api_endpoint, params=params, headers=hdrs, timeout=api_timeout)
+
+                if resp.status_code == 200:
+                    try:
+                        body = resp.json()
+                    except Exception as e:
+                        # resp.json() may raise AttributeError if the fake response doesn't implement it
+                        logger.warning('Brave API returned non-JSON response: %s; breaking pagination', e)
+                        break
+
+                    if isinstance(body, dict):
+                        # Log the structure for debugging
+                        logger.debug('Brave API response keys: %s', list(body.keys()) if body else 'None')
+
+                        # Preferred: Brave API uses body['web']['results'] for web search results
+                        web_results = None
+                        if 'web' in body and isinstance(body['web'], dict):
+                            web_results = body['web'].get('results')
+                            logger.debug('Found web.results with %s items', len(web_results) if isinstance(web_results, list) else 0)
+
+                        if isinstance(web_results, list):
+                            for item in web_results:
                                 if not isinstance(item, dict):
                                     continue
-                                url = item.get('url') or item.get('link') or item.get('href') or item.get('target')
-                                title = item.get('title') or item.get('name') or ''
-                                snippet = item.get('snippet') or item.get('description') or ''
+                                url = item.get('url') or (item.get('meta_url') or {}).get('url') or item.get('link')
+                                title = item.get('title') or item.get('name') or item.get('headline') or ''
+                                snippet = item.get('description') or item.get('snippet') or ''
                                 if url and url.startswith('http'):
-                                    results.append({'title': title, 'url': url, 'snippet': snippet})
-                            if results:
-                                logger.info('Brave API returned %s results via body[%s]', len(results), key)
-                                return results
+                                    batch_results.append({'title': title, 'url': url, 'snippet': snippet})
+                            if batch_results:
+                                logger.info('Brave API batch returned %s results via web.results', len(batch_results))
 
-                # Log detailed error information
-                if isinstance(body, dict):
-                    logger.warning('Brave API response did not contain usable results. Response structure: %s', json.dumps(body, indent=2)[:500])
+                        # Fallback heuristics: look for top-level lists
+                        if not batch_results:
+                            for key in ('results', 'organic', 'items', 'data'):
+                                if key in body and isinstance(body[key], list):
+                                    logger.debug('Found results in body[%s] with %s items', key, len(body[key]))
+                                    for item in body[key]:
+                                        if not isinstance(item, dict):
+                                            continue
+                                        url = item.get('url') or item.get('link') or item.get('href') or item.get('target')
+                                        title = item.get('title') or item.get('name') or ''
+                                        snippet = item.get('snippet') or item.get('description') or ''
+                                        if url and url.startswith('http'):
+                                            batch_results.append({'title': title, 'url': url, 'snippet': snippet})
+                                    if batch_results:
+                                        logger.info('Brave API batch returned %s results via body[%s]', len(batch_results), key)
+                                        break
+
+                    # Log detailed error information if no results in this batch
+                    if not batch_results:
+                        if isinstance(body, dict):
+                            logger.warning('Brave API response did not contain usable results. Response structure: %s', json.dumps(body, indent=2)[:500])
+                        else:
+                            logger.debug('Brave API response did not contain usable results (body is not a dict)')
+                        break  # No more results available
                 else:
-                    logger.debug('Brave API response did not contain usable results (body is not a dict)')
-            else:
-                body_text = getattr(resp, 'text', '')[:1000]
-                logger.error('Brave API request failed: HTTP %s. Response: %s', resp.status_code, body_text)
-                # Try to parse error details if it's JSON
-                try:
-                    error_body = resp.json()
-                    if isinstance(error_body, dict):
-                        error_msg = error_body.get('message') or error_body.get('error') or str(error_body)
-                        logger.error('Brave API error details: %s', error_msg)
-                except:
-                    pass
-        except Exception as e:
-            logger.warning('Brave API request error: %s; falling back to HTML scraping', e)
+                    body_text = getattr(resp, 'text', '')[:1000]
+                    logger.error('Brave API request failed: HTTP %s. Response: %s', resp.status_code, body_text)
+                    # Try to parse error details if it's JSON
+                    try:
+                        error_body = resp.json()
+                        if isinstance(error_body, dict):
+                            error_msg = error_body.get('message') or error_body.get('error') or str(error_body)
+                            logger.error('Brave API error details: %s', error_msg)
+                    except:
+                        pass
+                    break  # API error, stop pagination
+
+            except Exception as e:
+                logger.warning('Brave API request error: %s; stopping pagination', e)
+                break
+
+            # Add batch results to total
+            all_results.extend(batch_results)
+            logger.info('Collected %s/%s total results so far', len(all_results), size)
+
+            # If we got fewer results than requested, we've hit the end
+            if len(batch_results) < batch_size:
+                logger.info('Received fewer results than requested (%s < %s), stopping pagination', len(batch_results), batch_size)
+                break
+
+            # Update offset for next batch
+            offset += len(batch_results)
+
+        # Return collected results
+        if all_results:
+            logger.info('Brave API pagination complete: collected %s results total', len(all_results))
+            return all_results[:size]  # Trim to exact size requested
+
+        # If no results via pagination, fall through to HTML scraping
+        logger.warning('Brave API pagination returned no results')
         # If API key exists, do not fallback to HTML scraping unless explicitly enabled
         # This enforces an API-only flow when a subscription key is configured.
         allow_html = os.getenv('BRAVE_ALLOW_HTML_FALLBACK', '0') == '1'
         if not allow_html:
             # Return whatever results we have (possibly empty) and avoid HTML scraping
-            return results
+            return all_results
 
     logger.info('Falling back to Brave HTML scraping for query=%s', query)
     # Fallback to HTML scraping (only when API key is not present or fallback explicitly enabled)

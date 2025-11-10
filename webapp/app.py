@@ -490,17 +490,21 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brav
             progress_bar.progress(30)
 
             try:
-                # Temporarily increase the API limit for search results
-                # Store original value to restore later
-                original_limit = os.environ.get('BRAVE_API_MAX_COUNT')
+                # Configure timeout for larger requests (scale with number of pages)
+                # Each pagination batch needs time, so scale appropriately
                 original_timeout = os.environ.get('BRAVE_API_TIMEOUT')
-
-                os.environ['BRAVE_API_MAX_COUNT'] = str(brave_pages)
-                # Increase timeout for larger requests (scale with number of pages)
                 timeout_seconds = min(30, 10 + (brave_pages // 10))
                 os.environ['BRAVE_API_TIMEOUT'] = str(timeout_seconds)
 
-                logger.info(f"Searching Brave: query={query}, size={brave_pages}, timeout={timeout_seconds}s")
+                # Calculate expected number of API requests (Brave API limit is typically 20 per request)
+                max_per_request = int(os.getenv('BRAVE_API_MAX_COUNT', '20'))
+                expected_requests = (brave_pages + max_per_request - 1) // max_per_request  # Ceiling division
+
+                if expected_requests > 1:
+                    logger.info(f"Searching Brave: query={query}, size={brave_pages}, will make ~{expected_requests} paginated requests")
+                    status_text.text(f"🔍 Searching Brave (will make ~{expected_requests} API requests for {brave_pages} URLs)...")
+                else:
+                    logger.info(f"Searching Brave: query={query}, size={brave_pages}")
 
                 from ingestion.brave_search import search_brave
 
@@ -510,12 +514,7 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brav
                 progress_bar.progress(70)
                 status_text.text(f"✓ Received {len(search_results)} results, processing...")
 
-                # Restore original values
-                if original_limit is not None:
-                    os.environ['BRAVE_API_MAX_COUNT'] = original_limit
-                else:
-                    os.environ.pop('BRAVE_API_MAX_COUNT', None)
-
+                # Restore original timeout
                 if original_timeout is not None:
                     os.environ['BRAVE_API_TIMEOUT'] = original_timeout
                 else:
