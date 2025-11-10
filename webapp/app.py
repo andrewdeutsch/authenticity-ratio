@@ -1,6 +1,6 @@
 """
-Authenticity Ratio™ Web Application
-A comprehensive interface for brand content authenticity analysis
+Trust Stack Rating Web Application
+A comprehensive interface for brand content Trust Stack Rating analysis
 """
 from __future__ import annotations
 
@@ -253,7 +253,7 @@ def show_home_page():
 def show_analyze_page():
     """Display the analysis configuration and execution page"""
     st.markdown('<div class="main-header">🚀 Run Analysis</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Configure and execute brand authenticity analysis</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Configure and execute Trust Stack Rating analysis</div>', unsafe_allow_html=True)
 
     st.divider()
 
