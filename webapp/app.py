@@ -712,7 +712,7 @@ def show_results_page():
 
             st.markdown(f"**{status} {dim_name}**")
             st.progress(avg_score)
-            st.caption(f"Average: {avg_score:.3f} | Min: {dim_data.get('min', 0):.3f} | Max: {dim_data.get('max', 0):.3f}")
+            st.caption(f"Score: {avg_score*100:.1f}/100 | Range: {dim_data.get('min', 0)*100:.1f} - {dim_data.get('max', 0)*100:.1f}")
 
     st.divider()
 
@@ -793,7 +793,7 @@ def show_results_page():
                     for idx2, (dim_name, score) in enumerate(dims.items()):
                         if score is not None:
                             with dim_cols[idx2 % 3]:
-                                st.metric(dim_name.title(), f"{score:.3f}")
+                                st.metric(dim_name.title(), f"{score*100:.1f}/100")
 
                 st.divider()
 
@@ -869,7 +869,7 @@ def show_results_page():
         st.download_button(
             label="💾 Download Raw Data (JSON)",
             data=json.dumps(report, indent=2, default=str),
-            file_name=f"ar_data_{run_data.get('brand_id')}_{run_data.get('run_id')}.json",
+            file_name=f"trust_stack_data_{run_data.get('brand_id')}_{run_data.get('run_id')}.json",
             mime="application/json",
             use_container_width=True
         )
