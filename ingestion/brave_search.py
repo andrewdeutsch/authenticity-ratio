@@ -173,15 +173,19 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
         # If user wants more results than the API allows per request, we'll paginate
         all_results = []
         offset = 0
+        pagination_attempts = 0
+        max_pagination_attempts = 10  # Safety limit
 
-        while len(all_results) < size:
+        while len(all_results) < size and pagination_attempts < max_pagination_attempts:
+            pagination_attempts += 1
             # Calculate how many results to request in this batch
             remaining = size - len(all_results)
             batch_size = min(remaining, max_per_request)
 
             params = {"q": query, "count": batch_size}
 
-            # Add offset for pagination (if supported by API)
+            # Brave API uses 'offset' parameter for pagination
+            # Note: offset is the number of results to skip, not a page number
             if offset > 0:
                 params["offset"] = offset
 
@@ -294,18 +298,32 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
             all_results.extend(batch_results)
             logger.info('Collected %s/%s total results so far', len(all_results), size)
 
-            # If we got fewer results than requested, we've hit the end
-            if len(batch_results) < batch_size:
-                logger.info('Received fewer results than requested (%s < %s), stopping pagination', len(batch_results), batch_size)
+            # If we got no results in this batch, we've hit the end
+            if len(batch_results) == 0:
+                logger.info('No results in this batch, stopping pagination')
                 break
+
+            # If we got fewer results than requested, we might be near the end
+            # But continue trying if we haven't reached our target yet
+            if len(batch_results) < batch_size:
+                logger.info('Received fewer results than requested (%s < %s), may be reaching end of results', len(batch_results), batch_size)
+                # Continue anyway to try to get more results
 
             # Update offset for next batch
             offset += len(batch_results)
 
+            # Safety check: prevent infinite loops
+            if offset > size * 2:
+                logger.warning('Offset exceeded safety limit (%s > %s*2), stopping pagination', offset, size)
+                break
+
         # Return collected results
         if all_results:
-            logger.info('Brave API pagination complete: collected %s results total', len(all_results))
+            logger.info('Brave API pagination complete: collected %s results total (requested %s) after %s attempts',
+                       len(all_results), size, pagination_attempts)
             return all_results[:size]  # Trim to exact size requested
+
+        logger.warning('Brave API pagination complete but no results collected after %s attempts', pagination_attempts)
 
         # If no results via pagination, fall through to HTML scraping
         logger.warning('Brave API pagination returned no results')
