@@ -1,5 +1,5 @@
 """
-PDF report generator for AR tool
+PDF report generator for Trust Stack Rating tool
 Creates professional PDF reports with charts and analysis
 """
 
@@ -62,7 +62,7 @@ except Exception:
             return ''
 
 class PDFReportGenerator:
-    """Generates PDF reports for AR analysis"""
+    """Generates PDF reports for Trust Stack Rating analysis"""
     
     def __init__(self):
         self.styles = getSampleStyleSheet()
@@ -127,17 +127,17 @@ class PDFReportGenerator:
         # Executive Summary
         story.extend(self._create_executive_summary(report_data, include_items_table=include_items_table))
         story.append(PageBreak())
-        
-        # Authenticity Ratio Analysis
-        story.extend(self._create_ar_analysis(report_data))
+
+        # Trust Stack Rating Analysis
+        story.extend(self._create_rating_analysis(report_data))
         story.append(PageBreak())
-        
+
         # Dimension Breakdown
         story.extend(self._create_dimension_breakdown(report_data))
         story.append(PageBreak())
-        
-        # Classification Analysis
-        story.extend(self._create_classification_analysis(report_data))
+
+        # Legacy AR Analysis (backward compatibility)
+        story.extend(self._create_legacy_ar_section(report_data))
         
         # Build PDF
         doc.build(story)
@@ -148,20 +148,20 @@ class PDFReportGenerator:
     def _create_title_page(self, report_data: Dict[str, Any]) -> List:
         """Create title page"""
         story = []
-        
+
         # Main title
-        story.append(Paragraph("Authenticity Ratio™ Report", self.styles['CustomTitle']))
+        story.append(Paragraph("Trust Stack Rating Report", self.styles['CustomTitle']))
         story.append(Spacer(1, 20))
-        
+
         # Brand information
         brand_id = report_data.get('brand_id', 'Unknown Brand')
         story.append(Paragraph(f"Brand: {brand_id}", self.styles['Heading2']))
         story.append(Spacer(1, 10))
-        
+
         # Report metadata
         run_id = report_data.get('run_id', 'Unknown')
         generated_at = report_data.get('generated_at', datetime.now().isoformat())
-        
+
         sources = report_data.get('sources', [])
         sources_display = ', '.join(sources) if sources else 'Unknown'
 
@@ -170,9 +170,9 @@ class PDFReportGenerator:
             ['Generated:', generated_at],
             ['Analysis Period:', 'Current Run'],
             ['Data Sources:', sources_display],
-            ['Rubric Version:', report_data.get('rubric_version', 'v1.0')]
+            ['Rubric Version:', report_data.get('rubric_version', 'v2.0-trust-stack')]
         ]
-        
+
         metadata_table = Table(metadata, colWidths=[2*inch, 3*inch])
         metadata_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
@@ -180,21 +180,46 @@ class PDFReportGenerator:
             ('FONTSIZE', (0, 0), (-1, -1), 10),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ]))
-        
+
         story.append(metadata_table)
         story.append(Spacer(1, 30))
-        # Key metrics preview
-        ar_data = report_data.get('authenticity_ratio', {})
-        total_items = ar_data.get('total_items', 0)
-        ar_pct = ar_data.get('authenticity_ratio_pct', 0.0)
-        extended_ar = ar_data.get('extended_ar_pct', 0.0)
+
+        # Key metrics preview - focus on Trust Stack Rating
+        items = report_data.get('items', [])
+        total_items = len(items)
+
+        # Calculate average rating
+        if items:
+            avg_rating = sum(item.get('final_score', 0) for item in items) / len(items)
+        else:
+            avg_rating = 0
+
+        # Calculate rating distribution
+        excellent = sum(1 for item in items if item.get('final_score', 0) >= 80)
+        good = sum(1 for item in items if 60 <= item.get('final_score', 0) < 80)
+        fair = sum(1 for item in items if 40 <= item.get('final_score', 0) < 60)
+        poor = sum(1 for item in items if item.get('final_score', 0) < 40)
 
         story.append(Paragraph("Summary", self.styles['SectionHeader']))
-        story.append(Paragraph(f"Core Authenticity Ratio: {ar_pct:.1f}%", self.styles['KPI']))
-        story.append(Paragraph(f"Extended Authenticity Ratio: {extended_ar:.1f}%", self.styles['Heading3']))
+        story.append(Paragraph(f"Average Rating: {avg_rating:.1f}/100", self.styles['KPI']))
         story.append(Paragraph(f"Total Content Analyzed: {total_items:,}", self.styles['Normal']))
-        # Short executive one-liner for non-technical stakeholders
-        executive_one_liner = f"Executive Summary: {ar_pct:.1f}% Core AR — {total_items} items analyzed."
+        story.append(Spacer(1, 10))
+
+        # Rating band summary
+        rating_summary = f"Rating Distribution: {excellent} Excellent | {good} Good | {fair} Fair | {poor} Poor"
+        story.append(Paragraph(rating_summary, self.styles['Normal']))
+
+        # Executive one-liner
+        if avg_rating >= 80:
+            quality = "excellent"
+        elif avg_rating >= 60:
+            quality = "good"
+        elif avg_rating >= 40:
+            quality = "fair"
+        else:
+            quality = "requires immediate attention"
+
+        executive_one_liner = f"Executive Summary: Average content rating of {avg_rating:.1f}/100 indicates {quality} brand content quality across {total_items} analyzed items."
         story.append(Spacer(1, 6))
         story.append(Paragraph(executive_one_liner, self.styles['Normal']))
 
@@ -204,37 +229,63 @@ class PDFReportGenerator:
         """Create executive summary section"""
         story = []
         story.append(Paragraph("Executive Summary", self.styles['SectionHeader']))
-        ar_data = report_data.get('authenticity_ratio', {})
-        total_items = ar_data.get('total_items', 0)
-        authentic_items = ar_data.get('authentic_items', 0)
-        suspect_items = ar_data.get('suspect_items', 0)
-        inauthentic_items = ar_data.get('inauthentic_items', 0)
-        ar_pct = ar_data.get('authenticity_ratio_pct', 0.0)
-        extended_ar = ar_data.get('extended_ar_pct', 0.0)
 
-        interp = (
-            f"Out of {total_items} items analyzed, {ar_pct:.1f}% met authenticity standards, "
-            f"indicating that most brand-related content lacks verifiable provenance or transparency. "
-            f"The low Verification and Transparency scores suggest the brand’s messaging is being reused or misrepresented by third parties."
-        )
+        items = report_data.get('items', [])
+        total_items = len(items)
+
+        # Calculate average rating and distribution
+        if items:
+            avg_rating = sum(item.get('final_score', 0) for item in items) / len(items)
+        else:
+            avg_rating = 0
+
+        excellent = sum(1 for item in items if item.get('final_score', 0) >= 80)
+        good = sum(1 for item in items if 60 <= item.get('final_score', 0) < 80)
+        fair = sum(1 for item in items if 40 <= item.get('final_score', 0) < 60)
+        poor = sum(1 for item in items if item.get('final_score', 0) < 40)
+
+        # Interpretation based on average rating
+        if avg_rating >= 80:
+            interp = (
+                f"Out of {total_items} items analyzed, the average Trust Stack Rating is {avg_rating:.1f}/100, "
+                f"indicating excellent content quality. {excellent} items ({excellent/max(total_items, 1)*100:.1f}%) "
+                f"achieved excellent ratings (80+), demonstrating strong trust signals across provenance, "
+                f"verification, transparency, coherence, resonance, and AI readiness dimensions."
+            )
+        elif avg_rating >= 60:
+            interp = (
+                f"Out of {total_items} items analyzed, the average Trust Stack Rating is {avg_rating:.1f}/100, "
+                f"indicating good content quality with room for improvement. {excellent + good} items "
+                f"({(excellent + good)/max(total_items, 1)*100:.1f}%) achieved good or excellent ratings, "
+                f"while {poor} items require attention."
+            )
+        elif avg_rating >= 40:
+            interp = (
+                f"Out of {total_items} items analyzed, the average Trust Stack Rating is {avg_rating:.1f}/100, "
+                f"indicating fair content quality requiring attention. Only {excellent} items ({excellent/max(total_items, 1)*100:.1f}%) "
+                f"achieved excellent ratings, while {poor} items ({poor/max(total_items, 1)*100:.1f}%) have poor quality. "
+                f"Focus on improving verification and transparency dimensions."
+            )
+        else:
+            interp = (
+                f"Out of {total_items} items analyzed, the average Trust Stack Rating is {avg_rating:.1f}/100, "
+                f"indicating poor content quality requiring immediate action. {poor} items ({poor/max(total_items, 1)*100:.1f}%) "
+                f"have poor ratings, suggesting widespread issues with provenance, verification, or transparency. "
+                f"A comprehensive content audit and improvement plan is recommended."
+            )
 
         story.append(Paragraph(interp, self.styles['Normal']))
 
-        # Include score-based AR if present
-        score_based = report_data.get('score_based_ar_pct')
-        if score_based is not None:
-            story.append(Spacer(1, 6))
-            story.append(Paragraph(f"Score-based Authenticity Ratio (mean 5D score): {score_based:.1f}%", self.styles['Normal']))
-
-        # Add explicit definitions for Core vs Extended AR to reduce confusion
+        # Rating scale reference
         story.append(Spacer(1, 8))
-        defs_lines = [
-            "Definitions:",
-            "- Core AR (classification): Percentage of items explicitly classified as 'Authentic' (Authentic / Total * 100).",
-            "- Score-based AR (mean 5D score): The arithmetic mean of per-item 5D composite scores (0-100).",
-            "- Extended AR: A rubric-blended metric combining classification labels and score-based signals; see AR Analysis for formula details."
+        story.append(Paragraph("Trust Stack Rating Scale:", self.styles['Heading3']))
+        scale_lines = [
+            "• 80-100 (Excellent): High-quality, verified content with strong trust signals",
+            "• 60-79 (Good): Solid content with minor improvements needed",
+            "• 40-59 (Fair): Moderate quality requiring attention",
+            "• 0-39 (Poor): Low-quality content needing immediate review"
         ]
-        for ln in defs_lines:
+        for ln in scale_lines:
             story.append(Paragraph(ln, self.styles['Normal']))
 
         # Examples section (up to 5 items) for quick review
@@ -285,8 +336,18 @@ class PDFReportGenerator:
                         pass
                 url = meta.get('source_url') or meta.get('url') or ''
 
+                # Determine rating band
+                if score >= 80:
+                    rating_band = "Excellent"
+                elif score >= 60:
+                    rating_band = "Good"
+                elif score >= 40:
+                    rating_band = "Fair"
+                else:
+                    rating_band = "Poor"
+
                 # Title row
-                story.append(Paragraph(f"<b>{title}</b> — {label.title()} ({score:.1f})", self.styles['Normal']))
+                story.append(Paragraph(f"<b>{title}</b> — {rating_band} ({score:.1f}/100)", self.styles['Normal']))
                 if desc:
                     if len(desc) > 300:
                         desc = desc[:297].rstrip() + '...'
@@ -302,15 +363,25 @@ class PDFReportGenerator:
             all_items = [_coerce_item_to_dict(it) for it in all_items]
             if all_items:
                 story.append(PageBreak())
-                story.append(Paragraph('Per-item Scoring Table', self.styles['SectionHeader']))
-                table_rows = [['Content ID', 'Source', 'Label', 'Score', 'URL']]
+                story.append(Paragraph('Per-item Rating Table', self.styles['SectionHeader']))
+                table_rows = [['Content ID', 'Source', 'Rating', 'Score', 'URL']]
                 for it in all_items:
                     url = ''
                     try:
                         url = it.get('meta', {}).get('source_url') or ''
                     except Exception:
                         url = ''
-                    table_rows.append([it.get('content_id'), it.get('source'), it.get('label'), f"{it.get('final_score', 0.0):.1f}", url])
+                    # Determine rating band for table
+                    score = it.get('final_score', 0.0)
+                    if score >= 80:
+                        rating_band = "Excellent"
+                    elif score >= 60:
+                        rating_band = "Good"
+                    elif score >= 40:
+                        rating_band = "Fair"
+                    else:
+                        rating_band = "Poor"
+                    table_rows.append([it.get('content_id'), it.get('source'), rating_band, f"{score:.1f}", url])
                 per_table = Table(table_rows, colWidths=[1.5*inch, 1*inch, 1*inch, 0.8*inch, 2.0*inch])
                 per_table.setStyle(TableStyle([
                     ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -323,11 +394,78 @@ class PDFReportGenerator:
                 story.append(per_table)
         
         return story
-    
-    def _create_ar_analysis(self, report_data: Dict[str, Any]) -> List:
-        """Create Authenticity Ratio analysis section"""
+
+    def _create_rating_analysis(self, report_data: Dict[str, Any]) -> List:
+        """Create Trust Stack Rating analysis section"""
         story = []
-        story.append(Paragraph("Authenticity Ratio Analysis", self.styles['SectionHeader']))
+        story.append(Paragraph("Trust Stack Rating Analysis", self.styles['SectionHeader']))
+
+        items = report_data.get('items', [])
+        total_items = len(items)
+
+        # Calculate rating distribution
+        if items:
+            avg_rating = sum(item.get('final_score', 0) for item in items) / len(items)
+        else:
+            avg_rating = 0
+
+        excellent = sum(1 for item in items if item.get('final_score', 0) >= 80)
+        good = sum(1 for item in items if 60 <= item.get('final_score', 0) < 80)
+        fair = sum(1 for item in items if 40 <= item.get('final_score', 0) < 60)
+        poor = sum(1 for item in items if item.get('final_score', 0) < 40)
+
+        # Rating metrics table
+        rating_metrics = [
+            ['Rating Band', 'Count', 'Percentage', 'Description'],
+            ['Excellent (80-100)', f"{excellent:,}", f"{excellent / max(total_items, 1) * 100:.1f}%", 'High-quality, verified content'],
+            ['Good (60-79)', f"{good:,}", f"{good / max(total_items, 1) * 100:.1f}%", 'Solid content, minor improvements'],
+            ['Fair (40-59)', f"{fair:,}", f"{fair / max(total_items, 1) * 100:.1f}%", 'Moderate quality, needs attention'],
+            ['Poor (0-39)', f"{poor:,}", f"{poor / max(total_items, 1) * 100:.1f}%", 'Low quality, immediate action'],
+            ['', '', '', ''],
+            ['Total Items', f"{total_items:,}", '100.0%', ''],
+            ['Average Rating', f"{avg_rating:.1f}/100", '', '']
+        ]
+
+        rating_table = Table(rating_metrics, colWidths=[1.5*inch, 1*inch, 1*inch, 2.5*inch])
+        rating_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('BACKGROUND', (0, 1), (-1, -3), colors.beige),
+            ('BACKGROUND', (0, -2), (-1, -1), colors.lightblue),
+            ('FONTNAME', (0, -2), (-1, -1), 'Helvetica-Bold'),
+        ]))
+
+        story.append(rating_table)
+        story.append(Spacer(1, 20))
+
+        # Explanation
+        story.append(Paragraph("Rating Methodology", self.styles['Heading3']))
+        explanation = (
+            "Each content item receives a comprehensive rating (0-100) calculated as a weighted average "
+            "across six trust dimensions: Provenance, Verification, Transparency, Coherence, Resonance, "
+            "and AI Readiness. Detected trust attributes (e.g., SSL certificates, schema markup, author "
+            "attribution) provide bonuses or penalties to the base dimensional scores."
+        )
+        story.append(Paragraph(explanation, self.styles['Normal']))
+        story.append(Spacer(1, 12))
+
+        # Create rating distribution chart
+        chart_path = self._create_rating_chart(excellent, good, fair, poor)
+        if chart_path:
+            story.append(Image(chart_path, width=6*inch, height=4*inch))
+
+        return story
+
+    def _create_legacy_ar_section(self, report_data: Dict[str, Any]) -> List:
+        """Create legacy Authenticity Ratio section for backward compatibility"""
+        story = []
+        story.append(Paragraph("Legacy Metrics (Authenticity Ratio)", self.styles['SectionHeader']))
+        story.append(Paragraph("Note: These metrics are provided for backward compatibility. The primary focus is Trust Stack Ratings.", self.styles['Normal']))
+        story.append(Spacer(1, 10))
 
         ar_data = report_data.get('authenticity_ratio', {})
 
@@ -411,8 +549,8 @@ class PDFReportGenerator:
     def _create_dimension_breakdown(self, report_data: Dict[str, Any]) -> List:
         """Create dimension breakdown section"""
         story = []
-        
-        story.append(Paragraph("5D Trust Dimensions Analysis", self.styles['SectionHeader']))
+
+        story.append(Paragraph("6D Trust Dimensions Analysis", self.styles['SectionHeader']))
         
         dimension_data = report_data.get('dimension_breakdown', {})
         
@@ -479,7 +617,42 @@ class PDFReportGenerator:
                     logger.debug(f"Could not embed image {img_path}: {e}")
         
         return story
-    
+
+    def _create_rating_chart(self, excellent: int, good: int, fair: int, poor: int) -> str:
+        """Create rating distribution chart"""
+        try:
+            # Create pie chart
+            fig, ax = plt.subplots(figsize=(8, 6))
+
+            labels = ['Excellent (80+)', 'Good (60-79)', 'Fair (40-59)', 'Poor (<40)']
+            sizes = [excellent, good, fair, poor]
+            colors_list = ['#2ecc71', '#3498db', '#f39c12', '#e74c3c']
+
+            # Remove zero values
+            non_zero_data = [(label, size, color) for label, size, color in zip(labels, sizes, colors_list) if size > 0]
+            if non_zero_data:
+                labels, sizes, colors_list = zip(*non_zero_data)
+
+            wedges, texts, autotexts = ax.pie(sizes, labels=labels, colors=colors_list, autopct='%1.1f%%', startangle=90)
+
+            # Customize text
+            for autotext in autotexts:
+                autotext.set_color('white')
+                autotext.set_fontweight('bold')
+
+            ax.set_title('Rating Distribution', fontsize=14, fontweight='bold')
+
+            # Save to temporary file
+            chart_path = f"/tmp/rating_chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            plt.savefig(chart_path, dpi=150, bbox_inches='tight')
+            plt.close()
+
+            return chart_path
+
+        except Exception as e:
+            logger.error(f"Error creating rating chart: {e}")
+            return None
+
     def _create_classification_analysis(self, report_data: Dict[str, Any]) -> List:
         """Create classification analysis section"""
         story = []
@@ -562,7 +735,7 @@ class PDFReportGenerator:
             # Customize chart
             ax.set_ylim(0, 1)
             ax.set_ylabel('Average Score')
-            ax.set_title('5D Trust Dimensions - Average Scores', fontsize=14, fontweight='bold')
+            ax.set_title('6D Trust Dimensions - Average Scores', fontsize=14, fontweight='bold')
             ax.grid(True, alpha=0.3)
             
             # Add value labels on bars

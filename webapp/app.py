@@ -59,6 +59,7 @@ st.markdown("""
         border-radius: 0.5rem;
         border-left: 4px solid #2196F3;
         margin: 1rem 0;
+        color: #1565c0;
     }
     .success-box {
         background: #e8f5e9;
@@ -66,6 +67,7 @@ st.markdown("""
         border-radius: 0.5rem;
         border-left: 4px solid #4caf50;
         margin: 1rem 0;
+        color: #2e7d32;
     }
     .warning-box {
         background: #fff3e0;
@@ -73,6 +75,7 @@ st.markdown("""
         border-radius: 0.5rem;
         border-left: 4px solid #ff9800;
         margin: 1rem 0;
+        color: #e65100;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -540,7 +543,7 @@ def show_results_page():
             hole=0.3
         )
         fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
 
     with col2:
         # Rating Score Distribution Histogram
@@ -566,7 +569,7 @@ def show_results_page():
         fig_hist.add_vline(x=80, line_dash="dash", line_color="green", annotation_text="Excellent")
         fig_hist.add_vline(x=60, line_dash="dash", line_color="blue", annotation_text="Good")
         fig_hist.add_vline(x=40, line_dash="dash", line_color="orange", annotation_text="Fair")
-        st.plotly_chart(fig_hist, use_container_width=True)
+        st.plotly_chart(fig_hist, use_container_width=True, config={'displayModeBar': False})
 
     st.divider()
 
@@ -604,7 +607,7 @@ def show_results_page():
             height=400
         )
 
-        st.plotly_chart(fig_radar, use_container_width=True)
+        st.plotly_chart(fig_radar, use_container_width=True, config={'displayModeBar': False})
 
     with col2:
         st.markdown("#### Dimension Scores")
