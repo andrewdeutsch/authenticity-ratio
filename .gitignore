@@ -65,3 +65,6 @@ config/local_settings.py
 #ignore temporary folders
 tmp_smoke/
 tmp_smoke_multi/
+
+# Migration backup directories
+.migration_backup_*/
