@@ -292,9 +292,50 @@ def show_analyze_page():
 
             cfg = APIConfig()
 
-            # Brave (always available)
-            use_brave = st.checkbox("🌐 Web Search (Brave)", value=True, help="Search web content via Brave Search")
-            brave_pages = st.number_input("Web pages to fetch", min_value=1, max_value=100, value=10, step=1) if use_brave else 10
+            # Search Provider Selection
+            st.markdown("**Web Search Provider**")
+
+            # Check which providers are available
+            brave_available = bool(cfg.brave_api_key)
+            serper_available = bool(cfg.serper_api_key)
+
+            # Determine default provider
+            default_provider = 'serper' if serper_available else 'brave'
+
+            # Create provider options
+            provider_options = []
+            provider_labels = []
+
+            if brave_available:
+                provider_options.append('brave')
+                provider_labels.append('🌐 Brave')
+
+            if serper_available:
+                provider_options.append('serper')
+                provider_labels.append('🔍 Serper')
+
+            if not provider_options:
+                st.error("⚠️ No search provider API keys configured. Please set BRAVE_API_KEY or SERPER_API_KEY.")
+                search_provider = None
+            elif len(provider_options) == 1:
+                # Only one provider available, show as info
+                search_provider = provider_options[0]
+                st.info(f"Using {provider_labels[0]} (only available provider)")
+            else:
+                # Multiple providers available, let user choose
+                default_index = provider_options.index(default_provider) if default_provider in provider_options else 0
+                search_provider = st.radio(
+                    "Select search provider:",
+                    options=provider_options,
+                    format_func=lambda x: '🌐 Brave' if x == 'brave' else '🔍 Serper',
+                    index=default_index,
+                    horizontal=True,
+                    help="Choose between Brave Search or Serper (Google) for web search"
+                )
+
+            # Web search settings
+            use_web_search = st.checkbox("🌐 Enable Web Search", value=True, help="Search web content via selected provider")
+            web_pages = st.number_input("Web pages to fetch", min_value=1, max_value=100, value=10, step=1) if use_web_search else 10
 
             # Reddit
             reddit_available = bool(cfg.reddit_client_id and cfg.reddit_client_secret)
@@ -337,8 +378,8 @@ def show_analyze_page():
 
         # Build sources list
         sources = []
-        if use_brave:
-            sources.append('brave')
+        if use_web_search:
+            sources.append('web')
         if use_reddit:
             sources.append('reddit')
         if use_youtube:
@@ -349,7 +390,7 @@ def show_analyze_page():
             return
 
         # Search for URLs without running analysis
-        search_for_urls(brand_id, keywords.split(), sources, brave_pages)
+        search_for_urls(brand_id, keywords.split(), sources, web_pages, search_provider)
 
     # Display found URLs for selection
     if 'found_urls' in st.session_state and st.session_state['found_urls']:
@@ -424,8 +465,8 @@ def show_analyze_page():
 
         # Build sources list
         sources = []
-        if use_brave:
-            sources.append('brave')
+        if use_web_search:
+            sources.append('web')
         if use_reddit:
             sources.append('reddit')
         if use_youtube:
@@ -444,7 +485,7 @@ def show_analyze_page():
                 return
 
         # Run pipeline
-        run_analysis(brand_id, keywords.split(), sources, max_items, brave_pages, include_comments, selected_urls)
+        run_analysis(brand_id, keywords.split(), sources, max_items, web_pages, include_comments, selected_urls, search_provider)
 
 
 def detect_brand_owned_url(url: str, brand_id: str) -> bool:
@@ -465,7 +506,7 @@ def detect_brand_owned_url(url: str, brand_id: str) -> bool:
         return False
 
 
-def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brave_pages: int):
+def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_pages: int, search_provider: str = 'serper'):
     """Search for URLs and store them in session state for user selection"""
     import os
     import logging
@@ -482,34 +523,39 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brav
 
         found_urls = []
 
-        # For now, only implement Brave search (Reddit and YouTube can be added later)
-        if 'brave' in sources:
+        # Web search (using selected provider: Brave or Serper)
+        if 'web' in sources:
             query = ' '.join(keywords)
 
-            status_text.text(f"🔍 Searching Brave for '{query}' (requesting {brave_pages} URLs)...")
+            provider_display = '🌐 Brave' if search_provider == 'brave' else '🔍 Serper'
+            status_text.text(f"{provider_display} Searching for '{query}' (requesting {web_pages} URLs)...")
             progress_bar.progress(30)
 
             try:
                 # Configure timeout for larger requests (scale with number of pages)
                 # Each pagination batch needs time, so scale appropriately
                 original_timeout = os.environ.get('BRAVE_API_TIMEOUT')
-                timeout_seconds = min(30, 10 + (brave_pages // 10))
+                timeout_seconds = min(30, 10 + (web_pages // 10))
                 os.environ['BRAVE_API_TIMEOUT'] = str(timeout_seconds)
 
-                # Calculate expected number of API requests (Brave API limit is typically 20 per request)
-                max_per_request = int(os.getenv('BRAVE_API_MAX_COUNT', '20'))
-                expected_requests = (brave_pages + max_per_request - 1) // max_per_request  # Ceiling division
+                # Calculate expected number of API requests
+                if search_provider == 'brave':
+                    max_per_request = int(os.getenv('BRAVE_API_MAX_COUNT', '20'))
+                else:  # serper
+                    max_per_request = int(os.getenv('SERPER_MAX_PER_REQUEST', '100'))
+
+                expected_requests = (web_pages + max_per_request - 1) // max_per_request  # Ceiling division
 
                 if expected_requests > 1:
-                    logger.info(f"Searching Brave: query={query}, size={brave_pages}, will make ~{expected_requests} paginated requests")
-                    status_text.text(f"🔍 Searching Brave (will make ~{expected_requests} API requests for {brave_pages} URLs)...")
+                    logger.info(f"Searching {search_provider}: query={query}, size={web_pages}, will make ~{expected_requests} paginated requests")
+                    status_text.text(f"{provider_display} Searching (will make ~{expected_requests} API requests for {web_pages} URLs)...")
                 else:
-                    logger.info(f"Searching Brave: query={query}, size={brave_pages}")
+                    logger.info(f"Searching {search_provider}: query={query}, size={web_pages}")
 
                 from ingestion.search_unified import search
 
                 progress_bar.progress(50)
-                search_results = search(query, size=brave_pages)
+                search_results = search(query, size=web_pages, provider=search_provider)
 
                 progress_bar.progress(70)
                 status_text.text(f"✓ Received {len(search_results)} results, processing...")
@@ -521,26 +567,45 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brav
                     os.environ.pop('BRAVE_API_TIMEOUT', None)
 
                 if not search_results:
-                    st.warning("⚠️ No search results found. Try different keywords or check your Brave API configuration.")
+                    st.warning(f"⚠️ No search results found. Try different keywords or check your {search_provider.upper()} API configuration.")
 
                     # Provide helpful diagnostics
                     st.info("**Troubleshooting tips:**")
-                    st.markdown("""
-                    - **Check your Brave API key**: Ensure `BRAVE_API_KEY` environment variable is set
-                    - **Check the logs**: Look at the terminal/console for detailed error messages
-                    - **Try fewer pages**: Start with 10-20 pages to test the connection
-                    - **Verify API quota**: Your Brave API plan may have reached its limit
-                    - **Check search query**: Try simpler, more common keywords first
-                    """)
+                    if search_provider == 'brave':
+                        st.markdown("""
+                        - **Check your Brave API key**: Ensure `BRAVE_API_KEY` environment variable is set
+                        - **Check the logs**: Look at the terminal/console for detailed error messages
+                        - **Try fewer pages**: Start with 10-20 pages to test the connection
+                        - **Verify API quota**: Your Brave API plan may have reached its limit
+                        - **Check search query**: Try simpler, more common keywords first
+                        """)
+                    else:  # serper
+                        st.markdown("""
+                        - **Check your Serper API key**: Ensure `SERPER_API_KEY` environment variable is set
+                        - **Check the logs**: Look at the terminal/console for detailed error messages
+                        - **Try fewer pages**: Start with 10-20 pages to test the connection
+                        - **Verify API quota**: Your Serper API plan may have reached its limit
+                        - **Check search query**: Try simpler, more common keywords first
+                        """)
 
                     # Show current configuration for debugging
                     with st.expander("🔍 Show Configuration Details"):
-                        st.code(f"""
+                        if search_provider == 'brave':
+                            st.code(f"""
+Provider: Brave Search
 Query: {query}
-Pages requested: {brave_pages}
+Pages requested: {web_pages}
 Timeout: {timeout_seconds}s
 API Key set: {'Yes' if os.getenv('BRAVE_API_KEY') else 'No'}
 API Endpoint: {os.getenv('BRAVE_API_ENDPOINT', 'https://api.search.brave.com/res/v1/web/search')}
+""")
+                        else:
+                            st.code(f"""
+Provider: Serper (Google Search)
+Query: {query}
+Pages requested: {web_pages}
+Timeout: {timeout_seconds}s
+API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
 """)
 
                     progress_bar.empty()
@@ -557,7 +622,7 @@ API Endpoint: {os.getenv('BRAVE_API_ENDPOINT', 'https://api.search.brave.com/res
                             'description': result.get('snippet', result.get('description', '')),
                             'is_brand_owned': is_brand_owned,
                             'selected': True,  # Default to selected
-                            'source': 'brave'
+                            'source': search_provider
                         })
 
                 # Prioritize brand-owned URLs by sorting them first
@@ -579,20 +644,21 @@ API Endpoint: {os.getenv('BRAVE_API_ENDPOINT', 'https://api.search.brave.com/res
                 st.rerun()
 
             except TimeoutError as e:
-                logger.error(f"Timeout error during Brave search: {e}")
+                logger.error(f"Timeout error during {search_provider} search: {e}")
                 st.error(f"⏱️ Search timed out after {timeout_seconds} seconds. Try requesting fewer URLs or check your network connection.")
 
             except ConnectionError as e:
-                logger.error(f"Connection error during Brave search: {e}")
-                st.error(f"🌐 Connection error: Could not reach Brave Search API. Please check your internet connection.")
+                logger.error(f"Connection error during {search_provider} search: {e}")
+                st.error(f"🌐 Connection error: Could not reach {search_provider.upper()} API. Please check your internet connection.")
 
             except Exception as e:
-                logger.error(f"Error during Brave search: {type(e).__name__}: {e}")
+                logger.error(f"Error during {search_provider} search: {type(e).__name__}: {e}")
                 st.error(f"❌ Search failed: {type(e).__name__}: {str(e)}")
 
                 # Show more helpful error messages for common issues
                 if 'api' in str(e).lower() or 'key' in str(e).lower():
-                    st.info("💡 Tip: Check that your BRAVE_API_KEY is set correctly in your environment.")
+                    api_key_name = 'BRAVE_API_KEY' if search_provider == 'brave' else 'SERPER_API_KEY'
+                    st.info(f"💡 Tip: Check that your {api_key_name} is set correctly in your environment.")
                 elif 'timeout' in str(e).lower():
                     st.info("💡 Tip: Try reducing the number of web pages to fetch, or check your network connection.")
 
@@ -609,7 +675,7 @@ API Endpoint: {os.getenv('BRAVE_API_ENDPOINT', 'https://api.search.brave.com/res
             pass
 
 
-def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_items: int, brave_pages: int, include_comments: bool, selected_urls: List[Dict] = None):
+def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_items: int, web_pages: int, include_comments: bool, selected_urls: List[Dict] = None, search_provider: str = 'serper'):
     """Execute the analysis pipeline"""
 
     # Create output directory
@@ -629,7 +695,7 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
         status_text.text("Initializing pipeline components...")
         progress_bar.progress(10)
 
-        from ingestion.brave_search import collect_brave_pages
+        from ingestion.brave_search import collect_brave_pages, fetch_page
         from ingestion.normalizer import ContentNormalizer
         from scoring.pipeline import ScoringPipeline
         from reporting.pdf_generator import PDFReportGenerator
@@ -652,16 +718,15 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
 
         all_content = []
 
-        # Brave ingestion
-        if 'brave' in sources:
+        # Web search ingestion (using selected provider)
+        if 'web' in sources:
             # If URLs were pre-selected, use only those
             if selected_urls:
-                from ingestion.brave_search import fetch_page
-
-                selected_brave_urls = [u for u in selected_urls if u['source'] == 'brave']
+                # Filter URLs from the current search provider
+                selected_web_urls = [u for u in selected_urls if u['source'] in ['brave', 'serper', 'web']]
                 collected = []
 
-                for url_data in selected_brave_urls:
+                for url_data in selected_web_urls:
                     try:
                         page_data = fetch_page(url_data['url'])
                         if page_data and page_data.get('body'):
@@ -671,23 +736,36 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                     except Exception as e:
                         st.warning(f"⚠️ Could not fetch {url_data['url']}: {str(e)}")
 
-                st.info(f"✓ Fetched {len(collected)} of {len(selected_brave_urls)} selected web pages")
+                st.info(f"✓ Fetched {len(collected)} of {len(selected_web_urls)} selected web pages")
             else:
                 # Original behavior: search and fetch automatically
                 query = ' '.join(keywords)
-                collected = collect_brave_pages(query, target_count=brave_pages)
 
-                # Add brand-owned detection for each URL
-                for c in collected:
-                    url = c.get('url', '')
-                    c['is_brand_owned'] = detect_brand_owned_url(url, brand_id)
+                # Use the unified search interface with the selected provider
+                from ingestion.search_unified import search
+                search_results = search(query, size=web_pages, provider=search_provider)
 
-                st.info(f"✓ Collected {len(collected)} web pages")
+                collected = []
+                for result in search_results:
+                    url = result.get('url', '')
+                    if url:
+                        try:
+                            page_data = fetch_page(url)
+                            if page_data and page_data.get('body'):
+                                # Add metadata from search result
+                                page_data['search_title'] = result.get('title', '')
+                                page_data['search_snippet'] = result.get('snippet', '')
+                                page_data['is_brand_owned'] = detect_brand_owned_url(url, brand_id)
+                                collected.append(page_data)
+                        except Exception as e:
+                            st.warning(f"⚠️ Could not fetch {url}: {str(e)}")
+
+                st.info(f"✓ Collected {len(collected)} web pages using {search_provider}")
 
             # Convert to NormalizedContent
             for i, c in enumerate(collected):
                 url = c.get('url')
-                content_id = f"brave_{i}_{abs(hash(url or ''))}"
+                content_id = f"{search_provider}_{i}_{abs(hash(url or ''))}"
                 is_brand_owned = c.get('is_brand_owned', False)
 
                 meta = {
@@ -695,7 +773,8 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                     'content_type': 'web',
                     'title': c.get('title', ''),
                     'description': c.get('body', '')[:200],
-                    'is_brand_owned': is_brand_owned  # Add brand-owned flag to metadata
+                    'is_brand_owned': is_brand_owned,  # Add brand-owned flag to metadata
+                    'search_provider': search_provider  # Track which provider was used
                 }
                 if c.get('terms'):
                     meta['terms'] = c.get('terms')
@@ -704,7 +783,7 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
 
                 nc = NormalizedContent(
                     content_id=content_id,
-                    src='brave',
+                    src=search_provider,
                     platform_id=url or '',
                     author='web',
                     title=c.get('title', '') or '',
@@ -1269,7 +1348,11 @@ def main():
         st.markdown("### API Status")
         cfg = APIConfig()
 
-        st.write("🌐 Brave Search:", "✅" if True else "❌")
+        st.markdown("**Search Providers:**")
+        st.write("🌐 Brave:", "✅" if cfg.brave_api_key else "❌")
+        st.write("🔍 Serper:", "✅" if cfg.serper_api_key else "❌")
+
+        st.markdown("**Other APIs:**")
         st.write("🔴 Reddit:", "✅" if (cfg.reddit_client_id and cfg.reddit_client_secret) else "❌")
         st.write("📹 YouTube:", "✅" if cfg.youtube_api_key else "❌")
 

@@ -25,16 +25,21 @@ class APIConfig:
     reddit_client_id: str = os.getenv('REDDIT_CLIENT_ID', '')
     reddit_client_secret: str = os.getenv('REDDIT_CLIENT_SECRET', '')
     reddit_user_agent: str = os.getenv('REDDIT_USER_AGENT', 'AR-Tool/1.0')
-    
+
     # Amazon Product Advertising API
     amazon_access_key: str = os.getenv('AMAZON_ACCESS_KEY', '')
     amazon_secret_key: str = os.getenv('AMAZON_SECRET_KEY', '')
     amazon_associate_tag: str = os.getenv('AMAZON_ASSOCIATE_TAG', '')
-    
+
     # OpenAI for LLM scoring
     openai_api_key: str = os.getenv('OPENAI_API_KEY', '')
     # YouTube Data API v3
     youtube_api_key: str = os.getenv('YOUTUBE_API_KEY', '')
+
+    # Search Provider APIs
+    brave_api_key: str = os.getenv('BRAVE_API_KEY', '')
+    serper_api_key: str = os.getenv('SERPER_API_KEY', '')
+    search_provider: str = os.getenv('SEARCH_PROVIDER', 'serper')
 
 # Global settings
 SETTINGS = {
