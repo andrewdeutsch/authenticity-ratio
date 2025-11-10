@@ -164,7 +164,7 @@ st.markdown("""
 
 def show_home_page():
     """Display the home/overview page"""
-    st.markdown('<div class="main-header">⭐ Trust Stack Rating</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">⭐ Trust Stack R</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-header">Measure and monitor brand content quality across digital channels</div>', unsafe_allow_html=True)
 
     st.divider()
@@ -173,9 +173,9 @@ def show_home_page():
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.markdown("### 📊 What is Trust Stack Rating?")
+        st.markdown("### 📊 What is the Trust Stack Rating?")
         st.markdown("""
-        **Trust Stack Rating** is a comprehensive scoring system that evaluates brand-linked content
+        The **Trust Stack Rating** is a comprehensive scoring system that evaluates brand-linked content
         across six trust dimensions. Each piece of content receives a **0-100 rating** based on
         signals detected in metadata, structure, and provenance.
 
