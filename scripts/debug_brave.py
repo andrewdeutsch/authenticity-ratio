@@ -1,9 +1,10 @@
-"""Quick debug helper: run `search_brave()` and dump results + HTML snippet to disk.
+"""Quick debug helper: run search and dump results + HTML snippet to disk.
 
 Usage:
     python scripts/debug_brave.py --query nike --size 4 --out /tmp/brave_debug.html
 
-This helps you see the raw HTML Brave returns and the parsed link targets.
+This helps you see the raw search results and can fetch HTML for inspection.
+Note: Uses the unified search interface - provider is controlled by SEARCH_PROVIDER env var.
 """
 import argparse
 import logging
@@ -15,7 +16,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from ingestion import brave_search
+from ingestion import search_unified
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ def main():
     p.add_argument('--out', default='/tmp/brave_snippet.html')
     args = p.parse_args()
 
-    results = brave_search.search_brave(args.query, size=args.size)
+    results = search_unified.search(args.query, size=args.size)
     print(f"Parsed {len(results)} results:\n")
     for i, r in enumerate(results):
         print(i, r.get('title'), r.get('url'))

@@ -506,10 +506,10 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brav
                 else:
                     logger.info(f"Searching Brave: query={query}, size={brave_pages}")
 
-                from ingestion.brave_search import search_brave
+                from ingestion.search_unified import search
 
                 progress_bar.progress(50)
-                search_results = search_brave(query, size=brave_pages)
+                search_results = search(query, size=brave_pages)
 
                 progress_bar.progress(70)
                 status_text.text(f"✓ Received {len(search_results)} results, processing...")
