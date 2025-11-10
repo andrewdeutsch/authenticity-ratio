@@ -25,20 +25,22 @@ from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
-# Import both search modules
+# Import both search modules with aliases to avoid naming conflicts
 try:
-    from ingestion.brave_search import search_brave
+    from ingestion.brave_search import search_brave as _brave_search_impl
     _BRAVE_AVAILABLE = True
 except ImportError as e:
     logger.warning('Brave search not available: %s', e)
     _BRAVE_AVAILABLE = False
+    _brave_search_impl = None
 
 try:
-    from ingestion.serper_search import search_serper
+    from ingestion.serper_search import search_serper as _serper_search_impl
     _SERPER_AVAILABLE = True
 except ImportError as e:
     logger.warning('Serper search not available: %s', e)
     _SERPER_AVAILABLE = False
+    _serper_search_impl = None
 
 
 def search(query: str, size: int = 10, provider: str | None = None) -> List[Dict[str, str]]:
@@ -68,14 +70,14 @@ def search(query: str, size: int = 10, provider: str | None = None) -> List[Dict
             raise ValueError(
                 'Brave search is not available. Check brave_search.py import.'
             )
-        return search_brave(query, size=size)
+        return _brave_search_impl(query, size=size)
 
     elif provider == 'serper':
         if not _SERPER_AVAILABLE:
             raise ValueError(
                 'Serper search is not available. Check serper_search.py import.'
             )
-        return search_serper(query, size=size)
+        return _serper_search_impl(query, size=size)
 
     else:
         raise ValueError(
