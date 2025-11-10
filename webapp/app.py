@@ -575,7 +575,20 @@ API Endpoint: {os.getenv('BRAVE_API_ENDPOINT', 'https://api.search.brave.com/res
                 status_text.empty()
                 progress_bar.empty()
 
-                st.success(f"✓ Found {len(found_urls)} URLs ({brand_owned_count} brand-owned, {third_party_count} third-party)")
+                # Show success message with API limit warning if applicable
+                if len(found_urls) < brave_pages:
+                    st.warning(f"⚠️ Found {len(found_urls)} URLs ({brand_owned_count} brand-owned, {third_party_count} third-party)")
+                    st.info(f"""
+**Brave API Limitation**: Your API plan has pagination limits (max offset ≤ 9).
+You requested {brave_pages} URLs but could only retrieve {len(found_urls)}.
+
+**Options to get more results:**
+- Upgrade your Brave API subscription for deeper pagination
+- Use more specific search keywords to get better results in the first 20
+- Run multiple searches with different keywords
+""")
+                else:
+                    st.success(f"✓ Found {len(found_urls)} URLs ({brand_owned_count} brand-owned, {third_party_count} third-party)")
                 st.rerun()
 
             except TimeoutError as e:

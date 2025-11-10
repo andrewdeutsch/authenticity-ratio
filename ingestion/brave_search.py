@@ -176,6 +176,10 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
         pagination_attempts = 0
         max_pagination_attempts = 10  # Safety limit
 
+        # Brave API has strict limits on offset parameter (typically ≤9 for basic plans)
+        # We'll discover the max offset dynamically by handling 422 errors
+        max_offset_limit = None
+
         while len(all_results) < size and pagination_attempts < max_pagination_attempts:
             pagination_attempts += 1
             # Calculate how many results to request in this batch
@@ -187,6 +191,10 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
             # Brave API uses 'offset' parameter for pagination
             # Note: offset is the number of results to skip, not a page number
             if offset > 0:
+                # If we've discovered an offset limit, respect it
+                if max_offset_limit is not None and offset > max_offset_limit:
+                    logger.warning('Reached Brave API offset limit (%s). Cannot fetch more results.', max_offset_limit)
+                    break
                 params["offset"] = offset
 
             logger.info('Brave API request: query=%s, batch_size=%s, offset=%s (total collected: %s/%s)',
@@ -280,14 +288,38 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
                 else:
                     body_text = getattr(resp, 'text', '')[:1000]
                     logger.error('Brave API request failed: HTTP %s. Response: %s', resp.status_code, body_text)
-                    # Try to parse error details if it's JSON
-                    try:
-                        error_body = resp.json()
-                        if isinstance(error_body, dict):
-                            error_msg = error_body.get('message') or error_body.get('error') or str(error_body)
-                            logger.error('Brave API error details: %s', error_msg)
-                    except:
-                        pass
+
+                    # Handle 422 validation errors (offset limits)
+                    if resp.status_code == 422:
+                        try:
+                            error_body = resp.json()
+                            if isinstance(error_body, dict):
+                                error_detail = error_body.get('error', {})
+                                meta = error_detail.get('meta', {})
+                                errors = meta.get('errors', [])
+
+                                # Check if this is an offset limit error
+                                for err in errors:
+                                    if err.get('loc') == ['query', 'offset'] and 'le' in err.get('ctx', {}):
+                                        max_offset_limit = int(err['ctx']['le'])
+                                        logger.warning('Brave API offset limit discovered: max offset = %s', max_offset_limit)
+                                        logger.info('Your Brave API plan limits deep pagination. Maximum %s results can be retrieved.',
+                                                   max_offset_limit + max_per_request)
+                                        break
+
+                                logger.error('Brave API validation error: %s', error_detail)
+                        except:
+                            pass
+                    else:
+                        # Try to parse other error details
+                        try:
+                            error_body = resp.json()
+                            if isinstance(error_body, dict):
+                                error_msg = error_body.get('message') or error_body.get('error') or str(error_body)
+                                logger.error('Brave API error details: %s', error_msg)
+                        except:
+                            pass
+
                     break  # API error, stop pagination
 
             except Exception as e:
@@ -319,8 +351,17 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
 
         # Return collected results
         if all_results:
-            logger.info('Brave API pagination complete: collected %s results total (requested %s) after %s attempts',
-                       len(all_results), size, pagination_attempts)
+            if len(all_results) < size:
+                if max_offset_limit is not None:
+                    logger.warning('Brave API pagination limited by offset constraint (max offset=%s). Collected %s of %s requested results.',
+                                 max_offset_limit, len(all_results), size)
+                    logger.info('To get more results, consider upgrading your Brave API plan or using multiple search queries.')
+                else:
+                    logger.info('Brave API pagination complete: collected %s of %s requested results after %s attempts',
+                               len(all_results), size, pagination_attempts)
+            else:
+                logger.info('Brave API pagination complete: collected %s results total (requested %s) after %s attempts',
+                           len(all_results), size, pagination_attempts)
             return all_results[:size]  # Trim to exact size requested
 
         logger.warning('Brave API pagination complete but no results collected after %s attempts', pagination_attempts)
