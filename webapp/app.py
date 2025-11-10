@@ -344,12 +344,15 @@ def show_analyze_page():
     # Display found URLs for selection
     if 'found_urls' in st.session_state and st.session_state['found_urls']:
         st.markdown("### 📋 Found URLs")
-        st.markdown("Select the URLs you want to include in the analysis:")
 
         found_urls = st.session_state['found_urls']
 
-        # Add select all / deselect all buttons
-        col_sel_all, col_desel_all = st.columns(2)
+        # Separate URLs into brand-owned and third-party
+        brand_owned_urls = [u for u in found_urls if u.get('is_brand_owned', False)]
+        third_party_urls = [u for u in found_urls if not u.get('is_brand_owned', False)]
+
+        # Overall select/deselect buttons
+        col_sel_all, col_desel_all, col_stats = st.columns([1, 1, 2])
         with col_sel_all:
             if st.button("✓ Select All"):
                 for url_data in found_urls:
@@ -360,24 +363,48 @@ def show_analyze_page():
                 for url_data in found_urls:
                     url_data['selected'] = False
                 st.rerun()
+        with col_stats:
+            st.info(f"📊 Selected {sum(1 for u in found_urls if u.get('selected', True))} of {len(found_urls)} URLs")
 
-        # Display URLs with checkboxes
-        for idx, url_data in enumerate(found_urls):
-            col1, col2 = st.columns([1, 10])
-            with col1:
-                url_data['selected'] = st.checkbox(
-                    "Select",
-                    value=url_data.get('selected', True),
-                    key=f"url_{idx}",
-                    label_visibility="collapsed"
-                )
-            with col2:
-                # Show brand-owned indicator
-                brand_indicator = "🏢 Brand-owned" if url_data.get('is_brand_owned', False) else "🌐 Third-party"
-                st.markdown(f"**{brand_indicator}** | {url_data['title'][:80]}...")
-                st.caption(f"🔗 {url_data['url']}")
+        st.divider()
 
-        st.info(f"📊 Selected {sum(1 for u in found_urls if u.get('selected', True))} of {len(found_urls)} URLs")
+        # Brand-Owned URLs Section
+        if brand_owned_urls:
+            st.markdown("#### 🏢 Brand-Owned URLs")
+            st.caption(f"{len(brand_owned_urls)} URLs from brand domains")
+
+            for idx, url_data in enumerate(brand_owned_urls):
+                col1, col2 = st.columns([1, 10])
+                with col1:
+                    url_data['selected'] = st.checkbox(
+                        "Select",
+                        value=url_data.get('selected', True),
+                        key=f"brand_url_{idx}",
+                        label_visibility="collapsed"
+                    )
+                with col2:
+                    st.markdown(f"**{url_data['title'][:80]}{'...' if len(url_data['title']) > 80 else ''}**")
+                    st.caption(f"🔗 {url_data['url']}")
+
+            st.divider()
+
+        # Third-Party URLs Section
+        if third_party_urls:
+            st.markdown("#### 🌐 Third-Party URLs")
+            st.caption(f"{len(third_party_urls)} URLs from external sources")
+
+            for idx, url_data in enumerate(third_party_urls):
+                col1, col2 = st.columns([1, 10])
+                with col1:
+                    url_data['selected'] = st.checkbox(
+                        "Select",
+                        value=url_data.get('selected', True),
+                        key=f"third_party_url_{idx}",
+                        label_visibility="collapsed"
+                    )
+                with col2:
+                    st.markdown(f"**{url_data['title'][:80]}{'...' if len(url_data['title']) > 80 else ''}**")
+                    st.caption(f"🔗 {url_data['url']}")
 
     if submit:
         # Validate inputs
@@ -430,7 +457,7 @@ def detect_brand_owned_url(url: str, brand_id: str) -> bool:
 
 def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brave_pages: int):
     """Search for URLs and store them in session state for user selection"""
-    from ingestion.brave_search import search_brave
+    import os
 
     with st.spinner("🔍 Searching for URLs..."):
         found_urls = []
@@ -439,7 +466,19 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brav
         if 'brave' in sources:
             query = ' '.join(keywords)
             try:
+                # Temporarily increase the API limit for search results
+                # Store original value to restore later
+                original_limit = os.environ.get('BRAVE_API_MAX_COUNT')
+                os.environ['BRAVE_API_MAX_COUNT'] = str(brave_pages)
+
+                from ingestion.brave_search import search_brave
                 search_results = search_brave(query, size=brave_pages)
+
+                # Restore original limit
+                if original_limit is not None:
+                    os.environ['BRAVE_API_MAX_COUNT'] = original_limit
+                else:
+                    os.environ.pop('BRAVE_API_MAX_COUNT', None)
 
                 for result in search_results:
                     url = result.get('url', '')
@@ -448,14 +487,14 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brav
                         found_urls.append({
                             'url': url,
                             'title': result.get('title', 'No title'),
-                            'description': result.get('description', ''),
+                            'description': result.get('snippet', result.get('description', '')),
                             'is_brand_owned': is_brand_owned,
                             'selected': True,  # Default to selected
                             'source': 'brave'
                         })
 
                 st.session_state['found_urls'] = found_urls
-                st.success(f"✓ Found {len(found_urls)} URLs")
+                st.success(f"✓ Found {len(found_urls)} URLs ({sum(1 for u in found_urls if u['is_brand_owned'])} brand-owned, {sum(1 for u in found_urls if not u['is_brand_owned'])} third-party)")
                 st.rerun()
 
             except Exception as e:
