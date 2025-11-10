@@ -493,47 +493,77 @@ class PDFReportGenerator:
         return story
 
     def _create_dimension_deep_dive(self, report_data: Dict[str, Any]) -> List:
-        """Create per-dimension breakdown with content examples"""
+        """Create per-dimension breakdown with content examples and actionable analysis"""
         story = []
         story.append(Paragraph("Dimension Deep Dive", self.styles['SectionHeader']))
         story.append(Paragraph(
-            "This section provides a detailed analysis of each trust dimension, showing how your brand performed "
-            "and highlighting specific content examples that demonstrate high or low scores in each area.",
+            "This section analyzes your brand's performance in each trust dimension with specific examples from your content "
+            "and actionable recommendations for improvement.",
             self.styles['Normal']
         ))
         story.append(Spacer(1, 15))
 
-        # Define dimensions with detailed descriptions
+        # Define dimensions with detailed descriptions and action recommendations
         dimensions_info = {
             'provenance': {
                 'name': 'Provenance',
-                'description': 'Measures the origin, traceability, and metadata integrity of content. High scores indicate clear authorship, publication timestamps, and structured metadata (e.g., schema.org markup).',
-                'icon': '🔗'
+                'description': 'Measures the origin, traceability, and metadata integrity of content.',
+                'icon': '🔗',
+                'actions': {
+                    'high': 'Continue maintaining clear authorship and structured metadata across all content.',
+                    'medium': 'Add author attribution and publication timestamps to content that lacks them.',
+                    'low': 'Implement schema.org markup, add clear author attribution, and include publication timestamps on all content immediately.'
+                }
             },
             'verification': {
                 'name': 'Verification',
-                'description': 'Evaluates factual accuracy and verifiability against trusted databases. Content with citations, references to authoritative sources, and fact-checked claims scores higher.',
-                'icon': '✓'
+                'description': 'Evaluates factual accuracy and verifiability against trusted databases.',
+                'icon': '✓',
+                'actions': {
+                    'high': 'Maintain your strong fact-checking practices and continue citing authoritative sources.',
+                    'medium': 'Add more citations and references to verifiable external sources.',
+                    'low': 'Fact-check all claims against authoritative sources, add citations and references, and link to verifiable external data.'
+                }
             },
             'transparency': {
                 'name': 'Transparency',
-                'description': 'Assesses disclosure practices, clarity, and attribution. High scores reflect clear disclosure of sponsored content, transparent sourcing, and explicit attribution of information.',
-                'icon': '👁'
+                'description': 'Assesses disclosure practices, clarity, and attribution.',
+                'icon': '👁',
+                'actions': {
+                    'high': 'Continue your excellent disclosure and attribution practices.',
+                    'medium': 'Improve disclosure statements and add clearer attribution for sourced information.',
+                    'low': 'Add disclosure statements, clearly identify sponsored content, and provide detailed attribution for all sources.'
+                }
             },
             'coherence': {
                 'name': 'Coherence',
-                'description': 'Measures consistency across channels and over time. Evaluates whether messaging, branding, and positioning remain unified across different platforms and content types.',
-                'icon': '🔄'
+                'description': 'Measures consistency across channels and over time.',
+                'icon': '🔄',
+                'actions': {
+                    'high': 'Your messaging remains consistent - continue this unified approach.',
+                    'medium': 'Review messaging consistency across channels and align visual branding.',
+                    'low': 'Audit messaging consistency across all channels, align visual branding, and ensure unified voice in customer communications.'
+                }
             },
             'resonance': {
                 'name': 'Resonance',
-                'description': 'Evaluates cultural fit and organic engagement. High scores indicate authentic audience engagement, culturally relevant messaging, and reduced promotional language.',
-                'icon': '📢'
+                'description': 'Evaluates cultural fit and organic engagement.',
+                'icon': '📢',
+                'actions': {
+                    'high': 'Your content resonates well with your audience - maintain this authentic engagement.',
+                    'medium': 'Reduce overly promotional language and increase authentic engagement.',
+                    'low': 'Increase authentic engagement with your audience, reduce promotional language significantly, and ensure cultural relevance in messaging.'
+                }
             },
             'ai_readiness': {
                 'name': 'AI Readiness',
-                'description': 'Assesses machine discoverability and LLM-readability. Content with structured data, semantic HTML markup, and machine-readable metadata scores higher.',
-                'icon': '🤖'
+                'description': 'Assesses machine discoverability and LLM-readability.',
+                'icon': '🤖',
+                'actions': {
+                    'high': 'Your content is well-optimized for AI discovery - continue using structured data.',
+                    'medium': 'Add more structured data and improve semantic HTML markup.',
+                    'low': 'Optimize content for LLM discovery by adding structured data, improving semantic HTML markup, and including machine-readable metadata.'
+                }
             }
         }
 
@@ -553,10 +583,27 @@ class PDFReportGenerator:
             story.append(Paragraph(dim_info['description'], self.styles['Normal']))
             story.append(Spacer(1, 8))
 
-            # Score summary
-            score_text = f"<b>Average Score:</b> {avg_score:.1f}/100 | <b>Range:</b> {min_score:.1f} - {max_score:.1f}"
-            story.append(Paragraph(score_text, self.styles['Normal']))
-            story.append(Spacer(1, 8))
+            # Score summary with performance assessment
+            if avg_score >= 70:
+                performance = "Strong"
+                perf_color = colors.darkgreen
+                action_level = 'high'
+            elif avg_score >= 50:
+                performance = "Moderate"
+                perf_color = colors.orange
+                action_level = 'medium'
+            else:
+                performance = "Needs Improvement"
+                perf_color = colors.red
+                action_level = 'low'
+
+            score_para = Paragraph(
+                f"<b>Performance:</b> <font color='{perf_color.hexval()}'>{performance}</font> | "
+                f"<b>Average Score:</b> {avg_score:.1f}/100 | <b>Range:</b> {min_score:.1f} - {max_score:.1f}",
+                self.styles['Normal']
+            )
+            story.append(score_para)
+            story.append(Spacer(1, 10))
 
             # Find best and worst examples for this dimension
             items_with_dim_scores = []
@@ -565,66 +612,110 @@ class PDFReportGenerator:
                 if dim_key in dim_scores and dim_scores[dim_key] is not None:
                     items_with_dim_scores.append((item, dim_scores[dim_key] * 100))
 
-            if items_with_dim_scores:
+            if items_with_dim_scores and len(items_with_dim_scores) > 0:
                 # Sort by dimension score
                 items_with_dim_scores.sort(key=lambda x: x[1], reverse=True)
 
-                # Get best performing item
-                best_item, best_score = items_with_dim_scores[0]
+                # Analysis paragraph
+                num_high = len([s for _, s in items_with_dim_scores if s >= 70])
+                num_low = len([s for _, s in items_with_dim_scores if s < 40])
+                total_items = len(items_with_dim_scores)
 
-                story.append(Paragraph("<b>Example Content:</b>", self.styles['Normal']))
+                analysis_text = (
+                    f"<b>Analysis:</b> Of your {total_items} content items, {num_high} ({num_high/total_items*100:.0f}%) scored 70+ in {dim_info['name']}, "
+                    f"while {num_low} ({num_low/total_items*100:.0f}%) scored below 40. "
+                )
+
+                if avg_score >= 70:
+                    analysis_text += f"Your brand shows strength in {dim_info['name'].lower()}, with most content meeting high standards."
+                elif avg_score >= 50:
+                    analysis_text += f"There is inconsistency in {dim_info['name'].lower()} - some content excels while other items need significant improvement."
+                else:
+                    analysis_text += f"Most content struggles with {dim_info['name'].lower()}, indicating a systemic issue that requires immediate attention."
+
+                story.append(Paragraph(analysis_text, self.styles['Normal']))
+                story.append(Spacer(1, 10))
+
+                # Show best example
+                best_item, best_score = items_with_dim_scores[0]
+                story.append(Paragraph(f"<b>Highest-Scoring Example</b> ({best_score:.1f}/100):", self.styles['Normal']))
 
                 meta = best_item.get('meta', {})
                 title = meta.get('title') or meta.get('source_url') or meta.get('url') or 'Untitled'
-                if len(title) > 80:
-                    title = title[:77] + '...'
+                if len(title) > 70:
+                    title = title[:67] + '...'
 
                 source = best_item.get('source', 'Unknown').upper()
-                final_score = best_item.get('final_score', 0)
-
-                # Determine rating band
-                if final_score >= 80:
-                    rating_band = "🟢 Excellent"
-                elif final_score >= 60:
-                    rating_band = "🟡 Good"
-                elif final_score >= 40:
-                    rating_band = "🟠 Fair"
-                else:
-                    rating_band = "🔴 Poor"
+                url = meta.get('source_url') or meta.get('url') or ''
+                if len(url) > 60:
+                    url = url[:57] + '...'
 
                 example_data = [
                     ['Title', title],
                     ['Source', source],
-                    [f'{dim_info["name"]} Score', f"{best_score:.1f}/100"],
-                    ['Overall Rating', f"{final_score:.1f}/100 ({rating_band})"]
+                    ['URL', url if url else 'N/A']
                 ]
 
-                example_table = Table(example_data, colWidths=[1.5*inch, 4.5*inch])
+                example_table = Table(example_data, colWidths=[1.0*inch, 5.0*inch])
                 example_table.setStyle(TableStyle([
                     ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
                     ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-                    ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                     ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8),
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                    ('BACKGROUND', (1, 0), (1, -1), colors.beige),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BACKGROUND', (1, 0), (1, -1), colors.Color(0.93, 0.97, 0.93)),
                     ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
                 ]))
 
                 story.append(example_table)
+                story.append(Spacer(1, 8))
 
-                # If there's a significant worst performer, mention it
+                # Show worst example if there's significant variance
                 if len(items_with_dim_scores) > 1:
                     worst_item, worst_score = items_with_dim_scores[-1]
-                    if worst_score < 40 and best_score - worst_score > 30:
-                        story.append(Spacer(1, 6))
-                        story.append(Paragraph(
-                            f"<i>Note: {len([s for _, s in items_with_dim_scores if s < 40])} items scored below 40/100 "
-                            f"in {dim_info['name']}, indicating areas for improvement.</i>",
-                            self.styles['Normal']
-                        ))
+                    if worst_score < 50 and (best_score - worst_score) > 30:
+                        story.append(Paragraph(f"<b>Lowest-Scoring Example</b> ({worst_score:.1f}/100):", self.styles['Normal']))
 
-            story.append(Spacer(1, 15))
+                        meta = worst_item.get('meta', {})
+                        title = meta.get('title') or meta.get('source_url') or meta.get('url') or 'Untitled'
+                        if len(title) > 70:
+                            title = title[:67] + '...'
+
+                        source = worst_item.get('source', 'Unknown').upper()
+                        url = meta.get('source_url') or meta.get('url') or ''
+                        if len(url) > 60:
+                            url = url[:57] + '...'
+
+                        example_data = [
+                            ['Title', title],
+                            ['Source', source],
+                            ['URL', url if url else 'N/A']
+                        ]
+
+                        example_table = Table(example_data, colWidths=[1.0*inch, 5.0*inch])
+                        example_table.setStyle(TableStyle([
+                            ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+                            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                            ('FONTSIZE', (0, 0), (-1, -1), 8),
+                            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                            ('TOPPADDING', (0, 0), (-1, -1), 6),
+                            ('BACKGROUND', (1, 0), (1, -1), colors.Color(0.97, 0.93, 0.93)),
+                            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+                        ]))
+
+                        story.append(example_table)
+                        story.append(Spacer(1, 8))
+
+            # Call to action
+            story.append(Paragraph("<b>Recommended Action:</b>", self.styles['Normal']))
+            action_text = dim_info['actions'][action_level]
+            story.append(Paragraph(f"→ {action_text}", self.styles['Normal']))
+
+            story.append(Spacer(1, 18))
 
         return story
 
