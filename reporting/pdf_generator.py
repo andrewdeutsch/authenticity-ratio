@@ -670,45 +670,44 @@ class PDFReportGenerator:
                 ]))
 
                 story.append(example_table)
-                story.append(Spacer(1, 8))
+                story.append(Spacer(1, 10))
 
-                # Show worst example if there's significant variance
+                # Always show worst example for comparison
                 if len(items_with_dim_scores) > 1:
                     worst_item, worst_score = items_with_dim_scores[-1]
-                    if worst_score < 50 and (best_score - worst_score) > 30:
-                        story.append(Paragraph(f"<b>Lowest-Scoring Example</b> ({worst_score:.1f}/100):", self.styles['Normal']))
+                    story.append(Paragraph(f"<b>Lowest-Scoring Example</b> ({worst_score:.1f}/100):", self.styles['Normal']))
 
-                        meta = worst_item.get('meta', {})
-                        title = meta.get('title') or meta.get('source_url') or meta.get('url') or 'Untitled'
-                        if len(title) > 70:
-                            title = title[:67] + '...'
+                    meta = worst_item.get('meta', {})
+                    title = meta.get('title') or meta.get('source_url') or meta.get('url') or 'Untitled'
+                    if len(title) > 70:
+                        title = title[:67] + '...'
 
-                        source = worst_item.get('source', 'Unknown').upper()
-                        url = meta.get('source_url') or meta.get('url') or ''
-                        if len(url) > 60:
-                            url = url[:57] + '...'
+                    source = worst_item.get('source', 'Unknown').upper()
+                    url = meta.get('source_url') or meta.get('url') or ''
+                    if len(url) > 60:
+                        url = url[:57] + '...'
 
-                        example_data = [
-                            ['Title', title],
-                            ['Source', source],
-                            ['URL', url if url else 'N/A']
-                        ]
+                    example_data = [
+                        ['Title', title],
+                        ['Source', source],
+                        ['URL', url if url else 'N/A']
+                    ]
 
-                        example_table = Table(example_data, colWidths=[1.0*inch, 5.0*inch])
-                        example_table.setStyle(TableStyle([
-                            ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-                            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-                            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-                            ('FONTSIZE', (0, 0), (-1, -1), 8),
-                            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                            ('TOPPADDING', (0, 0), (-1, -1), 6),
-                            ('BACKGROUND', (1, 0), (1, -1), colors.Color(0.97, 0.93, 0.93)),
-                            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
-                        ]))
+                    example_table = Table(example_data, colWidths=[1.0*inch, 5.0*inch])
+                    example_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+                        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 8),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                        ('TOPPADDING', (0, 0), (-1, -1), 6),
+                        ('BACKGROUND', (1, 0), (1, -1), colors.Color(0.97, 0.93, 0.93)),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+                    ]))
 
-                        story.append(example_table)
-                        story.append(Spacer(1, 8))
+                    story.append(example_table)
+                    story.append(Spacer(1, 8))
 
             # Call to action
             story.append(Paragraph("<b>Recommended Action:</b>", self.styles['Normal']))
