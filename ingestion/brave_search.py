@@ -199,17 +199,21 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
             if resp.status_code == 200:
                 try:
                     body = resp.json()
-                except Exception:
+                except Exception as e:
                     # resp.json() may raise AttributeError if the fake response doesn't implement it
-                    logger.warning('Brave API returned non-JSON response; falling back to HTML parsing')
+                    logger.warning('Brave API returned non-JSON response: %s; falling back to HTML parsing', e)
                     body = None
 
                 results = []
                 if isinstance(body, dict):
+                    # Log the structure for debugging
+                    logger.debug('Brave API response keys: %s', list(body.keys()) if body else 'None')
+
                     # Preferred: Brave API uses body['web']['results'] for web search results
                     web_results = None
                     if 'web' in body and isinstance(body['web'], dict):
                         web_results = body['web'].get('results')
+                        logger.debug('Found web.results with %s items', len(web_results) if isinstance(web_results, list) else 0)
 
                     if isinstance(web_results, list):
                         for item in web_results[:size]:
@@ -221,11 +225,13 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
                             if url and url.startswith('http'):
                                 results.append({'title': title, 'url': url, 'snippet': snippet})
                         if results:
+                            logger.info('Brave API returned %s results via web.results', len(results))
                             return results
 
                     # Fallback heuristics: look for top-level lists
                     for key in ('results', 'organic', 'items', 'data'):
                         if key in body and isinstance(body[key], list):
+                            logger.debug('Found results in body[%s] with %s items', key, len(body[key]))
                             for item in body[key][:size]:
                                 if not isinstance(item, dict):
                                     continue
@@ -235,12 +241,25 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
                                 if url and url.startswith('http'):
                                     results.append({'title': title, 'url': url, 'snippet': snippet})
                             if results:
+                                logger.info('Brave API returned %s results via body[%s]', len(results), key)
                                 return results
 
-                logger.debug('Brave API response did not contain usable results')
+                # Log detailed error information
+                if isinstance(body, dict):
+                    logger.warning('Brave API response did not contain usable results. Response structure: %s', json.dumps(body, indent=2)[:500])
+                else:
+                    logger.debug('Brave API response did not contain usable results (body is not a dict)')
             else:
                 body_text = getattr(resp, 'text', '')[:1000]
-                logger.warning('Brave API request failed: %s %s', resp.status_code, body_text)
+                logger.error('Brave API request failed: HTTP %s. Response: %s', resp.status_code, body_text)
+                # Try to parse error details if it's JSON
+                try:
+                    error_body = resp.json()
+                    if isinstance(error_body, dict):
+                        error_msg = error_body.get('message') or error_body.get('error') or str(error_body)
+                        logger.error('Brave API error details: %s', error_msg)
+                except:
+                    pass
         except Exception as e:
             logger.warning('Brave API request error: %s; falling back to HTML scraping', e)
         # If API key exists, do not fallback to HTML scraping unless explicitly enabled

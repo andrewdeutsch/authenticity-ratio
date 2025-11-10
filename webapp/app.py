@@ -25,6 +25,16 @@ import glob as file_glob
 
 from config.settings import APIConfig
 
+# Configure logging for the webapp
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
 # Helper Functions
 def generate_rating_recommendation(avg_rating: float, dimension_breakdown: Dict[str, Any], items: List[Dict[str, Any]]) -> str:
     """
@@ -513,6 +523,27 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brav
 
                 if not search_results:
                     st.warning("⚠️ No search results found. Try different keywords or check your Brave API configuration.")
+
+                    # Provide helpful diagnostics
+                    st.info("**Troubleshooting tips:**")
+                    st.markdown("""
+                    - **Check your Brave API key**: Ensure `BRAVE_API_KEY` environment variable is set
+                    - **Check the logs**: Look at the terminal/console for detailed error messages
+                    - **Try fewer pages**: Start with 10-20 pages to test the connection
+                    - **Verify API quota**: Your Brave API plan may have reached its limit
+                    - **Check search query**: Try simpler, more common keywords first
+                    """)
+
+                    # Show current configuration for debugging
+                    with st.expander("🔍 Show Configuration Details"):
+                        st.code(f"""
+Query: {query}
+Pages requested: {brave_pages}
+Timeout: {timeout_seconds}s
+API Key set: {'Yes' if os.getenv('BRAVE_API_KEY') else 'No'}
+API Endpoint: {os.getenv('BRAVE_API_ENDPOINT', 'https://api.search.brave.com/res/v1/web/search')}
+""")
+
                     progress_bar.empty()
                     status_text.empty()
                     return
