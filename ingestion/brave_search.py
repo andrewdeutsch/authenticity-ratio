@@ -184,15 +184,17 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
             # Prepare request (if query-param auth, append below)
             _wait_for_rate_limit()
             # Use helper-style retry for robustness
+            # Allow timeout override via environment variable
+            api_timeout = int(os.getenv('BRAVE_API_TIMEOUT', '10'))
             if api_auth == 'query-param':
                 params_with_key = params.copy()
                 params_with_key['apikey'] = api_key
                 # API expects JSON response; ensure Accept header is suitable for the API path
                 hdrs['Accept'] = hdrs.get('Accept', '*/*') if hdrs.get('Accept') == '*/*' else 'application/json'
-                resp = requests.get(api_endpoint, params=params_with_key, headers=hdrs, timeout=10)
+                resp = requests.get(api_endpoint, params=params_with_key, headers=hdrs, timeout=api_timeout)
             else:
                 hdrs['Accept'] = hdrs.get('Accept', '*/*') if hdrs.get('Accept') == '*/*' else 'application/json'
-                resp = requests.get(api_endpoint, params=params, headers=hdrs, timeout=10)
+                resp = requests.get(api_endpoint, params=params, headers=hdrs, timeout=api_timeout)
 
             if resp.status_code == 200:
                 try:
@@ -253,6 +255,8 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
     params = {"q": query, "source": "web", "count": size}
     _wait_for_rate_limit()
     # Use simple retries/backoff for the public HTML scrape path
+    # Allow timeout override via environment variable
+    html_timeout = int(os.getenv('BRAVE_API_TIMEOUT', '10'))
     def _http_get_with_retries(url, params=None, headers=None, timeout=10, retries=3, backoff_factor=0.7):
         attempt = 0
         while attempt < retries:
@@ -267,7 +271,7 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
                 time.sleep(backoff_factor * (2 ** (attempt - 1)))
 
     try:
-        resp = _http_get_with_retries(BRAVE_SEARCH_URL, params=params, headers=headers, timeout=10, retries=int(os.getenv('BRAVE_HTML_RETRIES','3')))
+        resp = _http_get_with_retries(BRAVE_SEARCH_URL, params=params, headers=headers, timeout=html_timeout, retries=int(os.getenv('BRAVE_HTML_RETRIES','3')))
     except Exception as e:
         logger.error('Brave Search request failed after retries: %s', e)
         return []
