@@ -164,7 +164,7 @@ st.markdown("""
 
 def show_home_page():
     """Display the home/overview page"""
-    st.markdown('<div class="main-header">⭐ Trust Stack R</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">⭐ Trust Stack Rating</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-header">Measure and monitor brand content quality across digital channels</div>', unsafe_allow_html=True)
 
     st.divider()
