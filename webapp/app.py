@@ -458,27 +458,64 @@ def detect_brand_owned_url(url: str, brand_id: str) -> bool:
 def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brave_pages: int):
     """Search for URLs and store them in session state for user selection"""
     import os
+    import logging
 
-    with st.spinner("🔍 Searching for URLs..."):
+    # Set up logging
+    logger = logging.getLogger(__name__)
+
+    status_text = st.empty()
+    progress_bar = st.progress(0)
+
+    try:
+        status_text.text("🔍 Initializing search...")
+        progress_bar.progress(10)
+
         found_urls = []
 
         # For now, only implement Brave search (Reddit and YouTube can be added later)
         if 'brave' in sources:
             query = ' '.join(keywords)
+
+            status_text.text(f"🔍 Searching Brave for '{query}' (requesting {brave_pages} URLs)...")
+            progress_bar.progress(30)
+
             try:
                 # Temporarily increase the API limit for search results
                 # Store original value to restore later
                 original_limit = os.environ.get('BRAVE_API_MAX_COUNT')
+                original_timeout = os.environ.get('BRAVE_API_TIMEOUT')
+
                 os.environ['BRAVE_API_MAX_COUNT'] = str(brave_pages)
+                # Increase timeout for larger requests (scale with number of pages)
+                timeout_seconds = min(30, 10 + (brave_pages // 10))
+                os.environ['BRAVE_API_TIMEOUT'] = str(timeout_seconds)
+
+                logger.info(f"Searching Brave: query={query}, size={brave_pages}, timeout={timeout_seconds}s")
 
                 from ingestion.brave_search import search_brave
+
+                progress_bar.progress(50)
                 search_results = search_brave(query, size=brave_pages)
 
-                # Restore original limit
+                progress_bar.progress(70)
+                status_text.text(f"✓ Received {len(search_results)} results, processing...")
+
+                # Restore original values
                 if original_limit is not None:
                     os.environ['BRAVE_API_MAX_COUNT'] = original_limit
                 else:
                     os.environ.pop('BRAVE_API_MAX_COUNT', None)
+
+                if original_timeout is not None:
+                    os.environ['BRAVE_API_TIMEOUT'] = original_timeout
+                else:
+                    os.environ.pop('BRAVE_API_TIMEOUT', None)
+
+                if not search_results:
+                    st.warning("⚠️ No search results found. Try different keywords or check your Brave API configuration.")
+                    progress_bar.empty()
+                    status_text.empty()
+                    return
 
                 for result in search_results:
                     url = result.get('url', '')
@@ -493,12 +530,48 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], brav
                             'source': 'brave'
                         })
 
+                progress_bar.progress(90)
                 st.session_state['found_urls'] = found_urls
-                st.success(f"✓ Found {len(found_urls)} URLs ({sum(1 for u in found_urls if u['is_brand_owned'])} brand-owned, {sum(1 for u in found_urls if not u['is_brand_owned'])} third-party)")
+
+                brand_owned_count = sum(1 for u in found_urls if u['is_brand_owned'])
+                third_party_count = sum(1 for u in found_urls if not u['is_brand_owned'])
+
+                progress_bar.progress(100)
+                status_text.empty()
+                progress_bar.empty()
+
+                st.success(f"✓ Found {len(found_urls)} URLs ({brand_owned_count} brand-owned, {third_party_count} third-party)")
                 st.rerun()
 
+            except TimeoutError as e:
+                logger.error(f"Timeout error during Brave search: {e}")
+                st.error(f"⏱️ Search timed out after {timeout_seconds} seconds. Try requesting fewer URLs or check your network connection.")
+
+            except ConnectionError as e:
+                logger.error(f"Connection error during Brave search: {e}")
+                st.error(f"🌐 Connection error: Could not reach Brave Search API. Please check your internet connection.")
+
             except Exception as e:
-                st.error(f"Error searching for URLs: {str(e)}")
+                logger.error(f"Error during Brave search: {type(e).__name__}: {e}")
+                st.error(f"❌ Search failed: {type(e).__name__}: {str(e)}")
+
+                # Show more helpful error messages for common issues
+                if 'api' in str(e).lower() or 'key' in str(e).lower():
+                    st.info("💡 Tip: Check that your BRAVE_API_KEY is set correctly in your environment.")
+                elif 'timeout' in str(e).lower():
+                    st.info("💡 Tip: Try reducing the number of web pages to fetch, or check your network connection.")
+
+    except Exception as e:
+        logger.error(f"Unexpected error in search_for_urls: {type(e).__name__}: {e}")
+        st.error(f"❌ Unexpected error: {type(e).__name__}: {str(e)}")
+
+    finally:
+        # Clean up progress indicators
+        try:
+            progress_bar.empty()
+            status_text.empty()
+        except:
+            pass
 
 
 def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_items: int, brave_pages: int, include_comments: bool, selected_urls: List[Dict] = None):
