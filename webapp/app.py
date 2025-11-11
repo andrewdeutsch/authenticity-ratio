@@ -589,7 +589,8 @@ def show_analyze_page():
 
         # Search for URLs without running analysis
         search_for_urls(brand_id, keywords.split(), sources, web_pages, search_provider,
-                       brand_domains, brand_subdomains, brand_social_handles)
+                       brand_domains, brand_subdomains, brand_social_handles,
+                       collection_strategy, brand_owned_ratio)
 
     # Display found URLs for selection
     if 'found_urls' in st.session_state and st.session_state['found_urls']:
@@ -758,7 +759,8 @@ def detect_brand_owned_url(url: str, brand_id: str, brand_domains: List[str] = N
 
 
 def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_pages: int, search_provider: str = 'serper',
-                    brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None):
+                    brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None,
+                    collection_strategy: str = 'both', brand_owned_ratio: int = 60):
     """Search for URLs and store them in session state for user selection"""
     import os
     import logging
@@ -805,13 +807,59 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                 else:
                     logger.info(f"Searching {search_provider}: query={query}, size={web_pages}")
 
-                from ingestion.search_unified import search
+                # Create URLCollectionConfig for ratio enforcement
+                url_collection_config = None
+                if collection_strategy in ["brand_controlled", "both", "third_party"] and brand_domains:
+                    from ingestion.domain_classifier import URLCollectionConfig
+
+                    # Convert percentage to decimal ratio
+                    brand_ratio = brand_owned_ratio / 100.0
+                    third_party_ratio = 1.0 - brand_ratio
+
+                    url_collection_config = URLCollectionConfig(
+                        brand_owned_ratio=brand_ratio,
+                        third_party_ratio=third_party_ratio,
+                        brand_domains=brand_domains or [],
+                        brand_subdomains=brand_subdomains or [],
+                        brand_social_handles=brand_social_handles or []
+                    )
+                    logger.info(f"Created URLCollectionConfig with {collection_strategy} strategy: {brand_ratio:.1%} brand-owned, {third_party_ratio:.1%} 3rd party")
 
                 progress_bar.progress(50)
-                search_results = search(query, size=web_pages, provider=search_provider)
+
+                # Use collect functions for ratio enforcement
+                search_results = []
+                if search_provider == 'brave':
+                    from ingestion.brave_search import collect_brave_pages
+                    pages = collect_brave_pages(
+                        query=query,
+                        target_count=web_pages,
+                        url_collection_config=url_collection_config
+                    )
+                    # Convert to search result format
+                    for page in pages:
+                        search_results.append({
+                            'url': page.get('url', ''),
+                            'title': page.get('title', 'No title'),
+                            'snippet': page.get('body', '')[:200]
+                        })
+                else:  # serper
+                    from ingestion.serper_search import collect_serper_pages
+                    pages = collect_serper_pages(
+                        query=query,
+                        target_count=web_pages,
+                        url_collection_config=url_collection_config
+                    )
+                    # Convert to search result format
+                    for page in pages:
+                        search_results.append({
+                            'url': page.get('url', ''),
+                            'title': page.get('title', 'No title'),
+                            'snippet': page.get('body', '')[:200]
+                        })
 
                 progress_bar.progress(70)
-                status_text.text(f"✓ Received {len(search_results)} results, processing...")
+                status_text.text(f"✓ Received {len(search_results)} results (with {collection_strategy} ratio enforcement), processing...")
 
                 # Restore original timeout
                 if original_timeout is not None:
