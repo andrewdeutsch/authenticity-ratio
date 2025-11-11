@@ -238,7 +238,7 @@ def show_home_page():
     st.markdown("### ⚙️ Analysis Pipeline")
 
     pipeline_steps = [
-        ("1. Ingest", "Collect raw content and data from multiple sources\n\n→ Purpose: Gather inputs."),
+        ("1. Ingest", "Collect raw content and data from multiple sources\n\n_→ Purpose: Gather inputs._"),
         ("2. Normalize", "Standardize data structure, remove noise, and extract core metadata (source, title, author, date).\n\n_→ Purpose: Prepare clean, consistent inputs._"),
         ("3. Enrich", "Add contextual intelligence — provenance tags, schema markup, fact-check references, and entity recognition.\n\n_→ Purpose: Add meaning and traceability._"),
         ("4. Analyze", "Evaluate enriched content for trust-related patterns and attributes across the five dimensions (Provenance, Resonance, Coherence, Transparency, Verification).\n\n_→ Purpose: Interpret trust signals in context._"),
