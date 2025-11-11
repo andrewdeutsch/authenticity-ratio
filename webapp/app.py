@@ -362,6 +362,10 @@ def show_analyze_page():
         with st.expander("⚙️ URL Collection Strategy", expanded=False):
             st.markdown("**Choose which URLs to collect:**")
 
+            # Initialize session state for collection strategy if not exists
+            if 'collection_strategy' not in st.session_state:
+                st.session_state['collection_strategy'] = 'both'
+
             collection_strategy = st.radio(
                 "Collection Type",
                 options=["brand_controlled", "third_party", "both"],
@@ -370,17 +374,21 @@ def show_analyze_page():
                     "third_party": "🌐 3rd Party Only",
                     "both": "⚖️ Both (Balanced Collection)"
                 }[x],
-                index=2,  # Default to "both"
-                help="Select which type of URLs to collect for analysis"
+                index=["brand_controlled", "third_party", "both"].index(st.session_state['collection_strategy']),
+                help="Select which type of URLs to collect for analysis",
+                key='collection_strategy_radio'
             )
+
+            # Update session state
+            st.session_state['collection_strategy'] = collection_strategy
 
             # Show different help text based on selection
             if collection_strategy == "brand_controlled":
-                st.info("📝 Collecting only from brand-owned domains (website, blog, social). Enter brand domains below.")
+                st.info("📝 **Collecting only from brand-owned domains** (website, blog, social media). Brand domains are required.")
             elif collection_strategy == "third_party":
-                st.info("📝 Collecting only from external sources (news, reviews, forums). Brand domains not required.")
+                st.info("📝 **Collecting only from external sources** (news, reviews, forums, social media). Brand domains not required.")
             else:  # both
-                st.info("📝 Collecting from both brand-owned and 3rd party sources for holistic assessment.")
+                st.info("📝 **Collecting from both brand-owned and 3rd party sources** for holistic assessment (recommended 60/40 ratio).")
 
             # Only show ratio slider when "Both" is selected
             if collection_strategy == "both":
@@ -411,13 +419,24 @@ def show_analyze_page():
             # Brand Identification - only required for brand-controlled or both
             if collection_strategy in ["brand_controlled", "both"]:
                 st.markdown("**Brand Identification** " + ("*(Required)*" if collection_strategy == "brand_controlled" else "*(Optional)*"))
-                st.caption("Help the classifier identify your brand's digital properties")
+
+                # Add explanation
+                with st.container():
+                    st.markdown("""
+                    <div style='background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 15px;'>
+                    ℹ️ <strong>What does this do?</strong><br>
+                    These domains help the classifier <strong>categorize</strong> search results as "brand-owned" vs "3rd party".<br>
+                    • Serper will return <strong>all</strong> URLs matching your keywords<br>
+                    • The classifier then <strong>labels</strong> each URL based on these domains<br>
+                    • URLs are <strong>not filtered out</strong> - just categorized for ratio enforcement
+                    </div>
+                    """, unsafe_allow_html=True)
 
                 brand_domains_input = st.text_input(
                     "Brand Domains" + (" *" if collection_strategy == "brand_controlled" else ""),
                     value="",
                     placeholder="e.g., nike.com, nike.co.uk",
-                    help="Comma-separated list of brand-owned domains"
+                    help="Main domains owned by your brand. Used to identify brand-owned URLs in search results."
                 )
 
                 brand_subdomains_input = st.text_input(
