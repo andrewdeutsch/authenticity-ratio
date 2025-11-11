@@ -358,61 +358,100 @@ def show_analyze_page():
 
         st.divider()
 
-        # URL Collection Ratio Configuration
-        with st.expander("⚙️ URL Collection Configuration (60/40 Ratio)", expanded=False):
-            st.markdown("""
-            Configure brand-owned vs 3rd party URL collection ratio for holistic trust assessment.
-            **Recommended**: 60% brand-owned / 40% 3rd party for balanced coverage across all trust dimensions.
-            """)
+        # URL Collection Strategy - Simplified Interface
+        with st.expander("⚙️ URL Collection Strategy", expanded=False):
+            st.markdown("**Choose which URLs to collect:**")
 
-            col_ratio1, col_ratio2 = st.columns(2)
-            with col_ratio1:
-                brand_owned_ratio = st.slider(
-                    "Brand-Owned Ratio (%)",
-                    min_value=0,
-                    max_value=100,
-                    value=60,
-                    step=5,
-                    help="Percentage of URLs from brand-owned domains (website, blog, social)"
-                )
-            with col_ratio2:
-                third_party_ratio = 100 - brand_owned_ratio
-                st.metric("3rd Party Ratio (%)", f"{third_party_ratio}%")
-                st.caption("Automatically calculated")
-
-            st.markdown("**Brand Identification**")
-            st.caption("Help the classifier identify your brand's digital properties")
-
-            brand_domains_input = st.text_input(
-                "Brand Domains",
-                value="",
-                placeholder="e.g., nike.com, nike.co.uk",
-                help="Comma-separated list of brand-owned domains"
+            collection_strategy = st.radio(
+                "Collection Type",
+                options=["brand_controlled", "third_party", "both"],
+                format_func=lambda x: {
+                    "brand_controlled": "🏢 Brand-Controlled Only",
+                    "third_party": "🌐 3rd Party Only",
+                    "both": "⚖️ Both (Balanced Collection)"
+                }[x],
+                index=2,  # Default to "both"
+                help="Select which type of URLs to collect for analysis"
             )
 
-            brand_subdomains_input = st.text_input(
-                "Brand Subdomains (optional)",
-                value="",
-                placeholder="e.g., blog.nike.com, help.nike.com",
-                help="Comma-separated list of specific brand subdomains"
-            )
+            # Show different help text based on selection
+            if collection_strategy == "brand_controlled":
+                st.info("📝 Collecting only from brand-owned domains (website, blog, social). Enter brand domains below.")
+            elif collection_strategy == "third_party":
+                st.info("📝 Collecting only from external sources (news, reviews, forums). Brand domains not required.")
+            else:  # both
+                st.info("📝 Collecting from both brand-owned and 3rd party sources for holistic assessment.")
 
-            brand_social_handles_input = st.text_input(
-                "Brand Social Handles (optional)",
-                value="",
-                placeholder="e.g., @nike, nike",
-                help="Comma-separated list of official brand social media handles"
-            )
-
-            # Parse inputs into lists
-            brand_domains = [d.strip() for d in brand_domains_input.split(',') if d.strip()]
-            brand_subdomains = [d.strip() for d in brand_subdomains_input.split(',') if d.strip()]
-            brand_social_handles = [h.strip() for h in brand_social_handles_input.split(',') if h.strip()]
-
-            if brand_domains:
-                st.success(f"✓ Ratio enforcement enabled: {brand_owned_ratio}% brand-owned / {third_party_ratio}% 3rd party")
+            # Only show ratio slider when "Both" is selected
+            if collection_strategy == "both":
+                st.markdown("**Adjust Collection Ratio:**")
+                col_ratio1, col_ratio2 = st.columns(2)
+                with col_ratio1:
+                    brand_owned_ratio = st.slider(
+                        "Brand-Owned Ratio (%)",
+                        min_value=0,
+                        max_value=100,
+                        value=60,
+                        step=5,
+                        help="Percentage of URLs from brand-owned domains"
+                    )
+                with col_ratio2:
+                    third_party_ratio = 100 - brand_owned_ratio
+                    st.metric("3rd Party Ratio (%)", f"{third_party_ratio}%")
+                    st.caption("Auto-calculated")
             else:
-                st.info("💡 Enter brand domains to enable ratio enforcement")
+                # Set ratio to 100/0 or 0/100 based on selection
+                if collection_strategy == "brand_controlled":
+                    brand_owned_ratio = 100
+                else:  # third_party
+                    brand_owned_ratio = 0
+
+            st.divider()
+
+            # Brand Identification - only required for brand-controlled or both
+            if collection_strategy in ["brand_controlled", "both"]:
+                st.markdown("**Brand Identification** " + ("*(Required)*" if collection_strategy == "brand_controlled" else "*(Optional)*"))
+                st.caption("Help the classifier identify your brand's digital properties")
+
+                brand_domains_input = st.text_input(
+                    "Brand Domains" + (" *" if collection_strategy == "brand_controlled" else ""),
+                    value="",
+                    placeholder="e.g., nike.com, nike.co.uk",
+                    help="Comma-separated list of brand-owned domains"
+                )
+
+                brand_subdomains_input = st.text_input(
+                    "Brand Subdomains (optional)",
+                    value="",
+                    placeholder="e.g., blog.nike.com, help.nike.com",
+                    help="Comma-separated list of specific brand subdomains"
+                )
+
+                brand_social_handles_input = st.text_input(
+                    "Brand Social Handles (optional)",
+                    value="",
+                    placeholder="e.g., @nike, nike",
+                    help="Comma-separated list of official brand social media handles"
+                )
+
+                # Parse inputs into lists
+                brand_domains = [d.strip() for d in brand_domains_input.split(',') if d.strip()]
+                brand_subdomains = [d.strip() for d in brand_subdomains_input.split(',') if d.strip()]
+                brand_social_handles = [h.strip() for h in brand_social_handles_input.split(',') if h.strip()]
+
+                if brand_domains:
+                    third_party_ratio = 100 - brand_owned_ratio
+                    if collection_strategy == "both":
+                        st.success(f"✓ Balanced collection enabled: {brand_owned_ratio}% brand-owned / {third_party_ratio}% 3rd party")
+                    else:
+                        st.success(f"✓ Brand-controlled collection enabled")
+                elif collection_strategy == "brand_controlled":
+                    st.warning("⚠️ Brand domains required for brand-controlled collection")
+            else:
+                # No brand identification needed for 3rd party only
+                brand_domains = []
+                brand_subdomains = []
+                brand_social_handles = []
 
         st.divider()
 
@@ -432,6 +471,11 @@ def show_analyze_page():
         # Validate inputs
         if not brand_id or not keywords:
             st.error("⚠️ Brand ID and Keywords are required")
+            return
+
+        # Validate brand domains for brand-controlled strategy
+        if collection_strategy == "brand_controlled" and not brand_domains:
+            st.error("⚠️ Brand domains are required for brand-controlled collection")
             return
 
         # Build sources list
@@ -540,6 +584,11 @@ def show_analyze_page():
         # Validate inputs
         if not brand_id or not keywords:
             st.error("⚠️ Brand ID and Keywords are required")
+            return
+
+        # Validate brand domains for brand-controlled strategy
+        if collection_strategy == "brand_controlled" and not brand_domains:
+            st.error("⚠️ Brand domains are required for brand-controlled collection")
             return
 
         # Build sources list
