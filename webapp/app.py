@@ -238,13 +238,13 @@ def show_home_page():
     st.markdown("### ⚙️ Analysis Pipeline")
 
     pipeline_steps = [
-        ("1. Ingest", "Collect content from Reddit, YouTube, Web, Amazon"),
-        ("2. Normalize", "Standardize data format and extract metadata"),
-        ("3. Enrich", "Add metadata, fact-check signals, provenance data"),
-        ("4. Score", "Apply 6D rubric to each content item (0-100)"),
-        ("5. Detect", "Identify trust attributes and signals"),
-        ("6. Rate", "Calculate comprehensive rating (weighted avg)"),
-        ("7. Report", "Export PDF/Markdown with visualizations")
+        ("1. Ingest", "Collect raw content and data from multiple sources → Purpose: Gather inputs."),
+        ("2. Normalize", "Standardize data structure, remove noise, and extract core metadata (source, title, author, date).\n_→ Purpose: Prepare clean, consistent inputs._"),
+        ("3. Enrich", "Add contextual intelligence — provenance tags, schema markup, fact-check references, and entity recognition.\n_→ Purpose: Add meaning and traceability._"),
+        ("4. Analyze", "Evaluate enriched content for trust-related patterns and attributes across the five dimensions (Provenance, Resonance, Coherence, Transparency, Verification).\n_→ Purpose: Interpret trust signals in context._"),
+        ("5. Score", "Apply the 5D rubric to quantify each content item on a 0–100 scale per dimension.\n_→ Purpose: Turn analysis into measurable data._"),
+        ("6. Synthesize", "Aggregate and weight results into an overall Trust Index or benchmark, highlighting gaps and strengths.\n_→ Purpose: Combine scores into a holistic rating._"),
+        ("7. Report", "Generate visual outputs (PDF, dashboard, Markdown) with trust maps, insights, and recommended actions.\n_→ Purpose: Communicate results and next steps._")
     ]
 
     cols = st.columns(7)
