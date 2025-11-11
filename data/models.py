@@ -51,6 +51,10 @@ class NormalizedContent:
     channel: str = "unknown"  # youtube, reddit, amazon, instagram, etc.
     platform_type: str = "unknown"  # owned, social, marketplace, email
 
+    # URL source classification for ratio enforcement
+    source_type: str = "unknown"  # brand_owned, third_party, unknown
+    source_tier: str = "unknown"  # specific tier within brand_owned or third_party
+
     def __post_init__(self):
         if self.meta is None:
             self.meta = {}
@@ -81,6 +85,10 @@ class ContentScores:
     modality: str = "text"  # text, image, video, audio
     channel: str = "unknown"  # youtube, reddit, amazon, instagram, etc.
     platform_type: str = "unknown"  # owned, social, marketplace, email
+
+    # URL source classification for ratio enforcement
+    source_type: str = "unknown"  # brand_owned, third_party, unknown
+    source_tier: str = "unknown"  # specific tier within brand_owned or third_party
 
     @property
     def overall_score(self) -> float:

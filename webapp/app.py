@@ -358,6 +358,64 @@ def show_analyze_page():
 
         st.divider()
 
+        # URL Collection Ratio Configuration
+        with st.expander("⚙️ URL Collection Configuration (60/40 Ratio)", expanded=False):
+            st.markdown("""
+            Configure brand-owned vs 3rd party URL collection ratio for holistic trust assessment.
+            **Recommended**: 60% brand-owned / 40% 3rd party for balanced coverage across all trust dimensions.
+            """)
+
+            col_ratio1, col_ratio2 = st.columns(2)
+            with col_ratio1:
+                brand_owned_ratio = st.slider(
+                    "Brand-Owned Ratio (%)",
+                    min_value=0,
+                    max_value=100,
+                    value=60,
+                    step=5,
+                    help="Percentage of URLs from brand-owned domains (website, blog, social)"
+                )
+            with col_ratio2:
+                third_party_ratio = 100 - brand_owned_ratio
+                st.metric("3rd Party Ratio (%)", f"{third_party_ratio}%")
+                st.caption("Automatically calculated")
+
+            st.markdown("**Brand Identification**")
+            st.caption("Help the classifier identify your brand's digital properties")
+
+            brand_domains_input = st.text_input(
+                "Brand Domains",
+                value="",
+                placeholder="e.g., nike.com, nike.co.uk",
+                help="Comma-separated list of brand-owned domains"
+            )
+
+            brand_subdomains_input = st.text_input(
+                "Brand Subdomains (optional)",
+                value="",
+                placeholder="e.g., blog.nike.com, help.nike.com",
+                help="Comma-separated list of specific brand subdomains"
+            )
+
+            brand_social_handles_input = st.text_input(
+                "Brand Social Handles (optional)",
+                value="",
+                placeholder="e.g., @nike, nike",
+                help="Comma-separated list of official brand social media handles"
+            )
+
+            # Parse inputs into lists
+            brand_domains = [d.strip() for d in brand_domains_input.split(',') if d.strip()]
+            brand_subdomains = [d.strip() for d in brand_subdomains_input.split(',') if d.strip()]
+            brand_social_handles = [h.strip() for h in brand_social_handles_input.split(',') if h.strip()]
+
+            if brand_domains:
+                st.success(f"✓ Ratio enforcement enabled: {brand_owned_ratio}% brand-owned / {third_party_ratio}% 3rd party")
+            else:
+                st.info("💡 Enter brand domains to enable ratio enforcement")
+
+        st.divider()
+
         col_search, col_submit, col_clear = st.columns([1, 1, 3])
         with col_search:
             search_urls = st.form_submit_button("🔍 Search URLs", use_container_width=True)
@@ -390,7 +448,8 @@ def show_analyze_page():
             return
 
         # Search for URLs without running analysis
-        search_for_urls(brand_id, keywords.split(), sources, web_pages, search_provider)
+        search_for_urls(brand_id, keywords.split(), sources, web_pages, search_provider,
+                       brand_domains, brand_subdomains, brand_social_handles)
 
     # Display found URLs for selection
     if 'found_urls' in st.session_state and st.session_state['found_urls']:
@@ -434,7 +493,17 @@ def show_analyze_page():
                         label_visibility="collapsed"
                     )
                 with col2:
-                    st.markdown(f"**{url_data['title'][:80]}{'...' if len(url_data['title']) > 80 else ''}**")
+                    # Tier badge
+                    tier = url_data.get('source_tier', 'unknown')
+                    tier_emoji = {
+                        'primary_website': '🏠',
+                        'content_hub': '📚',
+                        'direct_to_consumer': '🛒',
+                        'brand_social': '📱'
+                    }.get(tier, '📄')
+                    tier_label = tier.replace('_', ' ').title()
+
+                    st.markdown(f"**{url_data['title'][:70]}{'...' if len(url_data['title']) > 70 else ''}** {tier_emoji} `{tier_label}`")
                     st.caption(f"🔗 {url_data['url']}")
 
             st.divider()
@@ -454,7 +523,17 @@ def show_analyze_page():
                         label_visibility="collapsed"
                     )
                 with col2:
-                    st.markdown(f"**{url_data['title'][:80]}{'...' if len(url_data['title']) > 80 else ''}**")
+                    # Tier badge
+                    tier = url_data.get('source_tier', 'unknown')
+                    tier_emoji = {
+                        'news_media': '📰',
+                        'user_generated': '👥',
+                        'expert_professional': '🎓',
+                        'marketplace': '🏪'
+                    }.get(tier, '🌐')
+                    tier_label = tier.replace('_', ' ').title()
+
+                    st.markdown(f"**{url_data['title'][:70]}{'...' if len(url_data['title']) > 70 else ''}** {tier_emoji} `{tier_label}`")
                     st.caption(f"🔗 {url_data['url']}")
 
     if submit:
@@ -485,28 +564,61 @@ def show_analyze_page():
                 return
 
         # Run pipeline
-        run_analysis(brand_id, keywords.split(), sources, max_items, web_pages, include_comments, selected_urls, search_provider)
+        run_analysis(brand_id, keywords.split(), sources, max_items, web_pages, include_comments, selected_urls, search_provider,
+                    brand_domains, brand_subdomains, brand_social_handles)
 
 
-def detect_brand_owned_url(url: str, brand_id: str) -> bool:
+def detect_brand_owned_url(url: str, brand_id: str, brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None) -> Dict[str, Any]:
     """
-    Detect if a URL is a brand-owned property.
+    Detect if a URL is a brand-owned property using the domain classifier.
 
-    Simple heuristic: check if brand_id appears in the domain name.
-    Can be enhanced with more sophisticated logic.
+    Returns:
+        Dict with keys: is_brand_owned (bool), source_type (str), source_tier (str), reason (str)
     """
-    from urllib.parse import urlparse
     try:
-        domain = urlparse(url).netloc.lower()
-        # Remove www. prefix
-        domain = domain.replace('www.', '')
-        # Check if brand_id is in domain
-        return brand_id.lower() in domain
-    except:
-        return False
+        from ingestion.domain_classifier import classify_url, URLCollectionConfig, URLSourceType
+
+        # Create config for classification
+        if brand_domains:
+            config = URLCollectionConfig(
+                brand_owned_ratio=0.6,
+                third_party_ratio=0.4,
+                brand_domains=brand_domains or [],
+                brand_subdomains=brand_subdomains or [],
+                brand_social_handles=brand_social_handles or []
+            )
+        else:
+            # Fallback to simple heuristic if no domains provided
+            from urllib.parse import urlparse
+            domain = urlparse(url).netloc.lower().replace('www.', '')
+            is_owned = brand_id.lower() in domain
+            return {
+                'is_brand_owned': is_owned,
+                'source_type': 'brand_owned' if is_owned else 'third_party',
+                'source_tier': 'primary_website' if is_owned else 'user_generated',
+                'reason': f"Simple heuristic: {brand_id} {'found' if is_owned else 'not found'} in domain"
+            }
+
+        # Use domain classifier
+        classification = classify_url(url, config)
+        return {
+            'is_brand_owned': classification.source_type == URLSourceType.BRAND_OWNED,
+            'source_type': classification.source_type.value,
+            'source_tier': classification.tier.value if classification.tier else 'unknown',
+            'reason': classification.reason
+        }
+    except Exception as e:
+        # Fallback on error
+        return {
+            'is_brand_owned': False,
+            'source_type': 'unknown',
+            'source_tier': 'unknown',
+            'reason': f"Classification error: {str(e)}"
+        }
 
 
-def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_pages: int, search_provider: str = 'serper'):
+def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_pages: int, search_provider: str = 'serper',
+                    brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None):
     """Search for URLs and store them in session state for user selection"""
     import os
     import logging
@@ -616,12 +728,15 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                 for result in search_results:
                     url = result.get('url', '')
                     if url:
-                        is_brand_owned = detect_brand_owned_url(url, brand_id)
+                        classification = detect_brand_owned_url(url, brand_id, brand_domains, brand_subdomains, brand_social_handles)
                         found_urls.append({
                             'url': url,
                             'title': result.get('title', 'No title'),
                             'description': result.get('snippet', result.get('description', '')),
-                            'is_brand_owned': is_brand_owned,
+                            'is_brand_owned': classification['is_brand_owned'],
+                            'source_type': classification['source_type'],
+                            'source_tier': classification['source_tier'],
+                            'classification_reason': classification['reason'],
                             'selected': True,  # Default to selected
                             'source': search_provider
                         })
@@ -676,7 +791,9 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
             pass
 
 
-def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_items: int, web_pages: int, include_comments: bool, selected_urls: List[Dict] = None, search_provider: str = 'serper'):
+def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_items: int, web_pages: int, include_comments: bool,
+                 selected_urls: List[Dict] = None, search_provider: str = 'serper',
+                 brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None):
     """Execute the analysis pipeline"""
 
     # Create output directory
@@ -756,7 +873,10 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                                 # Add metadata from search result
                                 page_data['search_title'] = result.get('title', '')
                                 page_data['search_snippet'] = result.get('snippet', '')
-                                page_data['is_brand_owned'] = detect_brand_owned_url(url, brand_id)
+                                classification = detect_brand_owned_url(url, brand_id, brand_domains, brand_subdomains, brand_social_handles)
+                                page_data['is_brand_owned'] = classification['is_brand_owned']
+                                page_data['source_type'] = classification['source_type']
+                                page_data['source_tier'] = classification['source_tier']
                                 collected.append(page_data)
                         except Exception as e:
                             st.warning(f"⚠️ Could not fetch {url}: {str(e)}")
@@ -795,7 +915,9 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                     url=url or '',
                     modality='text',
                     channel='web',
-                    platform_type='web'
+                    platform_type='web',
+                    source_type=c.get('source_type', 'unknown'),
+                    source_tier=c.get('source_tier', 'unknown')
                 )
                 all_content.append(nc)
 
@@ -832,6 +954,20 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
 
         normalizer = ContentNormalizer()
         normalized_content = normalizer.normalize_content(all_content)
+
+        # Report URL distribution if brand domains were provided
+        if brand_domains:
+            brand_owned_count = sum(1 for c in normalized_content if getattr(c, 'source_type', None) == 'brand_owned')
+            third_party_count = sum(1 for c in normalized_content if getattr(c, 'source_type', None) == 'third_party')
+            unknown_count = len(normalized_content) - brand_owned_count - third_party_count
+
+            st.info(f"""
+            📊 **URL Distribution Summary**
+            - Brand-owned: {brand_owned_count} ({brand_owned_count/len(normalized_content)*100:.1f}%)
+            - 3rd party: {third_party_count} ({third_party_count/len(normalized_content)*100:.1f}%)
+            {f"- Unknown: {unknown_count} ({unknown_count/len(normalized_content)*100:.1f}%)" if unknown_count > 0 else ""}
+            - Total: {len(normalized_content)}
+            """)
 
         # Step 4: Scoring
         status_text.text("Scoring content on 6D Trust dimensions...")

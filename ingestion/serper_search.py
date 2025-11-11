@@ -177,6 +177,142 @@ def search_serper(query: str, size: int = 10) -> List[Dict[str, str]]:
     return all_results[:size]  # Ensure we don't return more than requested
 
 
+def collect_serper_pages(
+    query: str,
+    target_count: int = 10,
+    pool_size: int | None = None,
+    min_body_length: int = 200,
+    url_collection_config: 'URLCollectionConfig' | None = None
+) -> List[Dict[str, str]]:
+    """Collect up to `target_count` successfully fetched pages from Serper search.
+
+    Behavior:
+    - Request `pool_size` search results (defaults to max(30, target_count*3)).
+    - If url_collection_config is provided, enforces brand-owned vs 3rd party ratio
+    - Iterate results in order and fetch page content
+    - Only count pages whose `body` length >= `min_body_length` as successful
+    - Stop once `target_count` successful pages are collected or the pool is exhausted
+
+    Args:
+        query: Search query
+        target_count: Target number of pages to collect
+        pool_size: Number of search results to request
+        min_body_length: Minimum body length for a page to be considered valid
+        url_collection_config: Optional ratio enforcement configuration
+
+    Returns:
+        List of dicts with page content {title, body, url, ...}
+    """
+    # Import fetch_page from brave_search module
+    from ingestion.brave_search import fetch_page
+
+    if pool_size is None:
+        pool_size = max(30, target_count * 3)
+
+    # Import classifier here to avoid circular imports
+    if url_collection_config:
+        from ingestion.domain_classifier import classify_url, URLSourceType
+
+    try:
+        search_results = search_serper(query, size=pool_size)
+    except Exception as e:
+        logger.warning('Serper search failed while collecting pages: %s', e)
+        search_results = []
+
+    if not search_results:
+        return []
+
+    # Ratio enforcement: track separate pools if config provided
+    if url_collection_config:
+        target_brand_owned = int(target_count * url_collection_config.brand_owned_ratio)
+        target_third_party = int(target_count * url_collection_config.third_party_ratio)
+
+        # Handle rounding to ensure we hit exact target_count
+        if target_brand_owned + target_third_party < target_count:
+            if url_collection_config.brand_owned_ratio >= url_collection_config.third_party_ratio:
+                target_brand_owned += (target_count - target_brand_owned - target_third_party)
+            else:
+                target_third_party += (target_count - target_brand_owned - target_third_party)
+
+        brand_owned_collected: List[Dict[str, str]] = []
+        third_party_collected: List[Dict[str, str]] = []
+
+        logger.info('Collecting with ratio enforcement: %d brand-owned (%.0f%%) + %d 3rd party (%.0f%%)',
+                   target_brand_owned, url_collection_config.brand_owned_ratio * 100,
+                   target_third_party, url_collection_config.third_party_ratio * 100)
+
+        for item in search_results:
+            # Stop if both pools are full
+            if len(brand_owned_collected) >= target_brand_owned and len(third_party_collected) >= target_third_party:
+                break
+
+            url = item.get('url')
+            if not url:
+                continue
+
+            # Classify the URL
+            classification = classify_url(url, url_collection_config)
+            is_brand_owned = classification.source_type == URLSourceType.BRAND_OWNED
+
+            # Check if pool is already full
+            if is_brand_owned and len(brand_owned_collected) >= target_brand_owned:
+                logger.debug('Skipping brand-owned URL %s - pool full', url)
+                continue
+            if not is_brand_owned and len(third_party_collected) >= target_third_party:
+                logger.debug('Skipping 3rd party URL %s - pool full', url)
+                continue
+
+            # Attempt to fetch and only count if body meets minimum length
+            content = fetch_page(url)
+            body = content.get('body') or ''
+            if body and len(body) >= min_body_length:
+                # Add source type metadata
+                content['source_type'] = classification.source_type.value
+                content['source_tier'] = classification.tier.value if classification.tier else 'unknown'
+
+                if is_brand_owned:
+                    brand_owned_collected.append(content)
+                    logger.debug('Collected brand-owned page (%d/%d): %s',
+                               len(brand_owned_collected), target_brand_owned, url)
+                else:
+                    third_party_collected.append(content)
+                    logger.debug('Collected 3rd party page (%d/%d): %s',
+                               len(third_party_collected), target_third_party, url)
+            else:
+                logger.debug('Skipping %s because content is thin or empty (len=%s)', url, len(body))
+
+        # Combine results
+        collected = brand_owned_collected + third_party_collected
+
+        logger.info('Collected %d brand-owned + %d 3rd party = %d total pages (target: %d) for query=%s',
+                   len(brand_owned_collected), len(third_party_collected), len(collected), target_count, query)
+
+    else:
+        # Original behavior: no ratio enforcement
+        collected: List[Dict[str, str]] = []
+        for item in search_results:
+            if len(collected) >= target_count:
+                break
+            url = item.get('url')
+            if not url:
+                continue
+
+            # Attempt to fetch and only count if body meets minimum length
+            content = fetch_page(url)
+            body = content.get('body') or ''
+            if body and len(body) >= min_body_length:
+                collected.append(content)
+            else:
+                logger.debug('Skipping %s because content is thin or empty (len=%s)', url, len(body))
+
+        if collected:
+            logger.info('Collected %s/%s successful pages for query=%s', len(collected), target_count, query)
+        else:
+            logger.info('No usable pages collected for query=%s', query)
+
+    return collected
+
+
 def get_serper_stats() -> Dict[str, any]:
     """Get current Serper API usage statistics.
 
