@@ -36,6 +36,81 @@ logging.basicConfig(
 )
 
 # Helper Functions
+def infer_brand_domains(brand_id: str) -> Dict[str, List[str]]:
+    """
+    Automatically infer likely brand domains from brand_id.
+
+    Args:
+        brand_id: Brand identifier (e.g., 'nike', 'coca-cola')
+
+    Returns:
+        Dict with 'domains', 'subdomains', and 'social_handles' keys
+    """
+    if not brand_id:
+        return {'domains': [], 'subdomains': [], 'social_handles': []}
+
+    brand_id_clean = brand_id.lower().strip()
+
+    # Handle common brand name variations (for domains, never use spaces)
+    brand_variations = []
+
+    # If there are spaces, create hyphenated and combined versions
+    if ' ' in brand_id_clean:
+        brand_variations.append(brand_id_clean.replace(' ', '-'))  # red-bull
+        brand_variations.append(brand_id_clean.replace(' ', ''))   # redbull
+    elif '-' in brand_id_clean:
+        # If there are hyphens, also try without
+        brand_variations.append(brand_id_clean)                    # coca-cola
+        brand_variations.append(brand_id_clean.replace('-', ''))   # cocacola
+    else:
+        # Simple brand name without spaces or hyphens
+        brand_variations.append(brand_id_clean)                    # nike
+
+    # Generate common domain patterns
+    domains = []
+    for variant in brand_variations:
+        domains.extend([
+            f"{variant}.com",
+            f"www.{variant}.com",
+        ])
+
+    # Generate common subdomains
+    subdomains = []
+    for variant in brand_variations:
+        subdomains.extend([
+            f"blog.{variant}.com",
+            f"www.{variant}.com",
+            f"shop.{variant}.com",
+            f"store.{variant}.com",
+        ])
+
+    # Generate social handle variations (include original for handles like "@red bull")
+    social_handles = []
+    # Add handles based on domain variants
+    for variant in brand_variations:
+        social_handles.extend([
+            f"@{variant}",
+            variant,
+        ])
+    # Also add original brand_id if different (for handles with spaces)
+    if brand_id_clean not in brand_variations:
+        social_handles.extend([
+            f"@{brand_id_clean}",
+            brand_id_clean,
+        ])
+
+    # Remove duplicates while preserving order
+    domains = list(dict.fromkeys(domains))
+    subdomains = list(dict.fromkeys(subdomains))
+    social_handles = list(dict.fromkeys(social_handles))
+
+    return {
+        'domains': domains,
+        'subdomains': subdomains,
+        'social_handles': social_handles
+    }
+
+
 def generate_rating_recommendation(avg_rating: float, dimension_breakdown: Dict[str, Any], items: List[Dict[str, Any]]) -> str:
     """
     Generate data-driven recommendation based on dimension analysis.
@@ -384,9 +459,9 @@ def show_analyze_page():
 
             # Show different help text based on selection
             if collection_strategy == "brand_controlled":
-                st.info("📝 **Collecting only from brand-owned domains** (website, blog, social media). Brand domains are required.")
+                st.info("📝 **Collecting only from brand-owned domains** (website, blog, social media). Domains auto-detected from brand ID.")
             elif collection_strategy == "third_party":
-                st.info("📝 **Collecting only from external sources** (news, reviews, forums, social media). Brand domains not required.")
+                st.info("📝 **Collecting only from external sources** (news, reviews, forums, social media).")
             else:  # both
                 st.info("📝 **Collecting from both brand-owned and 3rd party sources** for holistic assessment (recommended 60/40 ratio).")
 
@@ -416,56 +491,63 @@ def show_analyze_page():
 
             st.divider()
 
-            # Brand Identification - only required for brand-controlled or both
+            # Auto-infer brand domains from brand_id
             if collection_strategy in ["brand_controlled", "both"]:
-                st.markdown("**Brand Identification** " + ("*(Required)*" if collection_strategy == "brand_controlled" else "*(Optional)*"))
+                # Automatically infer brand domains
+                inferred = infer_brand_domains(brand_id)
 
-                # Add explanation with proper text color
-                with st.container():
-                    st.markdown("""
-                    <div style='background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 15px; color: #1f1f1f;'>
-                    ℹ️ <strong>What does this do?</strong><br>
-                    These domains help the classifier <strong>categorize</strong> search results as "brand-owned" vs "3rd party".<br>
-                    • Serper will return <strong>all</strong> URLs matching your keywords<br>
-                    • The classifier then <strong>labels</strong> each URL based on these domains<br>
-                    • URLs are <strong>not filtered out</strong> - just categorized for ratio enforcement
-                    </div>
-                    """, unsafe_allow_html=True)
+                st.info(f"🤖 **Auto-detected brand domains:** {', '.join(inferred['domains'][:3])}{'...' if len(inferred['domains']) > 3 else ''}")
 
-                brand_domains_input = st.text_input(
-                    "Brand Domains" + (" *" if collection_strategy == "brand_controlled" else ""),
-                    value="",
-                    placeholder="e.g., nike.com, nike.co.uk",
-                    help="Main domains owned by your brand. Used to identify brand-owned URLs in search results."
-                )
+                # Advanced override option
+                with st.expander("⚙️ Advanced: Customize Brand Domains (Optional)", expanded=False):
+                    st.caption("The system automatically detects brand domains. Only customize if you need specific overrides.")
 
-                brand_subdomains_input = st.text_input(
-                    "Brand Subdomains (optional)",
-                    value="",
-                    placeholder="e.g., blog.nike.com, help.nike.com",
-                    help="Comma-separated list of specific brand subdomains"
-                )
+                    brand_domains_input = st.text_input(
+                        "Override Brand Domains",
+                        value="",
+                        placeholder="Leave empty to use auto-detected domains",
+                        help="Comma-separated list. Leave empty to use auto-detected domains."
+                    )
 
-                brand_social_handles_input = st.text_input(
-                    "Brand Social Handles (optional)",
-                    value="",
-                    placeholder="e.g., @nike, nike",
-                    help="Comma-separated list of official brand social media handles"
-                )
+                    brand_subdomains_input = st.text_input(
+                        "Additional Subdomains",
+                        value="",
+                        placeholder="e.g., blog.nike.com, help.nike.com",
+                        help="Comma-separated list of specific brand subdomains to add"
+                    )
 
-                # Parse inputs into lists
-                brand_domains = [d.strip() for d in brand_domains_input.split(',') if d.strip()]
-                brand_subdomains = [d.strip() for d in brand_subdomains_input.split(',') if d.strip()]
-                brand_social_handles = [h.strip() for h in brand_social_handles_input.split(',') if h.strip()]
+                    brand_social_handles_input = st.text_input(
+                        "Additional Social Handles",
+                        value="",
+                        placeholder="e.g., @nikerunning, nikebasketball",
+                        help="Comma-separated list of additional brand social media handles"
+                    )
 
-                if brand_domains:
+                # Use auto-detected or manual override
+                if brand_domains_input.strip():
+                    brand_domains = [d.strip() for d in brand_domains_input.split(',') if d.strip()]
+                else:
+                    brand_domains = inferred['domains']
+
+                # Combine auto-detected with additional manual entries
+                if brand_subdomains_input.strip():
+                    manual_subdomains = [d.strip() for d in brand_subdomains_input.split(',') if d.strip()]
+                    brand_subdomains = list(dict.fromkeys(inferred['subdomains'] + manual_subdomains))
+                else:
+                    brand_subdomains = inferred['subdomains']
+
+                if brand_social_handles_input.strip():
+                    manual_handles = [h.strip() for h in brand_social_handles_input.split(',') if h.strip()]
+                    brand_social_handles = list(dict.fromkeys(inferred['social_handles'] + manual_handles))
+                else:
+                    brand_social_handles = inferred['social_handles']
+
+                # Show confirmation
+                if collection_strategy == "both":
                     third_party_ratio = 100 - brand_owned_ratio
-                    if collection_strategy == "both":
-                        st.success(f"✓ Balanced collection enabled: {brand_owned_ratio}% brand-owned / {third_party_ratio}% 3rd party")
-                    else:
-                        st.success(f"✓ Brand-controlled collection enabled")
-                elif collection_strategy == "brand_controlled":
-                    st.warning("⚠️ Brand domains required for brand-controlled collection")
+                    st.success(f"✓ Balanced collection enabled: {brand_owned_ratio}% brand-owned / {third_party_ratio}% 3rd party")
+                else:
+                    st.success(f"✓ Brand-controlled collection enabled with {len(brand_domains)} auto-detected domains")
             else:
                 # No brand identification needed for 3rd party only
                 brand_domains = []
@@ -490,11 +572,6 @@ def show_analyze_page():
         # Validate inputs
         if not brand_id or not keywords:
             st.error("⚠️ Brand ID and Keywords are required")
-            return
-
-        # Validate brand domains for brand-controlled strategy
-        if st.session_state.get('collection_strategy') == "brand_controlled" and not brand_domains:
-            st.error("⚠️ Brand domains are required for brand-controlled collection")
             return
 
         # Build sources list
@@ -603,11 +680,6 @@ def show_analyze_page():
         # Validate inputs
         if not brand_id or not keywords:
             st.error("⚠️ Brand ID and Keywords are required")
-            return
-
-        # Validate brand domains for brand-controlled strategy
-        if st.session_state.get('collection_strategy') == "brand_controlled" and not brand_domains:
-            st.error("⚠️ Brand domains are required for brand-controlled collection")
             return
 
         # Build sources list
