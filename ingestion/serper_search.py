@@ -136,14 +136,14 @@ def search_serper(query: str, size: int = 10) -> List[Dict[str, str]]:
 
                 logger.info('Serper API batch returned %s results', len(organic_results))
 
-                # If we got fewer results than expected, we've reached the end
-                if len(organic_results) < results_per_page:
-                    # No more results available
-                    logger.info('Serper API returned fewer results than requested - no more results available')
-                    break
-
                 # Stop if we have enough results
                 if len(all_results) >= size:
+                    logger.info('Collected enough results: %s/%s', len(all_results), size)
+                    break
+
+                # Only stop if we got zero results (no more results available)
+                if len(organic_results) == 0:
+                    logger.info('Serper API returned zero results - no more results available')
                     break
 
             elif response.status_code == 401:

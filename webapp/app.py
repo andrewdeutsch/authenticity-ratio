@@ -542,7 +542,8 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                 if search_provider == 'brave':
                     max_per_request = int(os.getenv('BRAVE_API_MAX_COUNT', '20'))
                 else:  # serper
-                    max_per_request = int(os.getenv('SERPER_MAX_PER_REQUEST', '100'))
+                    # Serper returns 10 results per page, regardless of the num parameter
+                    max_per_request = 10
 
                 expected_requests = (web_pages + max_per_request - 1) // max_per_request  # Ceiling division
 
