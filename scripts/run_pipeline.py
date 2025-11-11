@@ -36,6 +36,7 @@ except Exception:
 
 from ingestion.search_unified import search
 from ingestion.brave_search import fetch_page, collect_brave_pages
+from ingestion.serper_search import collect_serper_pages
 from ingestion.normalizer import ContentNormalizer
 from scoring.pipeline import ScoringPipeline
 from reporting.pdf_generator import PDFReportGenerator
@@ -66,7 +67,14 @@ def main():
     parser.add_argument('--use-llm-examples', action='store_true', help='Use LLM (gpt-3.5-turbo by default) to produce abstractive summaries for executive examples')
     parser.add_argument('--llm-model', default='gpt-3.5-turbo', help='LLM model to use for executive summaries (default: gpt-3.5-turbo)')
     parser.add_argument('--recommendations-model', default='gpt-4o-mini', help='LLM model to use for generating recommendations (default: gpt-4o-mini; options: gpt-4o, gpt-4o-mini, gpt-3.5-turbo)')
-    
+
+    # URL collection ratio enforcement arguments
+    parser.add_argument('--brand-domains', nargs='+', help='Brand-owned domains for URL classification (e.g., nike.com nike.co.uk)')
+    parser.add_argument('--brand-subdomains', nargs='+', help='Brand-owned subdomains (e.g., blog.nike.com help.nike.com)')
+    parser.add_argument('--brand-social-handles', nargs='+', help='Brand social media handles (e.g., @nike nike)')
+    parser.add_argument('--brand-owned-ratio', type=float, default=0.6, help='Target ratio of brand-owned URLs (default: 0.6 = 60%%)')
+    parser.add_argument('--third-party-ratio', type=float, default=0.4, help='Target ratio of 3rd party URLs (default: 0.4 = 40%%)')
+
     args = parser.parse_args()
     # Normalize sources to lowercase to be case-insensitive (users may pass 'Brave' or 'Youtube')
     args.sources = [s.lower() for s in args.sources]
@@ -262,8 +270,22 @@ def main():
                 query = ' '.join(args.keywords)
                 # Use the new collect_brave_pages helper to gather N successful pages
                 target = min(args.brave_pages, max_items)
+
+                # Create URL collection config if brand domains are provided
+                url_config = None
+                if args.brand_domains:
+                    from ingestion.domain_classifier import URLCollectionConfig
+                    url_config = URLCollectionConfig(
+                        brand_owned_ratio=args.brand_owned_ratio,
+                        third_party_ratio=args.third_party_ratio,
+                        brand_domains=args.brand_domains or [],
+                        brand_subdomains=args.brand_subdomains or [],
+                        brand_social_handles=args.brand_social_handles or []
+                    )
+                    logger.info(f"URL ratio enforcement enabled: {args.brand_owned_ratio:.0%} brand-owned / {args.third_party_ratio:.0%} 3rd party")
+
                 try:
-                    collected = collect_brave_pages(query, target_count=target)
+                    collected = collect_brave_pages(query, target_count=target, url_collection_config=url_config)
                 except Exception as e:
                     logger.warning(f"Brave collection failed: {e}")
                     collected = []
@@ -273,7 +295,10 @@ def main():
                 for i, c in enumerate(collected):
                     url = c.get('url')
                     content_id = f"brave_{i}_{abs(hash(url or ''))}"
-                    logger.info(f"Creating Brave content: url={url}, setting channel='web', platform_type='web'")
+                    source_type = c.get('source_type', 'unknown')
+                    source_tier = c.get('source_tier', 'unknown')
+                    logger.info(f"Creating Brave content: url={url}, source_type={source_type}, source_tier={source_tier}")
+
                     meta = {
                         'source_url': url or '',
                         'content_type': 'web'
@@ -301,14 +326,90 @@ def main():
                         url=url or '',
                         modality='text',
                         channel='web',
-                        platform_type='web'
+                        platform_type='web',
+                        # URL source classification
+                        source_type=source_type,
+                        source_tier=source_tier
                     )
                     brave_items.append(nc)
                 all_content.extend(brave_items)
                 logger.info(f"Retrieved {len(brave_items)} Brave content items (successful fetches)")
             else:
                 logger.info("Dry run: Skipping Brave ingestion")
-        
+
+        if 'serper' in args.sources:
+            logger.info("Ingesting Serper search results...")
+            if not args.dry_run:
+                query = ' '.join(args.keywords)
+                # Use the collect_serper_pages helper to gather N successful pages
+                target = min(args.brave_pages, max_items)  # Reuse --brave-pages arg for now
+
+                # Create URL collection config if brand domains are provided
+                url_config = None
+                if args.brand_domains:
+                    from ingestion.domain_classifier import URLCollectionConfig
+                    url_config = URLCollectionConfig(
+                        brand_owned_ratio=args.brand_owned_ratio,
+                        third_party_ratio=args.third_party_ratio,
+                        brand_domains=args.brand_domains or [],
+                        brand_subdomains=args.brand_subdomains or [],
+                        brand_social_handles=args.brand_social_handles or []
+                    )
+                    logger.info(f"URL ratio enforcement enabled: {args.brand_owned_ratio:.0%} brand-owned / {args.third_party_ratio:.0%} 3rd party")
+
+                try:
+                    collected = collect_serper_pages(query, target_count=target, url_collection_config=url_config)
+                except Exception as e:
+                    logger.warning(f"Serper collection failed: {e}")
+                    collected = []
+
+                serper_items = []
+                from data.models import NormalizedContent
+                for i, c in enumerate(collected):
+                    url = c.get('url')
+                    content_id = f"serper_{i}_{abs(hash(url or ''))}"
+                    source_type = c.get('source_type', 'unknown')
+                    source_tier = c.get('source_tier', 'unknown')
+                    logger.info(f"Creating Serper content: url={url}, source_type={source_type}, source_tier={source_tier}")
+
+                    meta = {
+                        'source_url': url or '',
+                        'content_type': 'web'
+                    }
+                    # Include footer-extracted links when available
+                    if isinstance(c, dict):
+                        terms = c.get('terms')
+                        privacy = c.get('privacy')
+                        if terms:
+                            meta['terms'] = terms
+                        if privacy:
+                            meta['privacy'] = privacy
+
+                    nc = NormalizedContent(
+                        content_id=content_id,
+                        src='serper',
+                        platform_id=url or '',
+                        author='web',
+                        title=c.get('title', '') or '',
+                        body=c.get('body', '') or '',
+                        run_id=run_id,
+                        event_ts=datetime.now().isoformat(),
+                        meta=meta,
+                        # Enhanced Trust Stack fields
+                        url=url or '',
+                        modality='text',
+                        channel='web',
+                        platform_type='web',
+                        # URL source classification
+                        source_type=source_type,
+                        source_tier=source_tier
+                    )
+                    serper_items.append(nc)
+                all_content.extend(serper_items)
+                logger.info(f"Retrieved {len(serper_items)} Serper content items (successful fetches)")
+            else:
+                logger.info("Dry run: Skipping Serper ingestion")
+
         if not all_content:
             logger.warning("No content retrieved from any source")
             return
@@ -317,6 +418,21 @@ def main():
         logger.info("Step 2: Content Normalization")
         normalized_content = normalizer.normalize_content(all_content)
         logger.info(f"Normalized {len(normalized_content)} content items")
+
+        # Report URL distribution if ratio enforcement was enabled
+        if args.brand_domains:
+            brand_owned_count = sum(1 for c in normalized_content if getattr(c, 'source_type', None) == 'brand_owned')
+            third_party_count = sum(1 for c in normalized_content if getattr(c, 'source_type', None) == 'third_party')
+            unknown_count = len(normalized_content) - brand_owned_count - third_party_count
+
+            logger.info("=" * 60)
+            logger.info("URL Distribution Summary:")
+            logger.info(f"  Brand-owned: {brand_owned_count} ({brand_owned_count/len(normalized_content)*100:.1f}%)")
+            logger.info(f"  3rd party:   {third_party_count} ({third_party_count/len(normalized_content)*100:.1f}%)")
+            if unknown_count > 0:
+                logger.info(f"  Unknown:     {unknown_count} ({unknown_count/len(normalized_content)*100:.1f}%)")
+            logger.info(f"  Total:       {len(normalized_content)}")
+            logger.info("=" * 60)
         
         # Step 3: Upload normalized content to S3/Athena
         if not args.dry_run and athena_client:

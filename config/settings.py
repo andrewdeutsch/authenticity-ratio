@@ -97,6 +97,26 @@ SETTINGS = {
     'include_comments_in_analysis': False,
 }
 
+# URL Collection Ratio Configuration
+@dataclass
+class URLCollectionRatioConfig:
+    """Configuration for brand-owned vs 3rd party URL ratio (60/40 recommended)"""
+    brand_owned_ratio: float = 0.6
+    third_party_ratio: float = 0.4
+
+    # Brand identification (should be set per brand analysis)
+    brand_domains: list = None
+    brand_subdomains: list = None
+    brand_social_handles: list = None
+
+    def __post_init__(self):
+        if self.brand_domains is None:
+            self.brand_domains = []
+        if self.brand_subdomains is None:
+            self.brand_subdomains = []
+        if self.brand_social_handles is None:
+            self.brand_social_handles = []
+
 # Brand configuration templates
 BRAND_TEMPLATES = {
     'default': {
@@ -104,6 +124,7 @@ BRAND_TEMPLATES = {
         'exclude_keywords': [],
         'sources': ['reddit', 'amazon', 'youtube', 'yelp'],
         'custom_scoring_weights': None,
+        'url_collection_ratio': URLCollectionRatioConfig(),
     }
 }
 
