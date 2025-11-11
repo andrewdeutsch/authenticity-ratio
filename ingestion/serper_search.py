@@ -61,22 +61,26 @@ def search_serper(query: str, size: int = 10) -> List[Dict[str, str]]:
     # Serper API endpoint
     endpoint = "https://google.serper.dev/search"
 
-    # Serper supports up to 100 results per request (vs Brave's 20)
-    max_per_request = int(os.getenv('SERPER_MAX_PER_REQUEST', '100'))
+    # Serper's actual per-page limit is 10 results (despite documentation suggesting 100)
+    # To get more results, we need to paginate through multiple pages
+    results_per_page = 10
+    max_per_request = min(int(os.getenv('SERPER_MAX_PER_REQUEST', '100')), 100)
 
     all_results = []
     page = 1
-    max_pages = 10  # Safety limit for pagination
+    max_pages = (size + results_per_page - 1) // results_per_page  # Calculate pages needed
+    max_pages = min(max_pages, 10)  # Safety limit for pagination
 
     while len(all_results) < size and page <= max_pages:
-        # Calculate how many results to request in this batch
+        # Calculate how many results we still need
         remaining = size - len(all_results)
-        batch_size = min(remaining, max_per_request)
+        # Request 10 results per page (Serper's page size)
+        batch_size = min(remaining, results_per_page)
 
         # Prepare request payload
         payload = {
             "q": query,
-            "num": batch_size,
+            "num": results_per_page,  # Always request 10 per page
         }
 
         # Add pagination if not the first page
@@ -132,11 +136,14 @@ def search_serper(query: str, size: int = 10) -> List[Dict[str, str]]:
 
                 logger.info('Serper API batch returned %s results', len(organic_results))
 
-                # Check if we have more results available
-                # Serper includes searchInformation.totalResults but we rely on organic results length
-                if len(organic_results) < batch_size:
+                # If we got fewer results than expected, we've reached the end
+                if len(organic_results) < results_per_page:
                     # No more results available
                     logger.info('Serper API returned fewer results than requested - no more results available')
+                    break
+
+                # Stop if we have enough results
+                if len(all_results) >= size:
                     break
 
             elif response.status_code == 401:
