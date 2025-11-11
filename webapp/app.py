@@ -383,15 +383,15 @@ def show_analyze_page():
             st.session_state['collection_strategy'] = collection_strategy
 
             # Show different help text based on selection
-            if collection_strategy == "brand_controlled":
+            if st.session_state['collection_strategy'] == "brand_controlled":
                 st.info("📝 **Collecting only from brand-owned domains** (website, blog, social media). Brand domains are required.")
-            elif collection_strategy == "third_party":
+            elif st.session_state['collection_strategy'] == "third_party":
                 st.info("📝 **Collecting only from external sources** (news, reviews, forums, social media). Brand domains not required.")
             else:  # both
                 st.info("📝 **Collecting from both brand-owned and 3rd party sources** for holistic assessment (recommended 60/40 ratio).")
 
             # Only show ratio slider when "Both" is selected
-            if collection_strategy == "both":
+            if st.session_state['collection_strategy'] == "both":
                 st.markdown("**Adjust Collection Ratio:**")
                 col_ratio1, col_ratio2 = st.columns(2)
                 with col_ratio1:
@@ -409,7 +409,7 @@ def show_analyze_page():
                     st.caption("Auto-calculated")
             else:
                 # Set ratio to 100/0 or 0/100 based on selection
-                if collection_strategy == "brand_controlled":
+                if st.session_state['collection_strategy'] == "brand_controlled":
                     brand_owned_ratio = 100
                 else:  # third_party
                     brand_owned_ratio = 0
@@ -417,13 +417,13 @@ def show_analyze_page():
             st.divider()
 
             # Brand Identification - only required for brand-controlled or both
-            if collection_strategy in ["brand_controlled", "both"]:
-                st.markdown("**Brand Identification** " + ("*(Required)*" if collection_strategy == "brand_controlled" else "*(Optional)*"))
+            if st.session_state['collection_strategy'] in ["brand_controlled", "both"]:
+                st.markdown("**Brand Identification** " + ("*(Required)*" if st.session_state['collection_strategy'] == "brand_controlled" else "*(Optional)*"))
 
-                # Add explanation
+                # Add explanation with proper text color
                 with st.container():
                     st.markdown("""
-                    <div style='background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 15px;'>
+                    <div style='background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 15px; color: #1f1f1f;'>
                     ℹ️ <strong>What does this do?</strong><br>
                     These domains help the classifier <strong>categorize</strong> search results as "brand-owned" vs "3rd party".<br>
                     • Serper will return <strong>all</strong> URLs matching your keywords<br>
@@ -433,7 +433,7 @@ def show_analyze_page():
                     """, unsafe_allow_html=True)
 
                 brand_domains_input = st.text_input(
-                    "Brand Domains" + (" *" if collection_strategy == "brand_controlled" else ""),
+                    "Brand Domains" + (" *" if st.session_state['collection_strategy'] == "brand_controlled" else ""),
                     value="",
                     placeholder="e.g., nike.com, nike.co.uk",
                     help="Main domains owned by your brand. Used to identify brand-owned URLs in search results."
@@ -460,11 +460,11 @@ def show_analyze_page():
 
                 if brand_domains:
                     third_party_ratio = 100 - brand_owned_ratio
-                    if collection_strategy == "both":
+                    if st.session_state['collection_strategy'] == "both":
                         st.success(f"✓ Balanced collection enabled: {brand_owned_ratio}% brand-owned / {third_party_ratio}% 3rd party")
                     else:
                         st.success(f"✓ Brand-controlled collection enabled")
-                elif collection_strategy == "brand_controlled":
+                elif st.session_state['collection_strategy'] == "brand_controlled":
                     st.warning("⚠️ Brand domains required for brand-controlled collection")
             else:
                 # No brand identification needed for 3rd party only
@@ -493,7 +493,7 @@ def show_analyze_page():
             return
 
         # Validate brand domains for brand-controlled strategy
-        if collection_strategy == "brand_controlled" and not brand_domains:
+        if st.session_state.get('collection_strategy') == "brand_controlled" and not brand_domains:
             st.error("⚠️ Brand domains are required for brand-controlled collection")
             return
 
@@ -606,7 +606,7 @@ def show_analyze_page():
             return
 
         # Validate brand domains for brand-controlled strategy
-        if collection_strategy == "brand_controlled" and not brand_domains:
+        if st.session_state.get('collection_strategy') == "brand_controlled" and not brand_domains:
             st.error("⚠️ Brand domains are required for brand-controlled collection")
             return
 
