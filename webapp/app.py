@@ -829,11 +829,15 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
 
                 # Use collect functions for ratio enforcement
                 search_results = []
+                # Increase pool size to find more brand-owned URLs (5x instead of default 3x)
+                pool_size = web_pages * 5
+
                 if search_provider == 'brave':
                     from ingestion.brave_search import collect_brave_pages
                     pages = collect_brave_pages(
                         query=query,
                         target_count=web_pages,
+                        pool_size=pool_size,
                         url_collection_config=url_collection_config
                     )
                     # Convert to search result format
@@ -848,6 +852,7 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                     pages = collect_serper_pages(
                         query=query,
                         target_count=web_pages,
+                        pool_size=pool_size,
                         url_collection_config=url_collection_config
                     )
                     # Convert to search result format
@@ -859,7 +864,7 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                         })
 
                 progress_bar.progress(70)
-                status_text.text(f"✓ Received {len(search_results)} results (with {collection_strategy} ratio enforcement), processing...")
+                status_text.text(f"✓ Collected {len(search_results)} URLs (target: {web_pages}) with {collection_strategy} ratio enforcement, processing...")
 
                 # Restore original timeout
                 if original_timeout is not None:
