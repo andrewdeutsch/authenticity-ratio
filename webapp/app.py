@@ -111,9 +111,124 @@ def infer_brand_domains(brand_id: str) -> Dict[str, List[str]]:
     }
 
 
+def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Extract specific issues from content items grouped by dimension.
+
+    Args:
+        items: List of analyzed content items with detected attributes
+
+    Returns:
+        Dictionary mapping dimension to list of specific issues found
+    """
+    dimension_issues = {
+        'provenance': [],
+        'verification': [],
+        'transparency': [],
+        'coherence': [],
+        'resonance': []
+    }
+
+    for item in items:
+        meta = item.get('meta', {})
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except:
+                meta = {}
+
+        # Extract detected attributes
+        detected_attrs = meta.get('detected_attributes', [])
+        title = meta.get('title', meta.get('name', 'Unknown content'))[:60]
+        url = meta.get('source_url', meta.get('url', ''))
+
+        for attr in detected_attrs:
+            dimension = attr.get('dimension', 'unknown')
+            value = attr.get('value', 5)
+            evidence = attr.get('evidence', '')
+            label = attr.get('label', '')
+
+            # Only report low-scoring attributes (value <= 5 indicates problems)
+            if dimension in dimension_issues and value <= 5:
+                dimension_issues[dimension].append({
+                    'title': title,
+                    'url': url,
+                    'issue': label,
+                    'evidence': evidence,
+                    'value': value
+                })
+
+    return dimension_issues
+
+
+def get_remedy_for_issue(issue_type: str, dimension: str) -> str:
+    """
+    Get specific remedy recommendation for a detected issue type.
+
+    Args:
+        issue_type: Type of issue detected (e.g., "Privacy Policy Link Availability Clarity")
+        dimension: Dimension the issue belongs to
+
+    Returns:
+        Specific actionable remedy recommendation
+    """
+    # Map specific issues to remedies
+    remedies = {
+        # Provenance
+        'AI vs Human Labeling Clarity': 'Add clear labels indicating whether content is AI-generated or human-created. Use schema.org markup to embed this metadata.',
+        'Author Brand Identity Verified': 'Implement author verification with clear attribution. Add structured author information using schema.org Person or Organization markup.',
+        'C2PA CAI Manifest Present': 'Implement Content Authenticity Initiative (C2PA) manifests for media files to provide cryptographic provenance.',
+        'Canonical URL Matches Declared Source': 'Ensure canonical URLs match the declared source. Add proper <link rel="canonical"> tags to all pages.',
+        'Digital Watermark Fingerprint Detected': 'Add digital watermarks or fingerprints to images and videos for traceability.',
+        'EXIF Metadata Integrity': 'Preserve EXIF metadata in images. Ensure metadata includes creator, date, and copyright information.',
+        'Source Domain Trust Baseline': 'Improve domain reputation by adding SSL certificates, privacy policies, and contact information.',
+        'Schema Compliance': 'Implement schema.org structured data markup (JSON-LD) for all content types.',
+        'Metadata Completeness': 'Add complete metadata including title, description, author, date, and Open Graph/Twitter Card tags.',
+
+        # Verification
+        'Ad Sponsored Label Consistency': 'Clearly label all sponsored content and advertisements with "Sponsored" or "Ad" labels.',
+        'Agent Safety Guardrail Presence': 'Implement content safety guardrails and moderation policies. Document them publicly.',
+        'Claim to Source Traceability': 'Add citations and references for all claims. Link to authoritative sources.',
+        'Engagement Authenticity Ratio': 'Monitor and remove fake engagement (bots, fake reviews). Encourage authentic user interactions.',
+        'Influencer Partner Identity Verified': 'Verify influencer and partner identities. Display verification badges or certificates.',
+        'Review Authenticity Confidence': 'Implement verified review systems. Flag or remove suspicious reviews.',
+        'Seller Product Verification Rate': 'Verify seller identities and product authenticity. Display verification status prominently.',
+        'Verified Purchaser Review Rate': 'Mark reviews from verified purchasers. Implement purchase verification in your review system.',
+
+        # Transparency
+        'AI Explainability Disclosure': 'When using AI, explain how it works and what data it uses. Add an AI transparency page.',
+        'AI Generated Assisted Disclosure Present': 'Clearly disclose when content is AI-generated or AI-assisted. Add disclosure statements to all AI content.',
+        'Bot Disclosure Response Audit': 'Clearly identify bot-generated responses. Add "This is an automated response" disclaimers.',
+        'Caption Subtitle Availability Accuracy': 'Add accurate captions and subtitles to all video content. Use human review for accuracy.',
+        'Data Source Citations for Claims': 'Add inline citations for all data-driven claims. Link to primary sources and datasets.',
+        'Privacy Policy Link Availability Clarity': 'Add a clear Privacy Policy link to your footer and make it easily accessible. Ensure the policy is clear and up-to-date.',
+
+        # Coherence
+        'Brand Voice Consistency Score': 'Audit content for consistent brand voice. Create and enforce brand voice guidelines.',
+        'Broken Link Rate': 'Regularly audit and fix broken links. Use automated link checkers weekly.',
+        'Claim Consistency Across Pages': 'Ensure claims are consistent across all content. Create a single source of truth for key claims.',
+        'Email Asset Consistency Check': 'Standardize email templates and branding. Ensure consistency with website branding.',
+        'Engagement to Trust Correlation': 'Monitor how engagement patterns correlate with trust metrics. Address suspicious patterns.',
+        'Multimodal Consistency Score': 'Ensure text, images, and videos tell a consistent story. Audit multimedia content for alignment.',
+        'Temporal Continuity Versions': 'Maintain version history for content updates. Show update dates and change logs.',
+        'Trust Fluctuation Index': 'Monitor trust score changes over time. Investigate and address sudden drops.',
+
+        # Resonance
+        'Community Alignment Index': 'Engage with your community authentically. Monitor sentiment and adjust messaging to align with community values.',
+        'Creative Recency vs Trend': 'Stay current with trends while maintaining brand authenticity. Update content regularly.',
+        'Cultural Context Alignment': 'Ensure content is culturally appropriate and relevant. Work with cultural consultants for diverse markets.',
+        'Language Locale Match': 'Provide content in appropriate languages for your target markets. Use professional translation services.',
+        'Personalization Relevance Embedding Similarity': 'Improve personalization algorithms to better match user interests while respecting privacy.',
+        'Readability Grade Level Fit': 'Adjust content readability to match your target audience. Use readability tools to test and optimize.',
+        'Tone Sentiment Appropriateness': 'Ensure content tone matches the context and audience expectations. Avoid overly promotional language.'
+    }
+
+    return remedies.get(issue_type, f'Address this {dimension} issue by improving content quality and adding relevant metadata.')
+
+
 def generate_rating_recommendation(avg_rating: float, dimension_breakdown: Dict[str, Any], items: List[Dict[str, Any]]) -> str:
     """
-    Generate data-driven recommendation based on dimension analysis.
+    Generate data-driven recommendation based on dimension analysis with specific examples.
 
     Args:
         avg_rating: Average rating score (0-100)
@@ -121,7 +236,7 @@ def generate_rating_recommendation(avg_rating: float, dimension_breakdown: Dict[
         items: List of analyzed content items
 
     Returns:
-        Comprehensive recommendation string
+        Comprehensive recommendation string with concrete examples
     """
     # Define dimension details
     dimension_info = {
@@ -159,28 +274,39 @@ def generate_rating_recommendation(avg_rating: float, dimension_breakdown: Dict[
         for key in dimension_keys
     }
 
+    # Extract specific issues from items
+    dimension_issues = extract_issues_from_items(items)
+
     # Find the dimension with the lowest score
     if dimension_scores:
         lowest_dim_key = min(dimension_scores, key=dimension_scores.get)
         lowest_dim_score = dimension_scores[lowest_dim_key]
         lowest_dim_info = dimension_info[lowest_dim_key]
 
+        # Get example issues for the lowest dimension
+        issues_for_dim = dimension_issues.get(lowest_dim_key, [])
+        example_text = ""
+        if issues_for_dim:
+            # Get first unique issue as example
+            example = issues_for_dim[0]
+            example_text = f" For example, on \"{example['title']}\", there was an issue with {example['issue'].lower()}: {example['evidence']}."
+
         # Generate comprehensive summary based on rating band
         if avg_rating >= 80:
             # Excellent - maintain standards with minor optimization
-            return f"Your brand content demonstrates high quality with an average rating of {avg_rating:.1f}/100. To reach even greater heights, consider optimizing {lowest_dim_info['name']} (currently at {lowest_dim_score:.1f}/100) by continuing to {lowest_dim_info['recommendation']}."
+            return f"Your brand content demonstrates high quality with an average rating of {avg_rating:.1f}/100. To reach even greater heights, consider optimizing {lowest_dim_info['name']} (currently at {lowest_dim_score:.1f}/100) by continuing to {lowest_dim_info['recommendation']}.{example_text}"
 
         elif avg_rating >= 60:
             # Good - focus on improvement area
-            return f"Your content shows solid quality with an average rating of {avg_rating:.1f}/100. To improve from Good to Excellent, focus on enhancing {lowest_dim_info['name']} (currently at {lowest_dim_score:.1f}/100) by taking action to {lowest_dim_info['recommendation']}."
+            return f"Your content shows solid quality with an average rating of {avg_rating:.1f}/100. To improve from Good to Excellent, focus on enhancing {lowest_dim_info['name']} (currently at {lowest_dim_score:.1f}/100) by taking action to {lowest_dim_info['recommendation']}.{example_text}"
 
         elif avg_rating >= 40:
             # Fair - requires focused attention
-            return f"Your content quality is moderate with an average rating of {avg_rating:.1f}/100, requiring attention. To mitigate weak {lowest_dim_info['description']}, you should {lowest_dim_info['recommendation']}. This will help move your rating from Fair to Good or Excellent."
+            return f"Your content quality is moderate with an average rating of {avg_rating:.1f}/100, requiring attention. To mitigate weak {lowest_dim_info['description']}, you should {lowest_dim_info['recommendation']}.{example_text} This will help move your rating from Fair to Good or Excellent."
 
         else:
             # Poor - immediate action needed
-            return f"Your content quality is low with an average rating of {avg_rating:.1f}/100, requiring immediate action. Critical issue detected in {lowest_dim_info['name']} (scoring only {lowest_dim_score:.1f}/100). You must {lowest_dim_info['recommendation']} to improve trust signals and content quality."
+            return f"Your content quality is low with an average rating of {avg_rating:.1f}/100, requiring immediate action. Critical issue detected in {lowest_dim_info['name']} (scoring only {lowest_dim_score:.1f}/100). You must {lowest_dim_info['recommendation']}.{example_text}"
 
     else:
         # Fallback if no dimension data available
@@ -1378,6 +1504,72 @@ def show_results_page():
         fig_hist.add_vline(x=60, line_dash="dash", line_color="blue", annotation_text="Good")
         fig_hist.add_vline(x=40, line_dash="dash", line_color="orange", annotation_text="Fair")
         st.plotly_chart(fig_hist, use_container_width=True, config={'displayModeBar': False})
+
+    st.divider()
+
+    # Remedies Section - NEW!
+    st.markdown("### 🔧 Remedies: Recommended Fixes by Dimension")
+
+    dimension_issues = extract_issues_from_items(items)
+
+    # Count total issues per dimension
+    issue_counts = {dim: len(issues) for dim, issues in dimension_issues.items()}
+    total_issues = sum(issue_counts.values())
+
+    if total_issues > 0:
+        st.markdown(f"**Found {total_issues} specific issues across {sum(1 for c in issue_counts.values() if c > 0)} dimensions**")
+
+        # Display remedies for each dimension with issues
+        for dimension_key in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
+            issues = dimension_issues.get(dimension_key, [])
+            if not issues:
+                continue
+
+            dimension_names = {
+                'provenance': ('🔗 Provenance', 'Origin & Metadata Issues'),
+                'verification': ('✓ Verification', 'Accuracy & Verification Issues'),
+                'transparency': ('👁 Transparency', 'Disclosure & Attribution Issues'),
+                'coherence': ('🔄 Coherence', 'Consistency Issues'),
+                'resonance': ('📢 Resonance', 'Engagement & Relevance Issues')
+            }
+
+            dim_emoji_name, dim_subtitle = dimension_names[dimension_key]
+
+            with st.expander(f"{dim_emoji_name}: {len(issues)} issues found", expanded=(dimension_key == min(issue_counts, key=issue_counts.get) if issue_counts else False)):
+                st.markdown(f"**{dim_subtitle}**")
+                st.markdown("---")
+
+                # Group issues by type
+                issues_by_type = {}
+                for issue in issues:
+                    issue_type = issue['issue']
+                    if issue_type not in issues_by_type:
+                        issues_by_type[issue_type] = []
+                    issues_by_type[issue_type].append(issue)
+
+                # Display each issue type with affected pages
+                for issue_type, type_issues in issues_by_type.items():
+                    st.markdown(f"**⚠️ {issue_type}** ({len(type_issues)} occurrence{'s' if len(type_issues) > 1 else ''})")
+
+                    # Show remedy recommendation based on issue type
+                    remedy = get_remedy_for_issue(issue_type, dimension_key)
+                    if remedy:
+                        st.info(f"**💡 Recommended Fix:** {remedy}")
+
+                    # Show first few affected pages
+                    with st.expander(f"View affected content ({len(type_issues)} items)"):
+                        for idx, issue in enumerate(type_issues[:10]):  # Limit to first 10
+                            st.markdown(f"- **{issue['title']}**")
+                            if issue['evidence']:
+                                st.caption(f"  📝 {issue['evidence']}")
+                            if issue['url']:
+                                st.caption(f"  🔗 {issue['url']}")
+                        if len(type_issues) > 10:
+                            st.caption(f"... and {len(type_issues) - 10} more items")
+
+                    st.markdown("")  # Spacing
+    else:
+        st.success("✅ No major issues detected! Your content shows strong trust signals across all dimensions.")
 
     st.divider()
 
