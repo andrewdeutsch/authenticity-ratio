@@ -698,7 +698,7 @@ def show_analyze_page():
                         "gpt-4o-mini",
                         "gpt-3.5-turbo",
                         "gpt-4o",
-                        "claude-3-5-sonnet-20241022",
+                        "claude-3-5-sonnet-20240620",
                         "claude-3-haiku-20240307",
                         "gemini-1.5-pro",
                         "gemini-1.5-flash",
@@ -716,7 +716,7 @@ def show_analyze_page():
                         "gpt-4o-mini",
                         "gpt-3.5-turbo",
                         "gpt-4o",
-                        "claude-3-5-sonnet-20241022",
+                        "claude-3-5-sonnet-20240620",
                         "claude-3-haiku-20240307",
                         "gemini-1.5-pro",
                         "gemini-1.5-flash",
@@ -733,7 +733,7 @@ def show_analyze_page():
                 'gpt-4o-mini': '⚖️ Balanced',
                 'gpt-4o': '⭐ Premium',
                 'claude-3-haiku-20240307': '💰 Budget',
-                'claude-3-5-sonnet-20241022': '⭐ Premium',
+                'claude-3-5-sonnet-20240620': '⭐ Premium',
                 'gemini-1.5-flash': '💰 Budget',
                 'gemini-1.5-pro': '⚖️ Balanced',
                 'deepseek-chat': '💰 Budget',
@@ -1338,20 +1338,6 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
 
         normalizer = ContentNormalizer()
         normalized_content = normalizer.normalize_content(all_content)
-
-        # Report URL distribution if brand domains were provided
-        if brand_domains:
-            brand_owned_count = sum(1 for c in normalized_content if getattr(c, 'source_type', None) == 'brand_owned')
-            third_party_count = sum(1 for c in normalized_content if getattr(c, 'source_type', None) == 'third_party')
-            unknown_count = len(normalized_content) - brand_owned_count - third_party_count
-
-            st.info(f"""
-            📊 **URL Distribution Summary**
-            - Brand-owned: {brand_owned_count} ({brand_owned_count/len(normalized_content)*100:.1f}%)
-            - 3rd party: {third_party_count} ({third_party_count/len(normalized_content)*100:.1f}%)
-            {f"- Unknown: {unknown_count} ({unknown_count/len(normalized_content)*100:.1f}%)" if unknown_count > 0 else ""}
-            - Total: {len(normalized_content)}
-            """)
 
         # Step 4: Scoring
         status_text.text("Scoring content on 6D Trust dimensions...")

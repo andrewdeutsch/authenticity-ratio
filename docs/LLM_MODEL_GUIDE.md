@@ -10,7 +10,7 @@ This guide helps you choose the right LLM model for your Trust Stack analysis ne
 | **OpenAI** | `gpt-4o-mini` | Mid | Balanced performance | $$ |
 | **OpenAI** | `gpt-4o` | Premium | Complex analysis | $$$$ |
 | **Claude** | `claude-3-haiku-20240307` | Budget | Fast processing | $$ |
-| **Claude** | `claude-3-5-sonnet-20241022` | Premium | Detailed analysis, nuanced writing | $$$$ |
+| **Claude** | `claude-3-5-sonnet-20240620` | Premium | Detailed analysis, nuanced writing | $$$$ |
 | **Google** | `gemini-1.5-flash` | Budget | Fast, efficient processing | $ |
 | **Google** | `gemini-1.5-pro` | Premium | Advanced reasoning | $$$ |
 | **DeepSeek** | `deepseek-chat` | Budget | Cost-effective processing | $ |
@@ -69,7 +69,7 @@ DEEPSEEK_API_KEY=sk-...
 - **Best for**: Quick summaries, high-throughput scenarios
 - **Strengths**: Good instruction following, concise outputs
 
-#### `claude-3-5-sonnet-20241022` ⭐ Recommended for Quality
+#### `claude-3-5-sonnet-20240620` ⭐ Recommended for Quality
 - **Cost**: Premium (~$3-$15 per 1M tokens)
 - **Speed**: Moderate
 - **Quality**: Excellent reasoning and writing quality
@@ -124,8 +124,8 @@ python -m scripts.run_pipeline \
   --keywords "nike shoes" \
   --sources brave \
   --use-llm-examples \
-  --llm-model claude-3-5-sonnet-20241022 \
-  --recommendations-model claude-3-5-sonnet-20241022
+  --llm-model claude-3-5-sonnet-20240620 \
+  --recommendations-model claude-3-5-sonnet-20240620
 
 # Use budget-friendly Gemini Flash for summaries
 python -m scripts.run_pipeline \
@@ -143,7 +143,7 @@ python -m scripts.run_pipeline \
   --sources brave \
   --use-llm-examples \
   --llm-model gpt-3.5-turbo \
-  --recommendations-model claude-3-5-sonnet-20241022
+  --recommendations-model claude-3-5-sonnet-20240620
 
 # Cost-effective DeepSeek option
 python -m scripts.run_pipeline \
@@ -173,8 +173,8 @@ python -m scripts.run_pipeline \
 
 ### Production (Premium Quality) ⭐
 ```bash
---llm-model claude-3-5-sonnet-20241022
---recommendations-model claude-3-5-sonnet-20241022
+--llm-model claude-3-5-sonnet-20240620
+--recommendations-model claude-3-5-sonnet-20240620
 ```
 **Why**: Best output quality for client-facing reports
 
@@ -196,7 +196,7 @@ python -m scripts.run_pipeline \
 
 ```
 Do you need the absolute best quality?
-├─ YES → claude-3-5-sonnet-20241022
+├─ YES → claude-3-5-sonnet-20240620
 └─ NO ↓
 
 Is cost a primary concern?
@@ -263,8 +263,8 @@ python -m scripts.run_pipeline \
   --sources brave \
   --brave-pages 5 \
   --use-llm-examples \
-  --llm-model claude-3-5-sonnet-20241022 \
-  --recommendations-model claude-3-5-sonnet-20241022 \
+  --llm-model claude-3-5-sonnet-20240620 \
+  --recommendations-model claude-3-5-sonnet-20240620 \
   --output-dir ./output/test_claude
 
 # Test 3: Gemini (cost-effective)
