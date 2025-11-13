@@ -712,6 +712,38 @@ class MarkdownReportGenerator:
             f"- Extended AR = rubric-adjusted blend (see AR Analysis section) = {extended_ar:.1f}%\n"
         )
 
+        # Generate LLM-powered executive summary
+        from reporting.executive_summary import generate_executive_summary
+
+        # Get model from report data (configurable via --llm-model flag)
+        summary_model = report_data.get('llm_model', 'gpt-4o-mini')
+        use_llm_summary = report_data.get('use_llm_summary', True)  # Default to LLM
+
+        # Get sources for context
+        sources = report_data.get('sources', [])
+        items = report_data.get('items', [])
+
+        # Calculate average rating for the summary
+        if items:
+            avg_rating = sum(item.get('final_score', 0) for item in items) / len(items) * 100
+        else:
+            avg_rating = 0.0
+
+        # Generate comprehensive executive summary
+        try:
+            executive_summary = generate_executive_summary(
+                avg_rating=avg_rating,
+                dimension_breakdown=dimension_breakdown,
+                items=items,
+                sources=sources,
+                model=summary_model,
+                use_llm=use_llm_summary
+            )
+        except Exception as e:
+            logger.warning(f"Executive summary generation failed, using fallback: {e}")
+            # Fallback to the template-based interpretation
+            executive_summary = interp
+
         return f"""## Summary
 
 **Total Content Analyzed:** {total_items:,}
@@ -719,6 +751,12 @@ class MarkdownReportGenerator:
 {trust_stack_table}
 
 {visuals_block}
+
+---
+
+### Executive Summary
+
+{executive_summary}
 
 ---
 
