@@ -829,8 +829,8 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
 
                 # Use collect functions for ratio enforcement
                 search_results = []
-                # Increase pool size to find more brand-owned URLs (5x instead of default 3x)
-                pool_size = web_pages * 5
+                # Use 3x pool size - with content validation before pool checks, this should be sufficient
+                pool_size = web_pages * 3
 
                 if search_provider == 'brave':
                     from ingestion.brave_search import collect_brave_pages
