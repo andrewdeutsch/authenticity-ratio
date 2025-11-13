@@ -20,7 +20,7 @@ DATABASE_CONFIG = {
     
     # Partition configuration
     'partition_scheme': ['brand_id', 'source'],
-    'supported_sources': ['reddit', 'amazon', 'youtube','yelp'],
+    'supported_sources': ['reddit', 'amazon', 'youtube', 'yelp', 'brave', 'serper'],
     
     # File format settings
     'file_format': 'PARQUET',
