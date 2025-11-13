@@ -1,146 +1,337 @@
-# Authenticity Ratio (AR) Tool
+# Trust Stack Rating Tool
 
-## Overview
-Authenticity Ratio (AR) is a KPI that measures authentic vs. inauthentic brand-linked content across channels. It reframes authenticity as a brand health metric for CMOs/boards.
+A comprehensive content quality assessment system that analyzes brand-linked content across digital channels using the **6D Trust Framework**. The tool provides a Trust Stack Rating (0-100 scale) and detailed insights into content authenticity, transparency, and trustworthiness.
 
-## Formula
-**Core:** AR = (Verified Authentic Content ÷ Total Brand-Linked Content) × 100
+## 🎯 What It Does
 
-**Extended (with suspect):** AR = (A + 0.5S) ÷ (A + S + I) × 100
-- A = Authentic, S = Suspect, I = Inauthentic
+The Trust Stack Rating Tool assesses brand content across six trust dimensions:
+- **Provenance**: Origin clarity, traceability, and metadata completeness
+- **Verification**: Factual accuracy against trusted sources
+- **Transparency**: Clarity of disclosures and attribution
+- **Coherence**: Consistency across channels
+- **Resonance**: Cultural fit and organic engagement patterns
+- **AI Readiness**: Machine discoverability and LLM-compatible signals
 
-## 6D Trust Dimensions
-Content is scored on:
-- **Provenance** – origin, traceability, metadata (16.7%)
-- **Verification** – factual accuracy vs. trusted DBs (16.7%)
-- **Transparency** – disclosures, clarity (16.7%)
-- **Coherence** – consistency across channels (16.7%)
-- **Resonance** – cultural fit, organic engagement (16.7%)
-- **AI Readiness** – machine discoverability, LLM-readable signals (16.7%)
+Each content item receives a comprehensive rating (0-100), with a weighted average across all dimensions. The system also computes a legacy **Authenticity Ratio** metric for backward compatibility.
 
-## Pipeline
-Ingest → Normalize → Enrich (metadata + fact-check) → Score (6D rubric) → Classify (A/S/I) → Compute AR → Report
+## 🚀 Quick Start
 
-## Project Structure
-```
-AR/
-├── config/                 # Configuration files
-├── data/                   # Data storage and processing
-├── ingestion/              # Data collection modules
-├── scoring/                # 6D scoring and classification
-├── reporting/              # Report generation and dashboards
-├── utils/                  # Shared utilities and helpers
-├── tests/                  # Test files
-├── docs/                   # Documentation
-└── scripts/                # Deployment and maintenance scripts
-```
+### Prerequisites
+- Python 3.8+
+- Required packages: `pip install -r requirements.txt`
+- Optional API credentials for enhanced data sources
 
-## Quick Start
+### Web Application (Recommended)
 
-### 🌐 Web Application (Recommended)
-The easiest way to use the AR tool is through the interactive web application:
+The easiest way to use the tool is through the interactive web application:
 
 ```bash
-# Launch the web app
 streamlit run webapp/app.py
 ```
 
-The web app provides:
-- **Interactive dashboard** with real-time visualizations
-- **Pipeline execution** with progress tracking
-- **Results analysis** with 6D Trust Dimensions breakdown
-- **Export capabilities** (PDF, Markdown, JSON)
-- **Analysis history** to track runs over time
+This launches a web interface at `http://localhost:8501` with:
+- **Interactive dashboards** with visualizations (charts, radar plots, histograms)
+- **Brand analysis configuration** with custom parameters
+- **Real-time progress tracking** during analysis
+- **Results analysis** with detailed content breakdown
+- **Multiple export formats** (PDF, Markdown, JSON)
+- **Analysis history** to track and compare multiple runs
+- **Status indicators** for available data sources
 
 See [webapp/README.md](webapp/README.md) for detailed usage instructions.
 
-### 📟 Command Line (Advanced)
+### Command Line (Advanced)
+
 For programmatic or batch processing:
 
-1. Set up configuration in `config/`
-2. Run data ingestion: `python -m ingestion.reddit_crawler`
-3. Process and score content: `python -m scoring.pipeline`
-4. Generate reports: `python -m reporting.generator`
-
-## Database
-Uses AWS Athena with S3 storage for normalized content and scores.
-
-## Brave Search integration
-
-This project includes a Brave Search ingestion module used by both the web application and command-line tools.
-
-Brave API configuration
-
-- `BRAVE_API_KEY`: Your Brave subscription token or API key. If set, the pipeline will prefer the API.
-- `BRAVE_API_ENDPOINT`: Optional API endpoint (defaults to `https://api.search.brave.com/res/v1/web/search`).
-- `BRAVE_API_AUTH`: Auth style for API calls. Supported values:
-	- `subscription-token` (default) — sends header `X-Subscription-Token: <key>`
-	- `x-api-key` — sends header `x-api-key: <key>`
-	- `bearer` — sends `Authorization: Bearer <key>`
-	- `query-param` — appends `apikey=<key>` to the query string
-- `BRAVE_REQUEST_INTERVAL`: Minimum seconds to wait between outbound Brave requests (default `1.0`)
-- `BRAVE_ALLOW_HTML_FALLBACK`: If set to `1` the client will fall back to HTML scraping when the API returns no results (default: `0` — disabled when API key present)
-- `AR_USE_PLAYWRIGHT`: If set to `1`, the client will attempt a Playwright-rendered fetch when HTML scraping is needed (applies to both Brave and Serper; install Playwright separately)
-
-Quick examples
-
-- Using the API (recommended):
-
 ```bash
-export BRAVE_API_KEY="<your_key_here>"
-export BRAVE_API_AUTH="subscription-token"
-export BRAVE_REQUEST_INTERVAL=1.0
-python scripts/debug_brave.py --query "nike" --size 4
+# Run the full pipeline with custom parameters
+python scripts/run_pipeline.py \
+  --brand-id myBrand \
+  --keywords "brand name" \
+  --sources brave reddit youtube \
+  --max-items 50
 ```
 
-- Enable Playwright-based rendering (heavy):
+Available data sources: `brave`, `reddit`, `youtube`
+
+## 📊 Project Architecture
+
+### Pipeline Stages
+1. **Ingestion**: Collect content from configured data sources (Brave Search, Reddit, YouTube)
+2. **Normalization**: Standardize content format across sources
+3. **Enrichment**: Extract metadata, detect attributes (SSL, schema markup, author info, etc.)
+4. **Scoring**: Apply 6D rubric using LLM-based analysis for each dimension
+5. **Classification**: Categorize content as Excellent/Good/Fair/Poor based on overall score
+6. **Reporting**: Generate comprehensive reports (PDF, Markdown, JSON)
+7. **Export**: Save results for analysis and comparison
+
+### Directory Structure
+```
+authenticity-ratio/
+├── webapp/                 # Streamlit web application
+├── ingestion/              # Data collection from various sources
+│   ├── brave_search.py     # Brave Search API/HTML scraping
+│   ├── reddit_crawler.py   # Reddit API integration
+│   ├── youtube_scraper.py  # YouTube Data API v3
+│   ├── normalizer.py       # Content standardization
+│   └── metadata_extractor.py  # Metadata and attribute detection
+├── scoring/                # Trust Stack Rating computation
+│   ├── pipeline.py         # Main scoring pipeline
+│   ├── scorer.py           # 6D dimension scoring
+│   ├── attribute_detector.py  # Trust attribute detection
+│   ├── classifier.py       # Content classification
+│   └── rubric.py           # Scoring rubric definitions
+├── reporting/              # Report generation
+│   ├── pdf_generator.py    # PDF report generation
+│   ├── markdown_generator.py  # Markdown report generation
+│   └── dashboard.py        # Dashboard utilities
+├── config/                 # Configuration and settings
+├── data/                   # Data storage
+├── tests/                  # Unit and integration tests
+├── scripts/                # Utility scripts
+└── docs/                   # Documentation
+```
+
+## 🔌 Data Source Integration
+
+### Brave Search
+Always available, no API key required. Falls back to web scraping if Brave API unavailable.
+
+**Configuration:**
+```bash
+export BRAVE_API_KEY="<your_key>"              # Optional API key
+export BRAVE_API_AUTH="subscription-token"     # Auth method (default)
+export BRAVE_REQUEST_INTERVAL=1.0              # Rate limiting (seconds)
+export BRAVE_ALLOW_HTML_FALLBACK=1             # Allow HTML fallback when API unavailable
+```
+
+**Supported auth methods:**
+- `subscription-token` (default) — `X-Subscription-Token` header
+- `x-api-key` — `x-api-key` header
+- `bearer` — `Authorization: Bearer` header
+- `query-param` — API key as query parameter
+
+**Example:**
+```bash
+python scripts/debug_brave.py --query "nike" --size 10
+```
+
+### Reddit
+Requires API credentials for full integration.
+
+**Configuration:**
+```bash
+export REDDIT_CLIENT_ID="<your_id>"
+export REDDIT_CLIENT_SECRET="<your_secret>"
+export REDDIT_USER_AGENT="truststack-analyzer/1.0"
+```
+
+**Usage:** Select "Reddit" as a data source in the web app or specify `--sources reddit` in CLI.
+
+### YouTube
+Requires YouTube Data API v3 key for video search and comment analysis.
+
+**Configuration:**
+```bash
+export YOUTUBE_API_KEY="<your_key>"
+export YOUTUBE_RATE_LIMIT=60  # requests per minute
+```
+
+**Example:**
+```python
+from ingestion.youtube_scraper import YouTubeScraper
+yt = YouTubeScraper()
+videos = yt.search_videos('nike', max_results=10)
+normalized = yt.convert_videos_to_normalized(
+    videos,
+    brand_id='nike',
+    run_id='analysis_001',
+    include_comments=True
+)
+```
+
+### Optional: Playwright for Enhanced Rendering
+For JavaScript-heavy pages, install and enable Playwright:
 
 ```bash
 pip install playwright
 playwright install
 export AR_USE_PLAYWRIGHT=1
-export BRAVE_ALLOW_HTML_FALLBACK=1
-python scripts/debug_brave.py --query "nike" --size 4
 ```
 
-Notes
+## 🎛️ Configuration
 
-- When `BRAVE_API_KEY` is present the client prefers API responses and will not fall back to HTML scraping unless `BRAVE_ALLOW_HTML_FALLBACK=1`.
-- Rate limiting is enforced by `BRAVE_REQUEST_INTERVAL` to respect one request per second default.
-
-
-## YouTube Data API integration
-
-This project also includes a YouTube ingestion module that talks to the YouTube Data API v3 for searching videos and fetching comments. The YouTube integration is API-key based and uses the Google API client under the hood.
-
-YouTube configuration
-
-- `YOUTUBE_API_KEY`: Your YouTube Data API v3 developer key (required for video search and comment fetches). If not present, the `YouTubeScraper` will raise a configuration error.
-- `youtube_rate_limit`: Configured in `config/settings.py` (defaults to `60` requests per minute); the scraper will respect this rate by inserting sleeps between calls.
-- `include_comments`: When converting videos to normalized content you can choose to include top-level comments (configurable by the scraper helper functions).
-
-Quick examples
-
-- Basic search with the project's debug runner (recommended for dev):
+### Environment Variables
+Create a `.env` file in the project root:
 
 ```bash
-export YOUTUBE_API_KEY="<your_key_here>"
-python -c "from ingestion.youtube_scraper import YouTubeScraper; print(YouTubeScraper().search_videos('nike', max_results=3))"
+# LLM Configuration
+OPENAI_API_KEY=<your_key>
+RECOMMENDATIONS_MODEL=gpt-4o-mini      # gpt-4o, gpt-4o-mini, gpt-3.5-turbo
+LLM_MODEL=gpt-3.5-turbo               # For summary generation
+
+# Data Sources
+BRAVE_API_KEY=<optional>
+REDDIT_CLIENT_ID=<optional>
+REDDIT_CLIENT_SECRET=<optional>
+YOUTUBE_API_KEY=<optional>
+
+# AWS (for cloud storage)
+AWS_ACCESS_KEY_ID=<optional>
+AWS_SECRET_ACCESS_KEY=<optional>
+AWS_REGION=us-east-1
 ```
 
-- Convert found videos (and comments) into normalized content (used by pipeline):
+See `.env.example` for a complete template.
 
-```python
-from ingestion.youtube_scraper import YouTubeScraper
-yt = YouTubeScraper()
-videos = yt.search_videos('nike', max_results=5)
-# Convert videos to NormalizedContent objects (used by the scoring pipeline)
-normalized = yt.convert_videos_to_normalized(videos, brand_id='nike', run_id='localtest', include_comments=True)
+## 💡 Model Selection Guide
+
+The system supports different LLM models for recommendations:
+- `gpt-4o` — Highest quality, slower, more expensive (for executive reports)
+- `gpt-4o-mini` — **Recommended** for most use cases (balanced quality/cost)
+- `gpt-3.5-turbo` — Fastest and cheapest (for development/testing)
+
+See [MODEL_SELECTION_GUIDE.md](MODEL_SELECTION_GUIDE.md) for detailed guidance.
+
+## 📈 Database
+Results can be stored in AWS Athena with S3 backend for at-scale analysis. Configure in `config/settings.py`.
+
+Results are also saved locally to `output/webapp_runs/` for easy access.
+
+## 🧪 Development
+
+### Setup
+```bash
+# Clone the repository
+git clone https://github.com/andrewdeutsch/authenticity-ratio.git
+cd authenticity-ratio
+
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Create .env with your credentials
+cp .env.example .env
+# Edit .env with your API keys
 ```
 
-Notes
+### Running Tests
+```bash
+# Run all tests
+pytest
 
-- The `google-api-python-client` package is required (already referenced in the project). Ensure your virtualenv has it installed.
-- Comment fetching is rate-limited by the same `youtube_rate_limit` setting — fetching many comments across many videos may be slow or hit quota limits; consider sampling or limiting comments per video for large runs.
+# Run with coverage
+pytest --cov=. --cov-report=html
 
+# Run specific test file
+pytest tests/test_scoring.py
+
+# Run with verbose output
+pytest -v
+```
+
+### Code Quality
+```bash
+# Format with Black
+black .
+
+# Lint with Flake8
+flake8 .
+
+# Type checking (if using mypy)
+mypy .
+```
+
+## 📖 Output & Reports
+
+### Web App Results
+When you run an analysis through the web app, results are saved to:
+```
+output/webapp_runs/{brand_id}_{run_id}/
+├── _run_data.json           # Complete run data (JSON)
+├── ar_report_{id}.pdf       # PDF report with visualizations
+└── ar_report_{id}.md        # Markdown report
+```
+
+### Report Contents
+- **Dashboard**: Overall rating, distribution, dimension breakdown
+- **Content Analysis**: Table of all analyzed items with individual scores
+- **6D Breakdown**: Detailed scores for each dimension
+- **Recommendations**: LLM-generated actionable insights
+- **Authenticity Ratio**: Legacy AR metrics (Authentic/Suspect/Inauthentic counts)
+
+### Rating Scale
+- **80-100** (🟢 Excellent): High-quality, verified content with strong trust signals
+- **60-79** (🟡 Good): Solid content with minor improvements needed
+- **40-59** (🟠 Fair): Moderate quality requiring attention
+- **0-39** (🔴 Poor): Low-quality content needing immediate review
+
+## 🐛 Troubleshooting
+
+### "No content collected from any source"
+- Verify API credentials are set and valid
+- Try different keywords that match your brand
+- Check network connectivity
+- For Brave: ensure search terms return results
+
+### "Missing API credentials"
+- Set required environment variables in `.env`
+- Restart the web app after adding credentials
+- Check sidebar status indicators for which sources are available
+
+### "Analysis takes a long time"
+- Reduce `max_items` parameter (start with 10-20)
+- Use only necessary data sources
+- Consider using faster LLM models (gpt-3.5-turbo)
+
+### "Visualizations not displaying"
+- Ensure plotly and pandas are installed: `pip install plotly pandas`
+- Clear browser cache and restart app
+- Check browser console for errors
+
+### LLM Generation Failures
+- Verify `OPENAI_API_KEY` is valid
+- Check OpenAI account has sufficient quota
+- System will fall back to structured recommendations if LLM fails
+- Check logs for specific API errors
+
+## 📚 Documentation
+
+- [Webapp README](webapp/README.md) — Web application detailed guide
+- [Model Selection Guide](MODEL_SELECTION_GUIDE.md) — LLM model comparison
+- [AR Methodology](docs/AR_METHODOLOGY.md) — Detailed scoring methodology
+- [Deployment Guide](docs/DEPLOYMENT.md) — Production deployment
+- [API Reference](docs/API_REFERENCE.md) — Code API documentation
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Run `pytest` and `black` to ensure code quality
+6. Submit a pull request
+
+## 📝 Version History
+
+**Current Version**: Trust Stack Rating v2.0
+
+**Key Evolution**:
+- v1.0: Original Authenticity Ratio (AR) KPI with 5D framework
+- v2.0: Trust Stack Rating with 6D dimensions + interactive web app
+
+See git history for detailed changelog.
+
+## 📄 License
+
+This project is proprietary. See LICENSE file for details.
+
+---
+
+**Questions?** Check the [docs/](docs/) directory or open an issue on GitHub.
 
