@@ -794,14 +794,6 @@ def collect_brave_pages(
             classification = classify_url(url, url_collection_config)
             is_brand_owned = classification.source_type == URLSourceType.BRAND_OWNED
 
-            # Check if pool is already full
-            if is_brand_owned and len(brand_owned_collected) >= target_brand_owned:
-                logger.debug('Skipping brand-owned URL %s - pool full', url)
-                continue
-            if not is_brand_owned and len(third_party_collected) >= target_third_party:
-                logger.debug('Skipping 3rd party URL %s - pool full', url)
-                continue
-
             # Respect robots.txt
             try:
                 allowed = is_allowed_by_robots(url)
@@ -816,6 +808,15 @@ def collect_brave_pages(
             content = fetch_page(url)
             body = content.get('body') or ''
             if body and len(body) >= min_body_length:
+                # Check if pool is full AFTER validating content
+                # This ensures we keep searching for valid URLs even if one pool fills up
+                if is_brand_owned and len(brand_owned_collected) >= target_brand_owned:
+                    logger.debug('Skipping brand-owned URL %s - pool full', url)
+                    continue
+                if not is_brand_owned and len(third_party_collected) >= target_third_party:
+                    logger.debug('Skipping 3rd party URL %s - pool full', url)
+                    continue
+
                 # Add source type metadata
                 content['source_type'] = classification.source_type.value
                 content['source_tier'] = classification.tier.value if classification.tier else 'unknown'
