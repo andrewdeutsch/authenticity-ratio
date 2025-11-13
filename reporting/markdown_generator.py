@@ -839,15 +839,41 @@ class MarkdownReportGenerator:
 
         scored_items.sort(key=lambda x: x[0], reverse=True)
 
-        # Get high trust items (top 1-2, score >= 70)
-        high_trust = [item for score, item in scored_items if score >= 0.70][:2]
+        # Get high trust items (top 3-5, score >= 70)
+        high_trust = [item for score, item in scored_items if score >= 0.70][:5]
 
         # Get low trust items (bottom 2-3, score < 50)
         low_trust = [item for score, item in scored_items if score < 0.50][:3]
 
-        # Format high trust section
+        # Format high trust section with LLM-powered insights
         if high_trust:
-            lines.append("### High Trust Content\n")
+            lines.append("### ⭐ Success Highlights\n")
+
+            # Generate LLM insights about what makes these items successful
+            try:
+                from reporting.executive_summary import generate_success_highlights
+
+                avg_rating = report_data.get('avg_rating', 0.0)
+                if avg_rating <= 1.0:  # Convert if on 0-1 scale
+                    avg_rating = avg_rating * 100
+
+                dimension_breakdown = report_data.get('dimension_breakdown', {})
+                summary_model = report_data.get('llm_model', 'gpt-4o-mini')
+
+                success_analysis = generate_success_highlights(
+                    high_trust_items=high_trust,
+                    avg_rating=avg_rating,
+                    dimension_breakdown=dimension_breakdown,
+                    model=summary_model
+                )
+
+                lines.append(success_analysis)
+                lines.append("\n")
+            except Exception as e:
+                logger.warning(f"Failed to generate success highlights: {e}")
+                # Continue with basic listing
+
+            lines.append("#### High Trust Content Examples\n")
             for item in high_trust:
                 # Extract fields safely
                 meta = item.get('meta', {})
@@ -888,7 +914,7 @@ class MarkdownReportGenerator:
 
         # Format low trust section
         if low_trust:
-            lines.append("### Low Trust Content\n")
+            lines.append("### ⚠️ Low Trust Content (Needs Attention)\n")
             for item in low_trust:
                 # Extract fields safely
                 meta = item.get('meta', {})

@@ -208,7 +208,11 @@ class PDFReportGenerator:
         story.extend(self._create_visual_overview(report_data))
         story.append(PageBreak())
 
-        # 4. Dimension Deep Dive (per-dimension analysis with examples)
+        # 4. Notable Content Examples (success highlights and problem areas)
+        story.extend(self._create_notable_examples(report_data))
+        story.append(PageBreak())
+
+        # 5. Dimension Deep Dive (per-dimension analysis with examples)
         story.extend(self._create_dimension_deep_dive(report_data))
         story.append(PageBreak())
 
@@ -560,6 +564,151 @@ class PDFReportGenerator:
         ]))
 
         story.append(stats_table)
+
+        return story
+
+    def _create_notable_examples(self, report_data: Dict[str, Any]) -> List:
+        """Create Notable Content Examples section highlighting successes and problem areas"""
+        story = []
+
+        items = report_data.get('items', [])
+        if not items:
+            return story
+
+        story.append(Paragraph("Notable Content Examples", self.styles['SectionHeader']))
+        story.append(Spacer(1, 10))
+
+        # Sort items by score
+        scored_items = []
+        for item in items:
+            score = item.get('final_score') or item.get('score')
+            if score is not None:
+                scored_items.append((float(score), item))
+
+        if not scored_items:
+            return story
+
+        scored_items.sort(key=lambda x: x[0], reverse=True)
+
+        # Get high trust items (top 3-5, score >= 70)
+        high_trust = [item for score, item in scored_items if score >= 0.70][:5]
+
+        # Get low trust items (bottom 2-3, score < 50)
+        low_trust = [item for score, item in scored_items if score < 0.50][:3]
+
+        # Success Highlights section with LLM insights
+        if high_trust:
+            story.append(Paragraph("⭐ Success Highlights", self.styles['Heading2']))
+            story.append(Spacer(1, 10))
+
+            # Generate LLM insights
+            try:
+                from reporting.executive_summary import generate_success_highlights
+
+                avg_rating = report_data.get('avg_rating', 0.0)
+                if avg_rating <= 1.0:  # Convert if on 0-1 scale
+                    avg_rating = avg_rating * 100
+
+                dimension_breakdown = report_data.get('dimension_breakdown', {})
+                summary_model = report_data.get('llm_model', 'gpt-4o-mini')
+
+                success_analysis = generate_success_highlights(
+                    high_trust_items=high_trust,
+                    avg_rating=avg_rating,
+                    dimension_breakdown=dimension_breakdown,
+                    model=summary_model
+                )
+
+                # Convert markdown formatting to PDF-friendly HTML
+                import re
+                success_analysis = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', success_analysis)
+                success_analysis = success_analysis.replace('\n\n', '<br/><br/>')
+
+                story.append(Paragraph(success_analysis, self.styles['Normal']))
+                story.append(Spacer(1, 15))
+
+            except Exception as e:
+                logger.warning(f"Failed to generate success highlights for PDF: {e}")
+
+            # List high trust examples
+            story.append(Paragraph("High Trust Content Examples", self.styles['Heading3']))
+            story.append(Spacer(1, 5))
+
+            for i, item in enumerate(high_trust, 1):
+                # Extract fields safely
+                meta = item.get('meta', {})
+                if isinstance(meta, str):
+                    try:
+                        import json
+                        meta = json.loads(meta) if meta else {}
+                    except:
+                        meta = {}
+
+                title = (
+                    item.get('title') or
+                    meta.get('title') or
+                    meta.get('name') or
+                    'Untitled'
+                )[:80]
+                score = float(item.get('final_score') or item.get('score', 0))
+
+                # Get strongest dimensions
+                dims = item.get('dimension_scores', {})
+                if dims and isinstance(dims, dict):
+                    try:
+                        dims_parsed = {k: float(v) for k, v in dims.items() if v is not None}
+                        if dims_parsed:
+                            strongest = max(dims_parsed.items(), key=lambda x: x[1])
+
+                            item_text = f"<b>{i}. {title}</b> (Score: {score:.2f})<br/>"
+                            item_text += f"   Strongest: {strongest[0].title()} ({strongest[1]:.2f})"
+
+                            story.append(Paragraph(item_text, self.styles['Normal']))
+                            story.append(Spacer(1, 3))
+                    except Exception:
+                        pass
+
+            story.append(Spacer(1, 15))
+
+        # Low Trust Content section
+        if low_trust:
+            story.append(Paragraph("⚠️ Low Trust Content (Needs Attention)", self.styles['Heading2']))
+            story.append(Spacer(1, 10))
+
+            for i, item in enumerate(low_trust, 1):
+                # Extract fields safely
+                meta = item.get('meta', {})
+                if isinstance(meta, str):
+                    try:
+                        import json
+                        meta = json.loads(meta) if meta else {}
+                    except:
+                        meta = {}
+
+                title = (
+                    item.get('title') or
+                    meta.get('title') or
+                    meta.get('name') or
+                    'Untitled'
+                )[:80]
+                score = float(item.get('final_score') or item.get('score', 0))
+
+                # Get weakest dimensions
+                dims = item.get('dimension_scores', {})
+                if dims and isinstance(dims, dict):
+                    try:
+                        dims_parsed = {k: float(v) for k, v in dims.items() if v is not None}
+                        if dims_parsed:
+                            weakest_two = sorted(dims_parsed.items(), key=lambda x: x[1])[:2]
+                            weak_str = ', '.join([f"{k.title()}({v:.2f})" for k, v in weakest_two])
+
+                            item_text = f"<b>{i}. {title}</b> (Score: {score:.2f})<br/>"
+                            item_text += f"   Weakest: {weak_str}"
+
+                            story.append(Paragraph(item_text, self.styles['Normal']))
+                            story.append(Spacer(1, 3))
+                    except Exception:
+                        pass
 
         return story
 
