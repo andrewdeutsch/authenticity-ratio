@@ -319,14 +319,21 @@ class ChatClient:
             anthropic_messages = [{'role': 'user', 'content': system_message}]
 
         # Anthropic API call
-        response = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_message if system_message else None,
-            messages=anthropic_messages,
+        # Note: system parameter must be a list of content blocks (new API format)
+        # Build API kwargs
+        api_kwargs = {
+            'model': model,
+            'max_tokens': max_tokens,
+            'temperature': temperature,
+            'messages': anthropic_messages,
             **kwargs
-        )
+        }
+
+        # Only include system parameter if we have a system message
+        if system_message:
+            api_kwargs['system'] = [{"type": "text", "text": system_message}]
+
+        response = client.messages.create(**api_kwargs)
 
         content = response.content[0].text
 
