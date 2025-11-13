@@ -312,6 +312,45 @@ def collect_serper_pages(
                     brand_owned_collected.append(content)
                     logger.debug('[SERPER] ✓ Collected brand-owned page (%d/%d): %s [len=%d]',
                                len(brand_owned_collected), target_brand_owned, url, len(body))
+
+                    # If we still need more brand-owned URLs, try extracting subpages
+                    if len(brand_owned_collected) < target_brand_owned:
+                        try:
+                            from ingestion.brave_search import _extract_internal_links
+
+                            # Get the raw HTML for link extraction
+                            resp = requests.get(url, headers={
+                                'User-Agent': os.getenv('AR_USER_AGENT',
+                                    'Mozilla/5.0 (compatible; ar-bot/1.0)')
+                            }, timeout=10)
+
+                            if resp.status_code == 200:
+                                subpage_urls = _extract_internal_links(url, resp.text, max_links=15)
+                                logger.debug('[SERPER] Extracted %d internal links from %s',
+                                           len(subpage_urls), url)
+
+                                # Fetch and add subpages as brand-owned URLs
+                                for subpage_url in subpage_urls:
+                                    if len(brand_owned_collected) >= target_brand_owned:
+                                        break
+
+                                    try:
+                                        subpage_content = fetch_page(subpage_url)
+                                        subpage_body = subpage_content.get('body') or ''
+
+                                        if subpage_body and len(subpage_body) >= min_body_length:
+                                            subpage_content['source_type'] = 'brand_owned'
+                                            subpage_content['source_tier'] = 'brand_subpage'
+                                            brand_owned_collected.append(subpage_content)
+                                            logger.debug('[SERPER] ✓ Collected brand subpage (%d/%d): %s [len=%d]',
+                                                       len(brand_owned_collected), target_brand_owned,
+                                                       subpage_url, len(subpage_body))
+                                        else:
+                                            logger.debug('[SERPER] Skipping subpage %s - thin content', subpage_url)
+                                    except Exception as e:
+                                        logger.debug('[SERPER] Failed to fetch subpage %s: %s', subpage_url, e)
+                        except Exception as e:
+                            logger.debug('[SERPER] Failed to extract subpages from %s: %s', url, e)
                 else:
                     third_party_collected.append(content)
                     logger.debug('[SERPER] ✓ Collected 3rd party page (%d/%d): %s [len=%d]',
