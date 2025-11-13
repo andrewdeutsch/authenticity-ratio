@@ -80,7 +80,7 @@ Brave API configuration
 	- `query-param` — appends `apikey=<key>` to the query string
 - `BRAVE_REQUEST_INTERVAL`: Minimum seconds to wait between outbound Brave requests (default `1.0`)
 - `BRAVE_ALLOW_HTML_FALLBACK`: If set to `1` the client will fall back to HTML scraping when the API returns no results (default: `0` — disabled when API key present)
-- `BRAVE_USE_PLAYWRIGHT`: If set to `1`, the client will attempt a Playwright-rendered fetch when HTML scraping is needed (install Playwright separately)
+- `AR_USE_PLAYWRIGHT`: If set to `1`, the client will attempt a Playwright-rendered fetch when HTML scraping is needed (applies to both Brave and Serper; install Playwright separately)
 
 Quick examples
 
@@ -98,7 +98,7 @@ python scripts/debug_brave.py --query "nike" --size 4
 ```bash
 pip install playwright
 playwright install
-export BRAVE_USE_PLAYWRIGHT=1
+export AR_USE_PLAYWRIGHT=1
 export BRAVE_ALLOW_HTML_FALLBACK=1
 python scripts/debug_brave.py --query "nike" --size 4
 ```

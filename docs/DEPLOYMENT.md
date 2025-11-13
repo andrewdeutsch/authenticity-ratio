@@ -327,7 +327,7 @@ aws logs get-log-events --log-group-name /ar-tool --log-stream-name STREAM_NAME
 Some websites use JavaScript-driven rendering, bot-challenges, or require executing client-side code to produce meaningful article text. The AR pipeline includes an optional Playwright fallback that will render pages in a headless browser when a normal HTTP fetch returns non-200 or yields thin content.
 
 Key points:
-- The Playwright fallback is opt-in. Enable it by setting env var `BRAVE_USE_PLAYWRIGHT=1`.
+- The Playwright fallback is opt-in. Enable it by setting env var `AR_USE_PLAYWRIGHT=1`.
 - Playwright must be installed and browsers must be provisioned in the runtime environment. Example install steps:
 
 ```bash
@@ -354,7 +354,7 @@ CI and production notes:
 - Running Playwright in containerized or serverless environments may require elevated capabilities (e.g., shared memory settings or additional libraries). If you see rendering failures or crashes, consult Playwright's docs for platform-specific runtime requirements.
 
 Environment variables of interest:
-- `BRAVE_USE_PLAYWRIGHT` — Set to `1` to enable the Playwright fallback. Defaults to `0`.
+- `AR_USE_PLAYWRIGHT` — Set to `1` to enable the Playwright fallback (applies to all page fetching). Defaults to `0`.
 - `AR_USER_AGENT` — User agent string used for robots checks and requests. Defaults to `Mozilla/5.0 (compatible; ar-bot/1.0)`.
 - `AR_FETCH_RETRIES`, `AR_FETCH_BACKOFF` — Configure HTTP fetch retry behavior.
 - `AR_FETCH_DEBUG_DIR` — Directory to write raw fetch debug dumps (default `/tmp/ar_fetch_debug`).

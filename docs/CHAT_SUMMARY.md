@@ -7,7 +7,7 @@ This document captures the recent assistant session that hardened Brave ingestio
 
 Goals implemented
 - Harden Brave ingestion: prefer Brave API when key present; fallback to HTML scraping on API errors; retries, headers, OG meta extraction, and raw HTML debug dumps implemented.
-- Playwright opt-in fallback: headful rendering is opt-in via env var `BRAVE_USE_PLAYWRIGHT`; Playwright renders are only used after robots.txt allows the user-agent and when HTTP fetches fail or return thin content.
+- Playwright opt-in fallback: headful rendering is opt-in via env var `AR_USE_PLAYWRIGHT`; Playwright renders are only used after robots.txt allows the user-agent and when HTTP fetches fail or return thin content.
 - Robots.txt: module-level robots.txt cache `_ROBOTS_CACHE` and `_is_allowed_by_robots(url, user_agent)` ensures we respect robots across fetches.
 - Footer extraction: `_extract_footer_links(html, base_url)` added to capture Terms/Privacy links at fetch time and stored in `NormalizedContent.meta['terms']` and `['privacy']`.
 - Pipeline wiring: `collect_brave_pages()` added and wired into `scripts/run_pipeline.py` so Brave collection yields N usable pages (skip robots-disallowed and thin pages).
@@ -23,9 +23,9 @@ Important files touched
 
 Environment & run notes
 - Python: 3.11 (used for runs in this session).
-- Playwright: required only if `BRAVE_USE_PLAYWRIGHT=1`; install browsers with `playwright install`.
+- Playwright: required only if `AR_USE_PLAYWRIGHT=1`; install browsers with `playwright install`.
 - Important env vars:
-  - `BRAVE_USE_PLAYWRIGHT=1` — enable Playwright fallback (opt-in)
+  - `AR_USE_PLAYWRIGHT=1` — enable Playwright fallback (opt-in; applies to all page fetching)
   - `BRAVE_ALLOW_HTML_FALLBACK=1` — allow HTML scraping fallback when API errors
   - `AR_FETCH_DEBUG_DIR` — directory to write raw HTML dumps for debugging
   - `BRAVE_API_KEY`, `BRAVE_API_ENDPOINT` — Brave API credentials and endpoint
@@ -34,7 +34,7 @@ Representative run command
 --------------------------
 (uses zsh)
 
-BRAVE_USE_PLAYWRIGHT=1 BRAVE_ALLOW_HTML_FALLBACK=1 AR_FETCH_DEBUG_DIR=/tmp/ar_fetch_debug \
+AR_USE_PLAYWRIGHT=1 BRAVE_ALLOW_HTML_FALLBACK=1 AR_FETCH_DEBUG_DIR=/tmp/ar_fetch_debug \
 python3.11 scripts/run_pipeline.py --brand-id footer-test --keywords "openai" --sources brave \
 --brave-pages 3 --max-content 10 --output-dir output/runs/run_footer_test --log-level INFO
 
