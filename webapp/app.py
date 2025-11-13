@@ -1339,20 +1339,6 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
         normalizer = ContentNormalizer()
         normalized_content = normalizer.normalize_content(all_content)
 
-        # Report URL distribution if brand domains were provided
-        if brand_domains:
-            brand_owned_count = sum(1 for c in normalized_content if getattr(c, 'source_type', None) == 'brand_owned')
-            third_party_count = sum(1 for c in normalized_content if getattr(c, 'source_type', None) == 'third_party')
-            unknown_count = len(normalized_content) - brand_owned_count - third_party_count
-
-            st.info(f"""
-            📊 **URL Distribution Summary**
-            - Brand-owned: {brand_owned_count} ({brand_owned_count/len(normalized_content)*100:.1f}%)
-            - 3rd party: {third_party_count} ({third_party_count/len(normalized_content)*100:.1f}%)
-            {f"- Unknown: {unknown_count} ({unknown_count/len(normalized_content)*100:.1f}%)" if unknown_count > 0 else ""}
-            - Total: {len(normalized_content)}
-            """)
-
         # Step 4: Scoring
         status_text.text("Scoring content on 6D Trust dimensions...")
         progress_bar.progress(60)
