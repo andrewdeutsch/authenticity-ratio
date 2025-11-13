@@ -257,6 +257,13 @@ def collect_serper_pages(
         for item in search_results:
             skip_stats['processed'] += 1
 
+            # Periodic progress update (every 50 URLs)
+            if skip_stats['processed'] % 50 == 0:
+                logger.info('[SERPER] Progress: Processed %d/%d results, collected %d/%d URLs (%d brand-owned, %d 3rd party)',
+                           skip_stats['processed'], len(search_results),
+                           len(brand_owned_collected) + len(third_party_collected), target_count,
+                           len(brand_owned_collected), len(third_party_collected))
+
             # Stop if both pools are full
             if len(brand_owned_collected) >= target_brand_owned and len(third_party_collected) >= target_third_party:
                 logger.info('[SERPER] Both pools full, breaking early at result %d/%d',
@@ -280,12 +287,12 @@ def collect_serper_pages(
                 # This ensures we keep searching for valid URLs even if one pool fills up
                 if is_brand_owned and len(brand_owned_collected) >= target_brand_owned:
                     skip_stats['brand_owned_pool_full'] += 1
-                    logger.info('[SERPER] Skipping brand-owned URL %s - pool full (%d/%d)',
+                    logger.debug('[SERPER] Skipping brand-owned URL %s - pool full (%d/%d)',
                                url, len(brand_owned_collected), target_brand_owned)
                     continue
                 if not is_brand_owned and len(third_party_collected) >= target_third_party:
                     skip_stats['third_party_pool_full'] += 1
-                    logger.info('[SERPER] Skipping 3rd party URL %s - pool full (%d/%d)',
+                    logger.debug('[SERPER] Skipping 3rd party URL %s - pool full (%d/%d)',
                                url, len(third_party_collected), target_third_party)
                     continue
 
@@ -295,15 +302,15 @@ def collect_serper_pages(
 
                 if is_brand_owned:
                     brand_owned_collected.append(content)
-                    logger.info('[SERPER] ✓ Collected brand-owned page (%d/%d): %s [len=%d]',
+                    logger.debug('[SERPER] ✓ Collected brand-owned page (%d/%d): %s [len=%d]',
                                len(brand_owned_collected), target_brand_owned, url, len(body))
                 else:
                     third_party_collected.append(content)
-                    logger.info('[SERPER] ✓ Collected 3rd party page (%d/%d): %s [len=%d]',
+                    logger.debug('[SERPER] ✓ Collected 3rd party page (%d/%d): %s [len=%d]',
                                len(third_party_collected), target_third_party, url, len(body))
             else:
                 skip_stats['thin_content'] += 1
-                logger.info('[SERPER] Skipping %s - thin/empty content (len=%s, min=%d) [%s]',
+                logger.debug('[SERPER] Skipping %s - thin/empty content (len=%s, min=%d) [%s]',
                            url, len(body), min_body_length,
                            'brand-owned' if is_brand_owned else '3rd party')
 
