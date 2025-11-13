@@ -410,7 +410,8 @@ def show_analyze_page():
 
             # Web search settings
             use_web_search = st.checkbox("🌐 Enable Web Search", value=True, help="Search web content via selected provider")
-            web_pages = st.number_input("Web pages to fetch", min_value=1, max_value=100, value=10, step=1) if use_web_search else 10
+            # Use max_items for web pages to fetch (removed separate input to avoid confusion)
+            web_pages = max_items if use_web_search else max_items
 
             # Reddit
             reddit_available = bool(cfg.reddit_client_id and cfg.reddit_client_secret)
