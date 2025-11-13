@@ -492,6 +492,77 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
     return results
 
 
+def _extract_body_text(soup: BeautifulSoup) -> str:
+    """Extract body text using multiple strategies in order of preference.
+
+    Tries extraction from:
+    1. <article> tag
+    2. <main> tag or [role="main"]
+    3. <div> with content-related class names
+    4. All <p> tags combined
+    5. Longest <div> by text length
+    6. Entire <body> as fallback
+
+    Returns the extracted text using the first strategy that yields content.
+    """
+    # Strategy 1: Try <article> tag
+    article = soup.find("article")
+    if article:
+        body = article.get_text(separator=" \n ", strip=True)
+        if body and len(body) >= 100:
+            return body
+
+    # Strategy 2: Try <main> tag or [role="main"]
+    main = soup.find("main") or soup.select_one('[role="main"]')
+    if main:
+        body = main.get_text(separator=" \n ", strip=True)
+        if body and len(body) >= 100:
+            return body
+
+    # Strategy 3: Try <div> with content-related class names
+    content_class_patterns = [
+        'content', 'post-content', 'article-body', 'article', 'entry',
+        'post', 'body-text', 'post-body', 'main-content', 'page-content',
+        'story-body', 'article-text', 'article-content', 'text-content'
+    ]
+    for pattern in content_class_patterns:
+        divs = soup.find_all('div', class_=lambda x: x and pattern in x.lower())
+        for div in divs:
+            body = div.get_text(separator=" \n ", strip=True)
+            if body and len(body) >= 150:
+                return body
+
+    # Strategy 4: Try all <p> tags combined
+    paragraphs = soup.find_all("p")
+    if paragraphs:
+        body = "\n\n".join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
+        if body and len(body) >= 100:
+            return body
+
+    # Strategy 5: Try to find the longest <div> by text length
+    divs = soup.find_all('div')
+    longest_div = None
+    longest_length = 0
+    for div in divs:
+        # Skip divs that are likely navigation or headers
+        div_class = div.get('class', [])
+        div_id = div.get('id', '')
+        if any(skip in str(div_class).lower() + div_id.lower()
+               for skip in ['nav', 'header', 'footer', 'menu', 'sidebar', 'widget', 'ad']):
+            continue
+        text = div.get_text(separator=" \n ", strip=True)
+        if len(text) > longest_length:
+            longest_length = len(text)
+            longest_div = div
+
+    if longest_div and longest_length >= 100:
+        return longest_div.get_text(separator=" \n ", strip=True)
+
+    # Strategy 6: Fall back to entire body text
+    body = soup.body.get_text(separator=" \n ", strip=True) if soup.body else ""
+    return body
+
+
 def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
     """Fetch a URL and return a simple content dict {title, body, url}"""
     headers = {
@@ -548,15 +619,44 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
                                 pass
                             page_content = page.content()
                             page_title = page.title() or ''
-                            # Try to capture article or paragraphs
+                            # Try multiple extraction strategies for rendered content
+                            page_body = ""
                             try:
-                                article_handle = page.query_selector('article')
-                                if article_handle:
-                                    page_body = article_handle.inner_text()
-                                else:
+                                # Strategy 1: article tag
+                                article = page.query_selector('article')
+                                if article:
+                                    page_body = article.inner_text()
+
+                                # Strategy 2: main tag or role="main"
+                                if not page_body or len(page_body) < 150:
+                                    main = page.query_selector('main') or page.query_selector('[role="main"]')
+                                    if main:
+                                        page_body = main.inner_text()
+
+                                # Strategy 3: divs with content-related class names
+                                if not page_body or len(page_body) < 150:
+                                    content_patterns = ['content', 'post-content', 'article-body', 'article', 'entry', 'post', 'story-body']
+                                    for pattern in content_patterns:
+                                        divs = page.query_selector_all(f'div[class*="{pattern}"]')
+                                        for div in divs:
+                                            div_text = div.inner_text()
+                                            if div_text and len(div_text) >= 150:
+                                                page_body = div_text
+                                                break
+                                        if page_body:
+                                            break
+
+                                # Strategy 4: all paragraphs
+                                if not page_body or len(page_body) < 150:
                                     paragraphs = page.query_selector_all('p')
                                     texts = [p.inner_text() for p in paragraphs if p]
                                     page_body = "\n\n".join(texts)
+
+                                # Strategy 5: fall back to entire body content
+                                if not page_body or len(page_body) < 100:
+                                    body_elem = page.query_selector('body')
+                                    if body_elem:
+                                        page_body = body_elem.inner_text()
                             except Exception:
                                 page_body = page_content
                             browser.close()
@@ -590,14 +690,8 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
             if og_title and og_title.get('content'):
                 title = og_title.get('content').strip()
 
-        # Extract main article/body heuristically
-        article = soup.find("article")
-        if article:
-            body = article.get_text(separator=" \n ", strip=True)
-        else:
-            # fallback: gather paragraph text
-            paragraphs = soup.find_all("p")
-            body = "\n\n".join(p.get_text(strip=True) for p in paragraphs)
+        # Extract body using multiple strategies
+        body = _extract_body_text(soup)
 
         # If body or title are thin, try OG/Twitter description and dump for debugging
         if (not body or len(body) < 200) and soup.select_one('meta[property="og:description"]'):
@@ -628,19 +722,49 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
                                 pass
                             page_html = page.content()
                             page_title = page.title() or ''
+                            # Try multiple extraction strategies for rendered content
+                            page_body = ""
                             try:
-                                article_handle = page.query_selector('article')
-                                if article_handle:
-                                    page_body = article_handle.inner_text()
-                                else:
+                                # Strategy 1: article tag
+                                article = page.query_selector('article')
+                                if article:
+                                    page_body = article.inner_text()
+
+                                # Strategy 2: main tag or role="main"
+                                if not page_body or len(page_body) < 150:
+                                    main = page.query_selector('main') or page.query_selector('[role="main"]')
+                                    if main:
+                                        page_body = main.inner_text()
+
+                                # Strategy 3: divs with content-related class names
+                                if not page_body or len(page_body) < 150:
+                                    content_patterns = ['content', 'post-content', 'article-body', 'article', 'entry', 'post', 'story-body']
+                                    for pattern in content_patterns:
+                                        divs = page.query_selector_all(f'div[class*="{pattern}"]')
+                                        for div in divs:
+                                            div_text = div.inner_text()
+                                            if div_text and len(div_text) >= 150:
+                                                page_body = div_text
+                                                break
+                                        if page_body:
+                                            break
+
+                                # Strategy 4: all paragraphs
+                                if not page_body or len(page_body) < 150:
                                     paragraphs = page.query_selector_all('p')
                                     texts = [p.inner_text() for p in paragraphs if p]
                                     page_body = "\n\n".join(texts)
+
+                                # Strategy 5: fall back to entire body content
+                                if not page_body or len(page_body) < 150:
+                                    body_elem = page.query_selector('body')
+                                    if body_elem:
+                                        page_body = body_elem.inner_text()
                             except Exception:
                                 # fallback to raw HTML if inner_text extraction fails
                                 page_body = page_html
                             browser.close()
-                            if page_body and len(page_body) >= 200:
+                            if page_body and len(page_body) >= 150:
                                 try:
                                     links = _extract_footer_links(page_html, url)
                                 except Exception:
