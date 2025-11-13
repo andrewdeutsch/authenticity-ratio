@@ -1231,6 +1231,26 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
         st.code(traceback.format_exc())
 
 
+def programmatic_quick_run(urls: List[str], output_dir: str = None, brand_id: str = 'brand') -> Dict[str, Any]:
+    """Programmatic helper used by tests to run the pipeline for a set of URLs.
+
+    This function delegates to scripts.run_pipeline.run_pipeline_for_contents and
+    returns the resulting dict. Tests may monkeypatch that function to simulate
+    pipeline behavior.
+    """
+    try:
+        from scripts.run_pipeline import run_pipeline_for_contents
+    except Exception as e:
+        raise RuntimeError(f"Could not import run_pipeline_for_contents: {e}")
+
+    out_dir = output_dir or os.path.join(PROJECT_ROOT, 'output')
+    os.makedirs(out_dir, exist_ok=True)
+
+    # Delegate to pipeline runner
+    result = run_pipeline_for_contents(urls, output_dir=out_dir, brand_id=brand_id)
+    return result
+
+
 def show_results_page():
     """Display analysis results with visualizations"""
 

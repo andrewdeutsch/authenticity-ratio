@@ -331,7 +331,7 @@ class PDFReportGenerator:
                         'verification': 'add citations to authoritative sources and fact-check all claims',
                         'transparency': 'add disclosure statements and clear attribution for all sourced information',
                         'coherence': 'ensure messaging aligns with your brand voice across all channels',
-                        'resonance': 'reduce promotional language and increase authentic, culturally relevant messaging': 'add structured data markup and improve semantic HTML for better machine discoverability'
+                        'resonance': 'reduce promotional language and increase culturally relevant messaging; add structured data markup and improve semantic HTML for better machine discoverability'
                     }
 
                     action = dim_actions.get(weakest_dim[0], 'improve trust signals')
@@ -593,7 +593,6 @@ class PDFReportGenerator:
                     'medium': 'Reduce overly promotional language and increase authentic engagement.',
                     'low': 'Increase authentic engagement with your audience, reduce promotional language significantly, and ensure cultural relevance in messaging.'
                 }
-            }
             }
         }
 
