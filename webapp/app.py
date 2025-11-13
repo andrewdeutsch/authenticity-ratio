@@ -1409,6 +1409,37 @@ def show_results_page():
     st.markdown('<div class="main-header">⭐ Trust Stack Results</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="sub-header">Brand: {run_data.get("brand_id")} | Run: {run_data.get("run_id")}</div>', unsafe_allow_html=True)
 
+    # Model Selection (in an expander to not clutter the UI)
+    with st.expander("🤖 Executive Summary Settings", expanded=False):
+        col_model, col_use_llm = st.columns([3, 1])
+
+        with col_model:
+            summary_model = st.selectbox(
+                "LLM Model for Executive Summary",
+                options=[
+                    "gpt-4o-mini",
+                    "gpt-3.5-turbo",
+                    "gpt-4o",
+                    "claude-3-5-sonnet-20241022",
+                    "claude-3-haiku-20240307",
+                    "gemini-1.5-pro",
+                    "gemini-1.5-flash",
+                    "deepseek-chat",
+                    "deepseek-reasoner"
+                ],
+                index=0,  # default to gpt-4o-mini
+                help="Select which LLM to use for generating the executive summary. Higher-tier models produce more detailed, actionable recommendations."
+            )
+
+        with col_use_llm:
+            use_llm_summary = st.checkbox(
+                "Use LLM",
+                value=True,
+                help="Uncheck to use simple template-based summary"
+            )
+
+        st.info(f"💡 **Current selection**: {summary_model} ({'LLM-powered' if use_llm_summary else 'template-based'})")
+
     st.divider()
 
     # Key Metrics
@@ -1443,9 +1474,27 @@ def show_results_page():
             delta=f"{(poor/len(items)*100):.0f}%" if items else "0%"
         )
 
-    # Rating Interpretation with Data-Driven Recommendations
+    # Generate Executive Summary using new module
     dimension_breakdown = report.get('dimension_breakdown', {})
-    recommendation = generate_rating_recommendation(avg_rating, dimension_breakdown, items)
+    sources = report.get('sources', ['unknown'])
+
+    # Import the new executive summary module
+    from reporting.executive_summary import generate_executive_summary
+
+    # Generate summary with selected model
+    try:
+        recommendation = generate_executive_summary(
+            avg_rating=avg_rating,
+            dimension_breakdown=dimension_breakdown,
+            items=items,
+            sources=sources,
+            model=summary_model,
+            use_llm=use_llm_summary
+        )
+    except Exception as e:
+        st.error(f"Executive summary generation failed: {e}")
+        # Fallback to template
+        recommendation = generate_rating_recommendation(avg_rating, dimension_breakdown, items)
 
     if avg_rating >= 80:
         st.markdown(f'<div class="success-box">🟢 <b>Excellent</b> - {recommendation}</div>', unsafe_allow_html=True)

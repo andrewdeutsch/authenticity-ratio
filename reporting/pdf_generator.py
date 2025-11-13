@@ -365,50 +365,82 @@ class PDFReportGenerator:
         fair = sum(1 for item in items if 40 <= item.get('final_score', 0) < 60)
         poor = sum(1 for item in items if item.get('final_score', 0) < 40)
 
-        # Get data-driven recommendation
-        dimension_breakdown = report_data.get('dimension_breakdown', {})
-        recommendation = generate_rating_recommendation_pdf(avg_rating, dimension_breakdown)
+        # Generate LLM-powered executive summary
+        from reporting.executive_summary import generate_executive_summary
+        import re
 
-        # Comprehensive analysis paragraph
-        if avg_rating >= 80:
-            analysis = (
-                f"<b>Overall Assessment: Excellent</b><br/><br/>"
-                f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
-                f"of <b>{avg_rating:.1f}/100</b>, placing it in the Excellent category. This indicates high-quality, "
-                f"verified content with strong trust signals across all five dimensions. "
-                f"{excellent} items ({excellent/max(total_items, 1)*100:.1f}%) achieved excellent ratings (80+), "
-                f"demonstrating consistent quality standards.<br/><br/>"
-                f"<b>Key Recommendation:</b> {recommendation}"
+        dimension_breakdown = report_data.get('dimension_breakdown', {})
+        sources = report_data.get('sources', [])
+
+        # Get model configuration from report data
+        summary_model = report_data.get('llm_model', 'gpt-4o-mini')
+        use_llm_summary = report_data.get('use_llm_summary', True)
+
+        # Generate comprehensive executive summary
+        try:
+            executive_summary_text = generate_executive_summary(
+                avg_rating=avg_rating * 100,  # Convert to 0-100 scale
+                dimension_breakdown=dimension_breakdown,
+                items=items,
+                sources=sources,
+                model=summary_model,
+                use_llm=use_llm_summary
             )
-        elif avg_rating >= 60:
-            analysis = (
-                f"<b>Overall Assessment: Good</b><br/><br/>"
-                f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
-                f"of <b>{avg_rating:.1f}/100</b>, indicating good content quality with room for improvement. "
-                f"{excellent + good} items ({(excellent + good)/max(total_items, 1)*100:.1f}%) achieved good or "
-                f"excellent ratings, while {poor} items require attention to meet higher standards.<br/><br/>"
-                f"<b>Key Recommendation:</b> {recommendation}"
-            )
-        elif avg_rating >= 40:
-            analysis = (
-                f"<b>Overall Assessment: Fair</b><br/><br/>"
-                f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
-                f"of <b>{avg_rating:.1f}/100</b>, indicating fair content quality that requires attention. "
-                f"Only {excellent} items ({excellent/max(total_items, 1)*100:.1f}%) achieved excellent ratings, "
-                f"while {poor} items ({poor/max(total_items, 1)*100:.1f}%) demonstrate poor quality. Significant "
-                f"improvements are needed to enhance trust signals and content credibility.<br/><br/>"
-                f"<b>Key Recommendation:</b> {recommendation}"
-            )
-        else:
-            analysis = (
-                f"<b>Overall Assessment: Poor (Immediate Action Required)</b><br/><br/>"
-                f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
-                f"of <b>{avg_rating:.1f}/100</b>, indicating poor content quality requiring immediate action. "
-                f"{poor} items ({poor/max(total_items, 1)*100:.1f}%) demonstrate poor quality, suggesting widespread "
-                f"issues with trust signals, verification, or transparency. A comprehensive content audit and "
-                f"improvement plan is essential.<br/><br/>"
-                f"<b>Critical Recommendation:</b> {recommendation}"
-            )
+
+            # Convert markdown to PDF-friendly HTML
+            # Replace markdown bold (**text**) with HTML bold (<b>text</b>)
+            executive_summary_text = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', executive_summary_text)
+            # Replace newlines with <br/> for proper PDF formatting
+            executive_summary_text = executive_summary_text.replace('\n\n', '<br/><br/>')
+            executive_summary_text = executive_summary_text.replace('\n', '<br/>')
+
+            analysis = executive_summary_text
+
+        except Exception as e:
+            logger.warning(f"Executive summary generation failed for PDF, using fallback: {e}")
+            # Fallback to template-based recommendation
+            recommendation = generate_rating_recommendation_pdf(avg_rating, dimension_breakdown)
+
+            # Use template-based analysis as fallback
+            if avg_rating >= 80:
+                analysis = (
+                    f"<b>Overall Assessment: Excellent</b><br/><br/>"
+                    f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
+                    f"of <b>{avg_rating:.1f}/100</b>, placing it in the Excellent category. This indicates high-quality, "
+                    f"verified content with strong trust signals across all five dimensions. "
+                    f"{excellent} items ({excellent/max(total_items, 1)*100:.1f}%) achieved excellent ratings (80+), "
+                    f"demonstrating consistent quality standards.<br/><br/>"
+                    f"<b>Key Recommendation:</b> {recommendation}"
+                )
+            elif avg_rating >= 60:
+                analysis = (
+                    f"<b>Overall Assessment: Good</b><br/><br/>"
+                    f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
+                    f"of <b>{avg_rating:.1f}/100</b>, indicating good content quality with room for improvement. "
+                    f"{excellent + good} items ({(excellent + good)/max(total_items, 1)*100:.1f}%) achieved good or "
+                    f"excellent ratings, while {poor} items require attention to meet higher standards.<br/><br/>"
+                    f"<b>Key Recommendation:</b> {recommendation}"
+                )
+            elif avg_rating >= 40:
+                analysis = (
+                    f"<b>Overall Assessment: Fair</b><br/><br/>"
+                    f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
+                    f"of <b>{avg_rating:.1f}/100</b>, indicating fair content quality that requires attention. "
+                    f"Only {excellent} items ({excellent/max(total_items, 1)*100:.1f}%) achieved excellent ratings, "
+                    f"while {poor} items ({poor/max(total_items, 1)*100:.1f}%) demonstrate poor quality. Significant "
+                    f"improvements are needed to enhance trust signals and content credibility.<br/><br/>"
+                    f"<b>Key Recommendation:</b> {recommendation}"
+                )
+            else:
+                analysis = (
+                    f"<b>Overall Assessment: Poor (Immediate Action Required)</b><br/><br/>"
+                    f"Out of {total_items} content items analyzed, your brand achieved an average Trust Stack Rating "
+                    f"of <b>{avg_rating:.1f}/100</b>, indicating poor content quality requiring immediate action. "
+                    f"{poor} items ({poor/max(total_items, 1)*100:.1f}%) demonstrate poor quality, suggesting widespread "
+                    f"issues with trust signals, verification, or transparency. A comprehensive content audit and "
+                    f"improvement plan is essential.<br/><br/>"
+                    f"<b>Critical Recommendation:</b> {recommendation}"
+                )
 
         story.append(Paragraph(analysis, self.styles['Normal']))
         story.append(Spacer(1, 15))
