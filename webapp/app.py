@@ -681,6 +681,64 @@ def show_analyze_page():
                 brand_subdomains = []
                 brand_social_handles = []
 
+        # LLM Model Selection
+        with st.expander("🤖 LLM Model Selection", expanded=True):
+            st.markdown("**Choose which AI model to use for generating executive summaries and recommendations:**")
+
+            col_model1, col_model2 = st.columns(2)
+
+            with col_model1:
+                summary_model = st.selectbox(
+                    "Executive Summary Model",
+                    options=[
+                        "gpt-4o-mini",
+                        "gpt-3.5-turbo",
+                        "gpt-4o",
+                        "claude-3-5-sonnet-20241022",
+                        "claude-3-haiku-20240307",
+                        "gemini-1.5-pro",
+                        "gemini-1.5-flash",
+                        "deepseek-chat",
+                        "deepseek-reasoner"
+                    ],
+                    index=0,  # default to gpt-4o-mini
+                    help="Model for generating the main executive summary. Higher-tier models (Claude Sonnet, GPT-4o) produce more detailed, actionable insights."
+                )
+
+            with col_model2:
+                recommendations_model = st.selectbox(
+                    "Recommendations Model",
+                    options=[
+                        "gpt-4o-mini",
+                        "gpt-3.5-turbo",
+                        "gpt-4o",
+                        "claude-3-5-sonnet-20241022",
+                        "claude-3-haiku-20240307",
+                        "gemini-1.5-pro",
+                        "gemini-1.5-flash",
+                        "deepseek-chat",
+                        "deepseek-reasoner"
+                    ],
+                    index=0,  # default to gpt-4o-mini
+                    help="Model for generating detailed recommendations section in markdown reports."
+                )
+
+            # Model information
+            model_tiers = {
+                'gpt-3.5-turbo': '💰 Budget',
+                'gpt-4o-mini': '⚖️ Balanced',
+                'gpt-4o': '⭐ Premium',
+                'claude-3-haiku-20240307': '💰 Budget',
+                'claude-3-5-sonnet-20241022': '⭐ Premium',
+                'gemini-1.5-flash': '💰 Budget',
+                'gemini-1.5-pro': '⚖️ Balanced',
+                'deepseek-chat': '💰 Budget',
+                'deepseek-reasoner': '⚖️ Balanced'
+            }
+
+            st.info(f"💡 **Selection**: Summary: {model_tiers.get(summary_model, '')} {summary_model} | Recommendations: {model_tiers.get(recommendations_model, '')} {recommendations_model}")
+            st.caption("💡 **Tip**: Use premium models (Claude Sonnet, GPT-4o) for highest quality summaries with specific, actionable recommendations.")
+
         st.divider()
 
         col_search, col_submit, col_clear = st.columns([1, 1, 3])
@@ -833,7 +891,8 @@ def show_analyze_page():
 
         # Run pipeline
         run_analysis(brand_id, keywords.split(), sources, max_items, web_pages, include_comments, selected_urls, search_provider,
-                    brand_domains, brand_subdomains, brand_social_handles)
+                    brand_domains, brand_subdomains, brand_social_handles,
+                    summary_model=summary_model, recommendations_model=recommendations_model)
 
 
 def detect_brand_owned_url(url: str, brand_id: str, brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None) -> Dict[str, Any]:
@@ -1113,7 +1172,8 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
 
 def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_items: int, web_pages: int, include_comments: bool,
                  selected_urls: List[Dict] = None, search_provider: str = 'serper',
-                 brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None):
+                 brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None,
+                 summary_model: str = 'gpt-4o-mini', recommendations_model: str = 'gpt-4o-mini'):
     """Execute the analysis pipeline"""
 
     # Create output directory
@@ -1310,6 +1370,11 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
         scores_list = pipeline_run.classified_scores or []
         scoring_report = scoring_pipeline.generate_scoring_report(scores_list, brand_config)
 
+        # Add LLM model configuration to the report for use in executive summary
+        scoring_report['llm_model'] = summary_model
+        scoring_report['recommendations_model'] = recommendations_model
+        scoring_report['use_llm_summary'] = True  # Enable LLM-powered summaries
+
         # Generate PDF
         pdf_generator = PDFReportGenerator()
         pdf_path = os.path.join(run_dir, f'ar_report_{brand_id}_{run_id}.pdf')
@@ -1409,36 +1474,14 @@ def show_results_page():
     st.markdown('<div class="main-header">⭐ Trust Stack Results</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="sub-header">Brand: {run_data.get("brand_id")} | Run: {run_data.get("run_id")}</div>', unsafe_allow_html=True)
 
-    # Model Selection (in an expander to not clutter the UI)
-    with st.expander("🤖 Executive Summary Settings", expanded=False):
-        col_model, col_use_llm = st.columns([3, 1])
+    # Display model info (read-only - model was selected before analysis)
+    summary_model_used = report.get('llm_model', 'gpt-4o-mini')
+    recommendations_model_used = report.get('recommendations_model', 'gpt-4o-mini')
 
-        with col_model:
-            summary_model = st.selectbox(
-                "LLM Model for Executive Summary",
-                options=[
-                    "gpt-4o-mini",
-                    "gpt-3.5-turbo",
-                    "gpt-4o",
-                    "claude-3-5-sonnet-20241022",
-                    "claude-3-haiku-20240307",
-                    "gemini-1.5-pro",
-                    "gemini-1.5-flash",
-                    "deepseek-chat",
-                    "deepseek-reasoner"
-                ],
-                index=0,  # default to gpt-4o-mini
-                help="Select which LLM to use for generating the executive summary. Higher-tier models produce more detailed, actionable recommendations."
-            )
-
-        with col_use_llm:
-            use_llm_summary = st.checkbox(
-                "Use LLM",
-                value=True,
-                help="Uncheck to use simple template-based summary"
-            )
-
-        st.info(f"💡 **Current selection**: {summary_model} ({'LLM-powered' if use_llm_summary else 'template-based'})")
+    with st.expander("ℹ️ AI Models Used", expanded=False):
+        st.markdown("**Models selected for this analysis:**")
+        st.info(f"📝 **Executive Summary**: {summary_model_used}\n\n📋 **Recommendations**: {recommendations_model_used}")
+        st.caption("💡 Models are selected on the analysis page before running. To use different models, run a new analysis.")
 
     st.divider()
 
@@ -1481,15 +1524,15 @@ def show_results_page():
     # Import the new executive summary module
     from reporting.executive_summary import generate_executive_summary
 
-    # Generate summary with selected model
+    # Generate summary using models that were selected before analysis
     try:
         recommendation = generate_executive_summary(
             avg_rating=avg_rating,
             dimension_breakdown=dimension_breakdown,
             items=items,
             sources=sources,
-            model=summary_model,
-            use_llm=use_llm_summary
+            model=summary_model_used,
+            use_llm=True  # Always use LLM for web app
         )
     except Exception as e:
         st.error(f"Executive summary generation failed: {e}")
