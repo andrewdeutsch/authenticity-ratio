@@ -215,11 +215,14 @@ def collect_serper_pages(
 
     try:
         search_results = search_serper(query, size=pool_size)
+        logger.info('[SERPER] Requested pool_size=%d, received %d search results for query=%s',
+                   pool_size, len(search_results), query)
     except Exception as e:
         logger.warning('Serper search failed while collecting pages: %s', e)
         search_results = []
 
     if not search_results:
+        logger.warning('[SERPER] No search results returned, returning empty list')
         return []
 
     # Ratio enforcement: track separate pools if config provided
@@ -237,17 +240,32 @@ def collect_serper_pages(
         brand_owned_collected: List[Dict[str, str]] = []
         third_party_collected: List[Dict[str, str]] = []
 
-        logger.info('Collecting with ratio enforcement: %d brand-owned (%.0f%%) + %d 3rd party (%.0f%%)',
+        # Track skip reasons for debugging
+        skip_stats = {
+            'no_url': 0,
+            'thin_content': 0,
+            'brand_owned_pool_full': 0,
+            'third_party_pool_full': 0,
+            'processed': 0
+        }
+
+        logger.info('[SERPER] Collecting with ratio enforcement: %d brand-owned (%.0f%%) + %d 3rd party (%.0f%%) from %d search results',
                    target_brand_owned, url_collection_config.brand_owned_ratio * 100,
-                   target_third_party, url_collection_config.third_party_ratio * 100)
+                   target_third_party, url_collection_config.third_party_ratio * 100,
+                   len(search_results))
 
         for item in search_results:
+            skip_stats['processed'] += 1
+
             # Stop if both pools are full
             if len(brand_owned_collected) >= target_brand_owned and len(third_party_collected) >= target_third_party:
+                logger.info('[SERPER] Both pools full, breaking early at result %d/%d',
+                           skip_stats['processed'], len(search_results))
                 break
 
             url = item.get('url')
             if not url:
+                skip_stats['no_url'] += 1
                 continue
 
             # Classify the URL
@@ -261,10 +279,14 @@ def collect_serper_pages(
                 # Check if pool is full AFTER validating content
                 # This ensures we keep searching for valid URLs even if one pool fills up
                 if is_brand_owned and len(brand_owned_collected) >= target_brand_owned:
-                    logger.debug('Skipping brand-owned URL %s - pool full', url)
+                    skip_stats['brand_owned_pool_full'] += 1
+                    logger.info('[SERPER] Skipping brand-owned URL %s - pool full (%d/%d)',
+                               url, len(brand_owned_collected), target_brand_owned)
                     continue
                 if not is_brand_owned and len(third_party_collected) >= target_third_party:
-                    logger.debug('Skipping 3rd party URL %s - pool full', url)
+                    skip_stats['third_party_pool_full'] += 1
+                    logger.info('[SERPER] Skipping 3rd party URL %s - pool full (%d/%d)',
+                               url, len(third_party_collected), target_third_party)
                     continue
 
                 # Add source type metadata
@@ -273,20 +295,38 @@ def collect_serper_pages(
 
                 if is_brand_owned:
                     brand_owned_collected.append(content)
-                    logger.debug('Collected brand-owned page (%d/%d): %s',
-                               len(brand_owned_collected), target_brand_owned, url)
+                    logger.info('[SERPER] ✓ Collected brand-owned page (%d/%d): %s [len=%d]',
+                               len(brand_owned_collected), target_brand_owned, url, len(body))
                 else:
                     third_party_collected.append(content)
-                    logger.debug('Collected 3rd party page (%d/%d): %s',
-                               len(third_party_collected), target_third_party, url)
+                    logger.info('[SERPER] ✓ Collected 3rd party page (%d/%d): %s [len=%d]',
+                               len(third_party_collected), target_third_party, url, len(body))
             else:
-                logger.debug('Skipping %s because content is thin or empty (len=%s)', url, len(body))
+                skip_stats['thin_content'] += 1
+                logger.info('[SERPER] Skipping %s - thin/empty content (len=%s, min=%d) [%s]',
+                           url, len(body), min_body_length,
+                           'brand-owned' if is_brand_owned else '3rd party')
 
         # Combine results
         collected = brand_owned_collected + third_party_collected
 
-        logger.info('Collected %d brand-owned + %d 3rd party = %d total pages (target: %d) for query=%s',
-                   len(brand_owned_collected), len(third_party_collected), len(collected), target_count, query)
+        logger.info('[SERPER] ═══════════════════════════════════════════════════════════')
+        logger.info('[SERPER] COLLECTION SUMMARY for query=%s', query)
+        logger.info('[SERPER] ───────────────────────────────────────────────────────────')
+        logger.info('[SERPER] Search results received: %d (requested pool_size: %d)',
+                   len(search_results), pool_size)
+        logger.info('[SERPER] Results processed: %d', skip_stats['processed'])
+        logger.info('[SERPER] Target: %d total (%d brand-owned + %d 3rd party)',
+                   target_count, target_brand_owned, target_third_party)
+        logger.info('[SERPER] Collected: %d total (%d brand-owned + %d 3rd party)',
+                   len(collected), len(brand_owned_collected), len(third_party_collected))
+        logger.info('[SERPER] ───────────────────────────────────────────────────────────')
+        logger.info('[SERPER] Skip reasons:')
+        logger.info('[SERPER]   - No URL: %d', skip_stats['no_url'])
+        logger.info('[SERPER]   - Thin/empty content (<%d bytes): %d', min_body_length, skip_stats['thin_content'])
+        logger.info('[SERPER]   - Brand-owned pool full: %d', skip_stats['brand_owned_pool_full'])
+        logger.info('[SERPER]   - 3rd party pool full: %d', skip_stats['third_party_pool_full'])
+        logger.info('[SERPER] ═══════════════════════════════════════════════════════════')
 
     else:
         # Original behavior: no ratio enforcement
