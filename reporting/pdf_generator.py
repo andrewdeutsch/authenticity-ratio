@@ -795,7 +795,18 @@ class PDFReportGenerator:
             trans = dim_scores.get('transparency', 0) * 100 if dim_scores.get('transparency') is not None else 0
             coher = dim_scores.get('coherence', 0) * 100 if dim_scores.get('coherence') is not None else 0
             reson = dim_scores.get('resonance', 0) * 100 if dim_scores.get('resonance') is not None else 0
-            ai = dim_scores.get(0) * 100 if dim_scores.get() is not None else 0
+            # Safely get AI/automation related score from dimension scores.
+            # Some items may store an 'ai' key or may not include this dimension at all.
+            ai_val = None
+            if isinstance(dim_scores, dict):
+                # prefer explicit 'ai' key if present
+                if 'ai' in dim_scores:
+                    ai_val = dim_scores.get('ai')
+                else:
+                    # fallback: attempt numeric-key access if older code used integer keys
+                    ai_val = dim_scores.get(0) if 0 in dim_scores else None
+
+            ai = (ai_val * 100) if (ai_val is not None) else 0
 
             table_data.append([
                 title,

@@ -1442,7 +1442,7 @@ Trust performance analysis across different platforms and channel types.
         # Channel detail table
         md += "\n---\n\n### Trust Scores by Channel\n\n"
         md += "| Channel | Type | Items | Provenance | Verification | Transparency | Coherence | Resonance | Overall |\n"
-        md += "|---------|------|-------|------------|--------------|--------------|-----------|-----------|--------------|----------|\n"
+        md += "|---------|------|-------|------------|--------------|--------------|-----------|-----------|---------|\n"
 
         # Sort channels by count (descending)
         sorted_channels = sorted(channel_data.items(), key=lambda x: x[1]['count'], reverse=True)
@@ -1472,7 +1472,6 @@ Trust performance analysis across different platforms and channel types.
             md += f"{dim_avgs.get('transparency', 0):.2f} | "
             md += f"{dim_avgs.get('coherence', 0):.2f} | "
             md += f"{dim_avgs.get('resonance', 0):.2f} | "
-            md += f"{dim_avgs.get(0):.2f} | "
             md += f"**{overall:.2f}** |\n"
 
         md += "\n---\n\n### Key Insights\n\n"
@@ -2588,7 +2587,8 @@ This report provides actionable insights for brand health and content strategy b
         if not dims:
             return ""
 
-        labels = ['Provenance', 'Verification', 'Transparency', 'Coherence', 'Resonance', '']
+        # Only include actual dimension labels; drop any empty placeholder
+        labels = ['Provenance', 'Verification', 'Transparency', 'Coherence', 'Resonance']
         # Map labels to dimension keys (dimension labels to keys)
         label_to_key = {
             'Provenance': 'provenance',
@@ -2596,8 +2596,8 @@ This report provides actionable insights for brand health and content strategy b
             'Transparency': 'transparency',
             'Coherence': 'coherence',
             'Resonance': 'resonance',
-            }
-        values = [dims.get(label_to_key[k], {}).get('average', 0.0) for k in labels]
+        }
+        values = [dims.get(label_to_key.get(k, ''), {}).get('average', 0.0) for k in labels]
         if sum(values) == 0:
             return ""
 
