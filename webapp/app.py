@@ -700,6 +700,7 @@ def show_analyze_page():
                         "gpt-4o-mini",
                         "gpt-3.5-turbo",
                         "gpt-4o",
+                        "claude-sonnet-4-20250514",
                         "claude-3-5-haiku-20241022",
                         "claude-3-haiku-20240307",
                         "gemini-1.5-pro",
@@ -718,6 +719,7 @@ def show_analyze_page():
                         "gpt-4o-mini",
                         "gpt-3.5-turbo",
                         "gpt-4o",
+                        "claude-sonnet-4-20250514",
                         "claude-3-5-haiku-20241022",
                         "claude-3-haiku-20240307",
                         "gemini-1.5-pro",
@@ -734,6 +736,7 @@ def show_analyze_page():
                 'gpt-3.5-turbo': '💰 Budget',
                 'gpt-4o-mini': '⚖️ Balanced',
                 'gpt-4o': '⭐ Premium',
+                'claude-sonnet-4-20250514': '⭐ Premium',
                 'claude-3-5-haiku-20241022': '💰 Budget',
                 'claude-3-haiku-20240307': '💰 Budget',
                 'gemini-1.5-flash': '💰 Budget',
@@ -743,7 +746,7 @@ def show_analyze_page():
             }
 
             st.info(f"💡 **Selection**: Summary: {model_tiers.get(summary_model, '')} {summary_model} | Recommendations: {model_tiers.get(recommendations_model, '')} {recommendations_model}")
-            st.caption("💡 **Tip**: Use premium models (GPT-4o) for highest quality summaries with specific, actionable recommendations.")
+            st.caption("💡 **Tip**: Use premium models (Claude Sonnet 4, GPT-4o) for highest quality summaries with specific, actionable recommendations.")
 
         st.divider()
 
