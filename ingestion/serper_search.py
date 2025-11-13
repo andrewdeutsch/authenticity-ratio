@@ -283,18 +283,26 @@ def collect_serper_pages(
             content = fetch_page(url)
             body = content.get('body') or ''
             if body and len(body) >= min_body_length:
-                # Check if pool is full AFTER validating content
-                # This ensures we keep searching for valid URLs even if one pool fills up
-                if is_brand_owned and len(brand_owned_collected) >= target_brand_owned:
-                    skip_stats['brand_owned_pool_full'] += 1
-                    logger.debug('[SERPER] Skipping brand-owned URL %s - pool full (%d/%d)',
-                               url, len(brand_owned_collected), target_brand_owned)
-                    continue
-                if not is_brand_owned and len(third_party_collected) >= target_third_party:
-                    skip_stats['third_party_pool_full'] += 1
-                    logger.debug('[SERPER] Skipping 3rd party URL %s - pool full (%d/%d)',
-                               url, len(third_party_collected), target_third_party)
-                    continue
+                # Check if pools are full AFTER validating content.
+                # Key: only skip if BOTH conditions are true:
+                #   1. This URL's pool is full
+                #   2. The other pool is also full
+                # This allows continued searching for brand-owned URLs even if
+                # 3rd party is full, and vice versa.
+                if is_brand_owned:
+                    if (len(brand_owned_collected) >= target_brand_owned and
+                        len(third_party_collected) >= target_third_party):
+                        skip_stats['brand_owned_pool_full'] += 1
+                        logger.debug('[SERPER] Skipping brand-owned URL %s - both pools full',
+                                   url)
+                        continue
+                else:
+                    if (len(third_party_collected) >= target_third_party and
+                        len(brand_owned_collected) >= target_brand_owned):
+                        skip_stats['third_party_pool_full'] += 1
+                        logger.debug('[SERPER] Skipping 3rd party URL %s - both pools full',
+                                   url)
+                        continue
 
                 # Add source type metadata
                 content['source_type'] = classification.source_type.value
