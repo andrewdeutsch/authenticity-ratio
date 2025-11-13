@@ -1409,8 +1409,8 @@ def show_results_page():
     st.markdown('<div class="main-header">⭐ Trust Stack Results</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="sub-header">Brand: {run_data.get("brand_id")} | Run: {run_data.get("run_id")}</div>', unsafe_allow_html=True)
 
-    # Model Selection (in an expander to not clutter the UI)
-    with st.expander("🤖 Executive Summary Settings", expanded=False):
+    # Model Selection (expanded by default for visibility)
+    with st.expander("🤖 Executive Summary Settings", expanded=True):
         col_model, col_use_llm = st.columns([3, 1])
 
         with col_model:
