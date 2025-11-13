@@ -258,13 +258,15 @@ class ScoringPipeline:
             r = getattr(s, 'score_resonance', 0.0) or 0.0
             c = getattr(s, 'score_coherence', 0.0) or 0.0
             t = getattr(s, 'score_transparency', 0.0) or 0.0
-            v = getattr(s, 'score_verification', 0.0) or 0.0            # Base weighted score (0-100). Use weights.get to be resilient.
+            v = getattr(s, 'score_verification', 0.0) or 0.0
+            # Base weighted score (0-100). Use weights.get to be resilient.
             base = (
                 p * weights.get('provenance', 0.0) +
                 r * weights.get('resonance', 0.0) +
                 c * weights.get('coherence', 0.0) +
                 t * weights.get('transparency', 0.0) +
-                v * weights.get('verification', 0.0) +) * 100.0
+                v * weights.get('verification', 0.0)
+            ) * 100.0
 
             # Metadata bonuses/penalties applied from attributes_cfg
             meta = _parse_meta(s)
