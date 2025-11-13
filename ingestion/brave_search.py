@@ -492,6 +492,72 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
     return results
 
 
+def _extract_internal_links(url: str, html_content: str, max_links: int = 15) -> List[str]:
+    """Extract internal links from a brand domain page.
+
+    Useful for collecting subpages from brand homepages (e.g., product pages,
+    category pages, about pages from nike.com).
+
+    Args:
+        url: The parent URL (used to determine internal links)
+        html_content: HTML content of the page
+        max_links: Maximum number of links to extract
+
+    Returns:
+        List of internal URLs (subpages on the same domain)
+    """
+    try:
+        from urllib.parse import urlparse, urljoin
+
+        soup = BeautifulSoup(html_content, "html.parser")
+        parent_domain = urlparse(url).netloc
+
+        internal_links = []
+        seen = set([url])  # Avoid duplicates
+
+        for link in soup.find_all('a', href=True):
+            try:
+                href = link.get('href', '').strip()
+                if not href:
+                    continue
+
+                # Skip anchors and javascript
+                if href.startswith('#') or href.startswith('javascript:'):
+                    continue
+
+                # Resolve relative URLs
+                full_url = urljoin(url, href)
+
+                # Only include internal links (same domain)
+                link_domain = urlparse(full_url).netloc
+                if link_domain != parent_domain:
+                    continue
+
+                # Skip common non-content pages
+                path = urlparse(full_url).path.lower()
+                if any(skip in path for skip in ['/search', '/login', '/cart', '/checkout',
+                                                   '/account', '/privacy', '/terms', '/contact']):
+                    continue
+
+                # Skip duplicate fragments
+                if full_url in seen:
+                    continue
+
+                seen.add(full_url)
+                internal_links.append(full_url)
+
+                if len(internal_links) >= max_links:
+                    break
+            except Exception:
+                continue
+
+        logger.debug('[INTERNAL_LINKS] Extracted %d internal links from %s', len(internal_links), url)
+        return internal_links
+    except Exception as e:
+        logger.debug('Failed to extract internal links from %s: %s', url, e)
+        return []
+
+
 def _extract_body_text(soup: BeautifulSoup) -> str:
     """Extract body text using multiple strategies in order of preference.
 
@@ -988,6 +1054,43 @@ def collect_brave_pages(
                     brand_owned_collected.append(content)
                     logger.debug('[BRAVE] ✓ Collected brand-owned page (%d/%d): %s [len=%d]',
                                len(brand_owned_collected), target_brand_owned, url, len(body))
+
+                    # If we still need more brand-owned URLs, try extracting subpages
+                    if len(brand_owned_collected) < target_brand_owned:
+                        try:
+                            # Get the raw HTML for link extraction
+                            resp = requests.get(url, headers={
+                                'User-Agent': os.getenv('AR_USER_AGENT',
+                                    'Mozilla/5.0 (compatible; ar-bot/1.0)')
+                            }, timeout=10)
+
+                            if resp.status_code == 200:
+                                subpage_urls = _extract_internal_links(url, resp.text, max_links=15)
+                                logger.debug('[BRAVE] Extracted %d internal links from %s',
+                                           len(subpage_urls), url)
+
+                                # Fetch and add subpages as brand-owned URLs
+                                for subpage_url in subpage_urls:
+                                    if len(brand_owned_collected) >= target_brand_owned:
+                                        break
+
+                                    try:
+                                        subpage_content = fetch_page(subpage_url)
+                                        subpage_body = subpage_content.get('body') or ''
+
+                                        if subpage_body and len(subpage_body) >= min_body_length:
+                                            subpage_content['source_type'] = 'brand_owned'
+                                            subpage_content['source_tier'] = 'brand_subpage'
+                                            brand_owned_collected.append(subpage_content)
+                                            logger.debug('[BRAVE] ✓ Collected brand subpage (%d/%d): %s [len=%d]',
+                                                       len(brand_owned_collected), target_brand_owned,
+                                                       subpage_url, len(subpage_body))
+                                        else:
+                                            logger.debug('[BRAVE] Skipping subpage %s - thin content', subpage_url)
+                                    except Exception as e:
+                                        logger.debug('[BRAVE] Failed to fetch subpage %s: %s', subpage_url, e)
+                        except Exception as e:
+                            logger.debug('[BRAVE] Failed to extract subpages from %s: %s', url, e)
                 else:
                     third_party_collected.append(content)
                     logger.debug('[BRAVE] ✓ Collected 3rd party page (%d/%d): %s [len=%d]',
