@@ -1888,9 +1888,9 @@ def show_results_page():
 
 
 def show_history_page():
-    """Display analysis history"""
+    """Display analysis history with enhanced features"""
     st.markdown('<div class="main-header">📚 Rating History</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">View past analysis runs</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">View and manage past analysis runs</div>', unsafe_allow_html=True)
 
     st.divider()
 
@@ -1898,14 +1898,20 @@ def show_history_page():
     output_dir = os.path.join(PROJECT_ROOT, 'output', 'webapp_runs')
 
     if not os.path.exists(output_dir):
-        st.info("No analysis history found. Run your first analysis to get started!")
+        st.info("📭 No analysis history found. Run your first analysis to get started!")
+        if st.button("🚀 Run Your First Analysis"):
+            st.session_state['page'] = 'analyze'
+            st.rerun()
         return
 
     # Scan for run data files
     run_files = file_glob.glob(os.path.join(output_dir, '*', '_run_data.json'))
 
     if not run_files:
-        st.info("No analysis history found. Run your first analysis to get started!")
+        st.info("📭 No analysis history found. Run your first analysis to get started!")
+        if st.button("🚀 Run Your First Analysis"):
+            st.session_state['page'] = 'analyze'
+            st.rerun()
         return
 
     # Load and display runs
@@ -1914,44 +1920,181 @@ def show_history_page():
         try:
             with open(run_file, 'r') as f:
                 run_data = json.load(f)
+                # Add file path for reference
+                run_data['_file_path'] = run_file
                 runs.append(run_data)
-        except:
+        except Exception as e:
+            logger.warning(f"Failed to load run data from {run_file}: {e}")
             continue
+
+    if not runs:
+        st.warning("⚠️ Found run files but couldn't load any valid data. The files may be corrupted.")
+        return
 
     # Sort by timestamp (newest first)
     runs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
 
-    st.write(f"Found {len(runs)} past analysis runs")
+    # Summary stats
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("📊 Total Runs", len(runs))
+    with col2:
+        unique_brands = len(set(r.get('brand_id', 'Unknown') for r in runs))
+        st.metric("🏢 Brands Analyzed", unique_brands)
+    with col3:
+        total_items = sum(r.get('total_items', 0) for r in runs)
+        st.metric("📝 Total Items", f"{total_items:,}")
+    with col4:
+        # Calculate average rating across all runs
+        all_ratings = []
+        for run in runs:
+            report = run.get('scoring_report', {})
+            items = report.get('items', [])
+            if items:
+                avg = sum(item.get('final_score', 0) for item in items) / len(items) * 100
+                all_ratings.append(avg)
+        if all_ratings:
+            overall_avg = sum(all_ratings) / len(all_ratings)
+            st.metric("⭐ Avg Rating", f"{overall_avg:.1f}/100")
+        else:
+            st.metric("⭐ Avg Rating", "N/A")
 
-    # Display runs
-    for run in runs:
+    st.divider()
+
+    # Filter options
+    with st.expander("🔍 Filter Options", expanded=False):
+        filter_col1, filter_col2 = st.columns(2)
+        with filter_col1:
+            brands = sorted(set(r.get('brand_id', 'Unknown') for r in runs))
+            selected_brand = st.selectbox("Filter by Brand", ["All"] + brands)
+        with filter_col2:
+            sources_all = sorted(set(src for r in runs for src in r.get('sources', [])))
+            selected_source = st.selectbox("Filter by Source", ["All"] + sources_all)
+
+    # Apply filters
+    filtered_runs = runs
+    if selected_brand != "All":
+        filtered_runs = [r for r in filtered_runs if r.get('brand_id') == selected_brand]
+    if selected_source != "All":
+        filtered_runs = [r for r in filtered_runs if selected_source in r.get('sources', [])]
+
+    st.write(f"**Showing {len(filtered_runs)} of {len(runs)} runs**")
+
+    # Display runs in a more visual way
+    for idx, run in enumerate(filtered_runs):
         report = run.get('scoring_report', {})
         items = report.get('items', [])
+        dimension_breakdown = report.get('dimension_breakdown', {})
 
         # Calculate average rating for this run
         if items:
-            avg_rating = sum(item.get('final_score', 0) for item in items) / len(items)
+            avg_rating = sum(item.get('final_score', 0) for item in items) / len(items) * 100
         else:
             avg_rating = 0
 
-        with st.expander(f"⭐ {run.get('brand_id')} - {run.get('timestamp')} (Avg Rating: {avg_rating:.1f}/100)"):
-            col1, col2, col3 = st.columns(3)
+        # Determine rating badge
+        if avg_rating >= 80:
+            rating_badge = "🟢 Excellent"
+            badge_color = "#28a745"
+        elif avg_rating >= 60:
+            rating_badge = "🟡 Good"
+            badge_color = "#ffc107"
+        elif avg_rating >= 40:
+            rating_badge = "🟠 Fair"
+            badge_color = "#fd7e14"
+        else:
+            rating_badge = "🔴 Poor"
+            badge_color = "#dc3545"
 
-            with col1:
-                st.write(f"**Run ID:** {run.get('run_id')}")
-                st.write(f"**Brand:** {run.get('brand_id')}")
-                st.write(f"**Keywords:** {', '.join(run.get('keywords', []))}")
+        # Format timestamp
+        try:
+            timestamp = datetime.fromisoformat(run.get('timestamp', '')).strftime('%B %d, %Y at %I:%M %p')
+        except:
+            timestamp = run.get('timestamp', 'Unknown')
 
-            with col2:
-                st.write(f"**Sources:** {', '.join(run.get('sources', []))}")
-                st.write(f"**Total Items:** {run.get('total_items', 0)}")
-                st.write(f"**Avg Rating:** {avg_rating:.1f}/100")
+        # Create card-style display
+        with st.container():
+            # Header row
+            header_col1, header_col2, header_col3 = st.columns([3, 2, 1])
 
-            with col3:
-                if st.button(f"View Results", key=f"view_{run.get('run_id')}"):
+            with header_col1:
+                st.markdown(f"### 🏢 {run.get('brand_id', 'Unknown Brand')}")
+                st.caption(f"📅 {timestamp}")
+
+            with header_col2:
+                st.markdown(f"<h3 style='color: {badge_color}; text-align: center;'>{rating_badge}</h3>", unsafe_allow_html=True)
+                st.markdown(f"<p style='text-align: center; font-size: 24px; margin: 0;'><b>{avg_rating:.1f}/100</b></p>", unsafe_allow_html=True)
+
+            with header_col3:
+                st.write("")  # Spacing
+                if st.button("📊 View", key=f"view_{idx}", use_container_width=True):
                     st.session_state['last_run'] = run
                     st.session_state['page'] = 'results'
                     st.rerun()
+
+            # Details row
+            detail_col1, detail_col2, detail_col3, detail_col4 = st.columns(4)
+
+            with detail_col1:
+                st.metric("📝 Items", run.get('total_items', 0))
+
+            with detail_col2:
+                keywords = run.get('keywords', [])
+                st.write("**🔍 Keywords:**")
+                st.caption(', '.join(keywords[:3]) + ('...' if len(keywords) > 3 else ''))
+
+            with detail_col3:
+                sources = run.get('sources', [])
+                st.write("**📊 Sources:**")
+                st.caption(', '.join(sources))
+
+            with detail_col4:
+                # Show top dimension
+                if dimension_breakdown:
+                    dim_avgs = {k: v.get('average', 0) * 100 for k, v in dimension_breakdown.items()}
+                    if dim_avgs:
+                        top_dim = max(dim_avgs, key=dim_avgs.get)
+                        st.write("**⭐ Top Dimension:**")
+                        st.caption(f"{top_dim.title()} ({dim_avgs[top_dim]:.0f})")
+
+            # Download reports section
+            download_col1, download_col2, download_col3 = st.columns([2, 1, 1])
+
+            with download_col1:
+                # Show models used
+                llm_model = report.get('llm_model', 'Unknown')
+                rec_model = report.get('recommendations_model', 'Unknown')
+                st.caption(f"🤖 Models: {llm_model} / {rec_model}")
+
+            with download_col2:
+                # PDF download
+                pdf_path = run.get('pdf_path')
+                if pdf_path and os.path.exists(pdf_path):
+                    with open(pdf_path, 'rb') as f:
+                        st.download_button(
+                            label="📄 PDF",
+                            data=f.read(),
+                            file_name=os.path.basename(pdf_path),
+                            mime="application/pdf",
+                            key=f"pdf_{idx}",
+                            use_container_width=True
+                        )
+
+            with download_col3:
+                # Markdown download
+                md_path = run.get('md_path')
+                if md_path and os.path.exists(md_path):
+                    with open(md_path, 'r') as f:
+                        st.download_button(
+                            label="📋 MD",
+                            data=f.read(),
+                            file_name=os.path.basename(md_path),
+                            mime="text/markdown",
+                            key=f"md_{idx}",
+                            use_container_width=True
+                        )
+
+            st.divider()
 
 
 def main():
