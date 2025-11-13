@@ -319,38 +319,14 @@ class ChatClient:
             anthropic_messages = [{'role': 'user', 'content': system_message}]
 
         # Anthropic API call
-        # Some versions of the Anthropic SDK expect `system` to be provided as a
-        # list while others accept a string. Normalize to a list when necessary
-        # to avoid errors like: "system: Input should be a valid list".
-        system_payload = None
-        if system_message is not None:
-            # If it's already a list, pass through. If it's a string, wrap it.
-            if isinstance(system_message, list):
-                system_payload = system_message
-            else:
-                # Wrap single system string into a list for newer Anthropic clients
-                system_payload = [system_message]
-
-        try:
-            response = client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=system_payload if system_payload else None,
-                messages=anthropic_messages,
-                **kwargs
-            )
-        except TypeError:
-            # Fallback: some anthropic client versions expect system as a string.
-            # Retry with the original string form if available.
-            response = client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=system_message if system_message else None,
-                messages=anthropic_messages,
-                **kwargs
-            )
+        response = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=system_message if system_message else None,
+            messages=anthropic_messages,
+            **kwargs
+        )
 
         content = response.content[0].text
 
