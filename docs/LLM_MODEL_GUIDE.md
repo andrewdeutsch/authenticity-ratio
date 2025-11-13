@@ -10,7 +10,8 @@ This guide helps you choose the right LLM model for your Trust Stack analysis ne
 | **OpenAI** | `gpt-4o-mini` | Mid | Balanced performance | $$ |
 | **OpenAI** | `gpt-4o` | Premium | Complex analysis | $$$$ |
 | **Claude** | `claude-3-haiku-20240307` | Budget | Fast processing | $$ |
-| **Claude** | `claude-3-5-sonnet-20240620` | Premium | Detailed analysis, nuanced writing | $$$$ |
+| **Claude** | `claude-3-sonnet-20240229` | Mid | Balanced performance | $$$ |
+| **Claude** | `claude-3-opus-20240229` | Premium | Detailed analysis, nuanced writing | $$$$ |
 | **Google** | `gemini-1.5-flash` | Budget | Fast, efficient processing | $ |
 | **Google** | `gemini-1.5-pro` | Premium | Advanced reasoning | $$$ |
 | **DeepSeek** | `deepseek-chat` | Budget | Cost-effective processing | $ |
@@ -69,16 +70,27 @@ DEEPSEEK_API_KEY=sk-...
 - **Best for**: Quick summaries, high-throughput scenarios
 - **Strengths**: Good instruction following, concise outputs
 
-#### `claude-3-5-sonnet-20240620` ⭐ Recommended for Quality
-- **Cost**: Premium (~$3-$15 per 1M tokens)
+#### `claude-3-sonnet-20240229`
+- **Cost**: Mid (~$3-$15 per 1M tokens)
 - **Speed**: Moderate
-- **Quality**: Excellent reasoning and writing quality
-- **Best for**: Detailed recommendations, nuanced analysis
+- **Quality**: Very good reasoning and writing quality
+- **Best for**: Balanced cost/quality for recommendations
+- **Strengths**:
+  - Good writing quality
+  - Reliable instruction following
+  - Solid reasoning capabilities
+- **Use when**: You want good quality without premium cost
+
+#### `claude-3-opus-20240229` ⭐ Recommended for Quality
+- **Cost**: Premium (~$15-$75 per 1M tokens)
+- **Speed**: Slower
+- **Quality**: Highest quality Claude model
+- **Best for**: Detailed recommendations, complex nuanced analysis
 - **Strengths**:
   - Superior writing quality
-  - Better at following complex instructions
+  - Best at following complex instructions
   - Excellent at structured output
-  - Strong reasoning capabilities
+  - Strongest reasoning capabilities
 - **Use when**: You want the most actionable and well-written recommendations
 
 ### Google Gemini Models
