@@ -832,6 +832,7 @@ class TrustStackAttributeDetector:
             value = 1.0
             evidence = "No schema.org structured data detected"
 
+        return DetectedAttribute(
             label="Schema.org Compliance",
             value=value,
             evidence=evidence,
