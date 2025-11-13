@@ -681,6 +681,10 @@ def show_analyze_page():
                 brand_subdomains = []
                 brand_social_handles = []
 
+        # DEBUG: Verify this section renders
+        st.markdown("---")
+        st.markdown("### 🤖 AI Model Configuration")
+
         # LLM Model Selection
         with st.expander("🤖 LLM Model Selection", expanded=True):
             st.markdown("**Choose which AI model to use for generating executive summaries and recommendations:**")
