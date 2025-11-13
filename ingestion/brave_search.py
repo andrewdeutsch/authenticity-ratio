@@ -714,11 +714,14 @@ def collect_brave_pages(
     results = []
     try:
         search_results = search_brave(query, size=pool_size)
+        logger.info('[BRAVE] Requested pool_size=%d, received %d search results for query=%s',
+                   pool_size, len(search_results), query)
     except Exception as e:
         logger.warning('Brave search failed while collecting pages: %s', e)
         search_results = []
 
     if not search_results:
+        logger.warning('[BRAVE] No search results returned, returning empty list')
         return []
 
     # robots.txt cache per netloc
@@ -777,17 +780,33 @@ def collect_brave_pages(
         brand_owned_collected: List[Dict[str, str]] = []
         third_party_collected: List[Dict[str, str]] = []
 
-        logger.info('Collecting with ratio enforcement: %d brand-owned (%.0f%%) + %d 3rd party (%.0f%%)',
+        # Track skip reasons for debugging
+        skip_stats = {
+            'no_url': 0,
+            'robots_txt': 0,
+            'thin_content': 0,
+            'brand_owned_pool_full': 0,
+            'third_party_pool_full': 0,
+            'processed': 0
+        }
+
+        logger.info('[BRAVE] Collecting with ratio enforcement: %d brand-owned (%.0f%%) + %d 3rd party (%.0f%%) from %d search results',
                    target_brand_owned, url_collection_config.brand_owned_ratio * 100,
-                   target_third_party, url_collection_config.third_party_ratio * 100)
+                   target_third_party, url_collection_config.third_party_ratio * 100,
+                   len(search_results))
 
         for item in search_results:
+            skip_stats['processed'] += 1
+
             # Stop if both pools are full
             if len(brand_owned_collected) >= target_brand_owned and len(third_party_collected) >= target_third_party:
+                logger.info('[BRAVE] Both pools full, breaking early at result %d/%d',
+                           skip_stats['processed'], len(search_results))
                 break
 
             url = item.get('url')
             if not url:
+                skip_stats['no_url'] += 1
                 continue
 
             # Classify the URL
@@ -801,7 +820,8 @@ def collect_brave_pages(
                 allowed = True
 
             if not allowed:
-                logger.info('Skipping %s due to robots.txt disallow', url)
+                skip_stats['robots_txt'] += 1
+                logger.info('[BRAVE] Skipping %s due to robots.txt disallow', url)
                 continue
 
             # Attempt to fetch and only count if body meets minimum length
@@ -811,10 +831,14 @@ def collect_brave_pages(
                 # Check if pool is full AFTER validating content
                 # This ensures we keep searching for valid URLs even if one pool fills up
                 if is_brand_owned and len(brand_owned_collected) >= target_brand_owned:
-                    logger.debug('Skipping brand-owned URL %s - pool full', url)
+                    skip_stats['brand_owned_pool_full'] += 1
+                    logger.info('[BRAVE] Skipping brand-owned URL %s - pool full (%d/%d)',
+                               url, len(brand_owned_collected), target_brand_owned)
                     continue
                 if not is_brand_owned and len(third_party_collected) >= target_third_party:
-                    logger.debug('Skipping 3rd party URL %s - pool full', url)
+                    skip_stats['third_party_pool_full'] += 1
+                    logger.info('[BRAVE] Skipping 3rd party URL %s - pool full (%d/%d)',
+                               url, len(third_party_collected), target_third_party)
                     continue
 
                 # Add source type metadata
@@ -823,20 +847,39 @@ def collect_brave_pages(
 
                 if is_brand_owned:
                     brand_owned_collected.append(content)
-                    logger.debug('Collected brand-owned page (%d/%d): %s',
-                               len(brand_owned_collected), target_brand_owned, url)
+                    logger.info('[BRAVE] ✓ Collected brand-owned page (%d/%d): %s [len=%d]',
+                               len(brand_owned_collected), target_brand_owned, url, len(body))
                 else:
                     third_party_collected.append(content)
-                    logger.debug('Collected 3rd party page (%d/%d): %s',
-                               len(third_party_collected), target_third_party, url)
+                    logger.info('[BRAVE] ✓ Collected 3rd party page (%d/%d): %s [len=%d]',
+                               len(third_party_collected), target_third_party, url, len(body))
             else:
-                logger.debug('Skipping %s because content is thin or empty (len=%s)', url, len(body))
+                skip_stats['thin_content'] += 1
+                logger.info('[BRAVE] Skipping %s - thin/empty content (len=%s, min=%d) [%s]',
+                           url, len(body), min_body_length,
+                           'brand-owned' if is_brand_owned else '3rd party')
 
         # Combine results
         collected = brand_owned_collected + third_party_collected
 
-        logger.info('Collected %d brand-owned + %d 3rd party = %d total pages (target: %d) for query=%s',
-                   len(brand_owned_collected), len(third_party_collected), len(collected), target_count, query)
+        logger.info('[BRAVE] ═══════════════════════════════════════════════════════════')
+        logger.info('[BRAVE] COLLECTION SUMMARY for query=%s', query)
+        logger.info('[BRAVE] ───────────────────────────────────────────────────────────')
+        logger.info('[BRAVE] Search results received: %d (requested pool_size: %d)',
+                   len(search_results), pool_size)
+        logger.info('[BRAVE] Results processed: %d', skip_stats['processed'])
+        logger.info('[BRAVE] Target: %d total (%d brand-owned + %d 3rd party)',
+                   target_count, target_brand_owned, target_third_party)
+        logger.info('[BRAVE] Collected: %d total (%d brand-owned + %d 3rd party)',
+                   len(collected), len(brand_owned_collected), len(third_party_collected))
+        logger.info('[BRAVE] ───────────────────────────────────────────────────────────')
+        logger.info('[BRAVE] Skip reasons:')
+        logger.info('[BRAVE]   - No URL: %d', skip_stats['no_url'])
+        logger.info('[BRAVE]   - Robots.txt blocked: %d', skip_stats['robots_txt'])
+        logger.info('[BRAVE]   - Thin/empty content (<%d bytes): %d', min_body_length, skip_stats['thin_content'])
+        logger.info('[BRAVE]   - Brand-owned pool full: %d', skip_stats['brand_owned_pool_full'])
+        logger.info('[BRAVE]   - 3rd party pool full: %d', skip_stats['third_party_pool_full'])
+        logger.info('[BRAVE] ═══════════════════════════════════════════════════════════')
 
     else:
         # Original behavior: no ratio enforcement
