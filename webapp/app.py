@@ -136,6 +136,8 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
                 meta = json.loads(meta)
             except:
                 meta = {}
+        elif meta is None:
+            meta = {}
 
         # Extract detected attributes
         detected_attrs = meta.get('detected_attributes', [])
