@@ -457,12 +457,12 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
     return results
 
     # Optional Playwright fallback: render the page with a headless browser and extract links
-    use_playwright = os.getenv('BRAVE_USE_PLAYWRIGHT', '0') == '1'
+    use_playwright = os.getenv('AR_USE_PLAYWRIGHT', '0') == '1'
     if not results and use_playwright:
         if not _PLAYWRIGHT_AVAILABLE:
-            logger.warning('Playwright fallback requested (BRAVE_USE_PLAYWRIGHT=1) but Playwright is not installed.')
+            logger.warning('Playwright fallback requested (AR_USE_PLAYWRIGHT=1) but Playwright is not installed.')
         else:
-            logger.info('Attempting Playwright-rendered Brave search (BRAVE_USE_PLAYWRIGHT=1)')
+            logger.info('Attempting Playwright-rendered Brave search (AR_USE_PLAYWRIGHT=1)')
             try:
                 with sync_playwright() as pw:
                     browser = pw.chromium.launch(headless=True)
@@ -525,7 +525,7 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
         if resp.status_code != 200:
             logger.warning("Fetching %s returned %s", url, resp.status_code)
             # If Playwright fallback is enabled and allowed by robots.txt, try rendering
-            use_playwright = os.getenv('BRAVE_USE_PLAYWRIGHT', '0') == '1'
+            use_playwright = os.getenv('AR_USE_PLAYWRIGHT', '0') == '1'
             try_playwright = use_playwright and _PLAYWRIGHT_AVAILABLE
             if try_playwright:
                 try:
@@ -536,7 +536,7 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
                     except Exception:
                         allowed = True
                     if allowed:
-                        logger.info('Attempting Playwright-rendered fetch for %s (BRAVE_USE_PLAYWRIGHT=1)', url)
+                        logger.info('Attempting Playwright-rendered fetch for %s (AR_USE_PLAYWRIGHT=1)', url)
                         with sync_playwright() as pw:
                             browser = pw.chromium.launch(headless=True)
                             page = browser.new_page(user_agent=ua)
@@ -606,7 +606,7 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
                 body = og_desc.get('content').strip()
         if (not title or not body or len(body) < 200):
             # Attempt Playwright fallback for thin content if enabled and allowed
-            use_playwright = os.getenv('BRAVE_USE_PLAYWRIGHT', '0') == '1'
+            use_playwright = os.getenv('AR_USE_PLAYWRIGHT', '0') == '1'
             try_playwright = use_playwright and _PLAYWRIGHT_AVAILABLE
             if try_playwright:
                 try:

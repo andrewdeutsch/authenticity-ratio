@@ -107,7 +107,7 @@ def test_fetch_page_playwright_fallback(monkeypatch, tmp_path):
     monkeypatch.setattr(brave_search, 'sync_playwright', lambda: FakePW())
 
     # Enable Playwright via env var
-    monkeypatch.setenv('BRAVE_USE_PLAYWRIGHT', '1')
+    monkeypatch.setenv('AR_USE_PLAYWRIGHT', '1')
 
     result = brave_search.fetch_page(url)
     assert result['title'] == 'Rendered Title'
@@ -135,7 +135,7 @@ def test_fetch_page_respects_robots(monkeypatch, tmp_path):
 
     # Even if Playwright is available, it should not be used because robots disallow
     monkeypatch.setattr(brave_search, '_PLAYWRIGHT_AVAILABLE', True)
-    monkeypatch.setenv('BRAVE_USE_PLAYWRIGHT', '1')
+    monkeypatch.setenv('AR_USE_PLAYWRIGHT', '1')
 
     result = brave_search.fetch_page(url)
     # Since robots disallow, fetch_page should not use Playwright and should return empty body
