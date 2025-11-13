@@ -64,9 +64,19 @@ def main():
     parser.add_argument('--max-content', type=int, help='[DEPRECATED] Use --max-items instead')
     parser.add_argument('--brave-pages', type=int, default=10, help='Number of Brave search results/pages to fetch (default: 10)')
     parser.add_argument('--include-comments', action='store_true', help='Include comments in analysis (overrides settings include_comments_in_analysis)')
-    parser.add_argument('--use-llm-examples', action='store_true', help='Use LLM (gpt-3.5-turbo by default) to produce abstractive summaries for executive examples')
-    parser.add_argument('--llm-model', default='gpt-3.5-turbo', help='LLM model to use for executive summaries (default: gpt-3.5-turbo)')
-    parser.add_argument('--recommendations-model', default='gpt-4o-mini', help='LLM model to use for generating recommendations (default: gpt-4o-mini; options: gpt-4o, gpt-4o-mini, gpt-3.5-turbo)')
+    parser.add_argument('--use-llm-examples', action='store_true', help='Use LLM to produce abstractive summaries for executive examples')
+    parser.add_argument('--llm-model', default='gpt-3.5-turbo',
+                        help='LLM model for executive summaries (default: gpt-3.5-turbo). '
+                             'OpenAI: gpt-3.5-turbo, gpt-4o-mini, gpt-4o | '
+                             'Claude: claude-3-haiku-20240307, claude-3-5-sonnet-20241022 | '
+                             'Google: gemini-1.5-flash, gemini-1.5-pro | '
+                             'DeepSeek: deepseek-chat, deepseek-reasoner')
+    parser.add_argument('--recommendations-model', default='gpt-4o-mini',
+                        help='LLM model for recommendations (default: gpt-4o-mini). '
+                             'OpenAI: gpt-3.5-turbo, gpt-4o-mini, gpt-4o | '
+                             'Claude: claude-3-haiku-20240307, claude-3-5-sonnet-20241022 | '
+                             'Google: gemini-1.5-flash, gemini-1.5-pro | '
+                             'DeepSeek: deepseek-chat, deepseek-reasoner')
 
     # URL collection ratio enforcement arguments
     parser.add_argument('--brand-domains', nargs='+', help='Brand-owned domains for URL classification (e.g., nike.com nike.co.uk)')

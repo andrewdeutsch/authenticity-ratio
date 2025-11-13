@@ -31,8 +31,12 @@ class APIConfig:
     amazon_secret_key: str = os.getenv('AMAZON_SECRET_KEY', '')
     amazon_associate_tag: str = os.getenv('AMAZON_ASSOCIATE_TAG', '')
 
-    # OpenAI for LLM scoring
+    # LLM API Keys
     openai_api_key: str = os.getenv('OPENAI_API_KEY', '')
+    anthropic_api_key: str = os.getenv('ANTHROPIC_API_KEY', '')
+    google_api_key: str = os.getenv('GOOGLE_API_KEY', '')
+    deepseek_api_key: str = os.getenv('DEEPSEEK_API_KEY', '')
+
     # YouTube Data API v3
     youtube_api_key: str = os.getenv('YOUTUBE_API_KEY', '')
 
