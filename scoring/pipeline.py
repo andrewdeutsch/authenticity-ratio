@@ -384,13 +384,13 @@ class ScoringPipeline:
             except Exception:
                 pass
 
-            # Build dimension scores dict (6D)
+            # Build dimension scores dict (5D)
             dim_scores = {
                 'provenance': p,
                 'resonance': r,
                 'coherence': c,
                 'transparency': t,
-                'verification': v: ai,
+                'verification': v,
             }
 
             per_item_breakdowns.append({
