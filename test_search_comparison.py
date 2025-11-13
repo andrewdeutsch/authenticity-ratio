@@ -45,6 +45,12 @@ except ImportError:
 
 from ingestion.search_unified import search
 
+try:
+    import pytest
+    pytestmark = pytest.mark.skip(reason="Script for manual provider comparison — skip during automated pytest runs")
+except Exception:
+    pass
+
 
 def test_provider(provider: str, query: str, size: int) -> tuple[List[Dict[str, str]], float]:
     """Test a single provider and measure response time.
