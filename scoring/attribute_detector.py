@@ -381,13 +381,17 @@ class TrustStackAttributeDetector:
         if not text or len(text) < 50:
             return None
 
-        sentences = len(re.split(r'[.!?]+', text))
-        words = len(text.split())
+        # Split into sentences using positive lookbehind (split after punctuation + whitespace)
+        # This avoids the off-by-one error from re.split()
+        sentence_list = re.split(r'(?<=[\.\!\?])\s+', text)
+        # Filter out very short fragments (< 10 chars) that aren't real sentences
+        sentence_list = [s.strip() for s in sentence_list if len(s.strip()) > 10]
 
-        if sentences == 0:
+        if len(sentence_list) == 0:
             return None
 
-        words_per_sentence = words / sentences
+        words = len(text.split())
+        words_per_sentence = words / len(sentence_list)
 
         # Target: 15-20 words per sentence (grade 8-10)
         if 12 <= words_per_sentence <= 22:
