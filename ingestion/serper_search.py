@@ -361,6 +361,65 @@ def collect_serper_pages(
                            url, len(body), min_body_length,
                            'brand-owned' if is_brand_owned else '3rd party')
 
+        # If brand-owned pool is not full, try targeted brand domain searches
+        if len(brand_owned_collected) < target_brand_owned and url_collection_config.brand_domains:
+            logger.info('[SERPER] Brand-owned pool not full (%d/%d), attempting targeted brand domain searches',
+                       len(brand_owned_collected), target_brand_owned)
+
+            for brand_domain in url_collection_config.brand_domains:
+                if len(brand_owned_collected) >= target_brand_owned:
+                    break
+
+                # Targeted search for brand domain
+                targeted_query = f"site:{brand_domain}"
+                logger.info('[SERPER] Targeted search: %s', targeted_query)
+
+                try:
+                    # Request enough results to fill the gap
+                    needed = target_brand_owned - len(brand_owned_collected)
+                    targeted_pool_size = min(needed * 3, 30)  # Request 3x what we need, max 30
+
+                    targeted_results = search_serper(targeted_query, size=targeted_pool_size)
+                    logger.info('[SERPER] Targeted search returned %d results', len(targeted_results))
+
+                    for item in targeted_results:
+                        if len(brand_owned_collected) >= target_brand_owned:
+                            break
+
+                        url = item.get('url')
+                        if not url:
+                            continue
+
+                        # Skip if already collected
+                        if any(c.get('url') == url for c in brand_owned_collected):
+                            logger.debug('[SERPER] Skipping duplicate URL: %s', url)
+                            continue
+
+                        # Fetch and validate
+                        content = fetch_page(url)
+                        body = content.get('body') or ''
+
+                        if body and len(body) >= min_body_length:
+                            # Classify to confirm it's brand-owned
+                            classification = classify_url(url, url_collection_config)
+
+                            if classification.source_type == URLSourceType.BRAND_OWNED:
+                                content['source_type'] = classification.source_type.value
+                                content['source_tier'] = classification.tier.value if classification.tier else 'unknown'
+                                brand_owned_collected.append(content)
+                                logger.info('[SERPER] ✓ Added brand-owned URL from targeted search (%d/%d): %s',
+                                           len(brand_owned_collected), target_brand_owned, url)
+                            else:
+                                logger.debug('[SERPER] URL from targeted search was not classified as brand-owned: %s', url)
+                        else:
+                            logger.debug('[SERPER] Skipping thin content from targeted search: %s (len=%d)', url, len(body))
+
+                except Exception as e:
+                    logger.warning('[SERPER] Targeted search for %s failed: %s', targeted_query, e)
+
+            logger.info('[SERPER] After targeted searches: %d/%d brand-owned URLs collected',
+                       len(brand_owned_collected), target_brand_owned)
+
         # Combine results
         collected = brand_owned_collected + third_party_collected
 
