@@ -137,6 +137,8 @@ def test_chat_client_summarize():
 @patch.dict(os.environ, {}, clear=True)
 def test_chat_client_no_api_key():
     """Test ChatClient raises error when no API key is configured."""
+    # Defensive: ensure OPENAI_API_KEY is not present in the environment
+    os.environ.pop('OPENAI_API_KEY', None)
     with patch('scoring.llm_client.OpenAI'):
         from scoring.llm_client import ChatClient
 
