@@ -152,17 +152,26 @@ class TrustStackAttributeDetector:
             )
 
     def _detect_author_verified(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
-        """Detect author/brand identity verification"""
+        """
+        Detect author/brand identity verification with content-type awareness.
+
+        Blog posts and articles warrant visible bylines, but corporate landing pages
+        showing organizational/team attribution through structured data or subtle
+        footer credits can still pass the Author Identity check.
+        """
         meta = content.meta or {}
 
-        # Check for verification indicators
-        is_verified = (
+        # Determine content type
+        content_type = self._determine_content_type(content)
+
+        # Check for explicit verification (highest confidence)
+        is_explicitly_verified = (
             meta.get("author_verified") == "true" or
             meta.get("verified") == "true" or
             "verified" in content.author.lower()
         )
 
-        if is_verified:
+        if is_explicitly_verified:
             return DetectedAttribute(
                 attribute_id="author_brand_identity_verified",
                 dimension="provenance",
@@ -171,15 +180,264 @@ class TrustStackAttributeDetector:
                 evidence=f"Verified author: {content.author}",
                 confidence=1.0
             )
+
+        # Check for visible byline (expected for blog/article content)
+        has_visible_byline = content.author and content.author.lower() not in ['unknown', 'anonymous', '']
+
+        # For blog/article content, require visible byline
+        if content_type in ['blog', 'article', 'news']:
+            if has_visible_byline:
+                return DetectedAttribute(
+                    attribute_id="author_brand_identity_verified",
+                    dimension="provenance",
+                    label="Author/brand identity verified",
+                    value=8.0,
+                    evidence=f"Visible byline present: {content.author}",
+                    confidence=0.9
+                )
+            else:
+                return DetectedAttribute(
+                    attribute_id="author_brand_identity_verified",
+                    dimension="provenance",
+                    label="Author/brand identity verified",
+                    value=2.0,
+                    evidence="Missing byline - expected for blog/article content",
+                    confidence=1.0
+                )
+
+        # For corporate landing pages, check alternative attribution methods
+        elif content_type == 'landing_page':
+            attribution_result = self._check_alternative_attribution(content, meta)
+
+            if attribution_result['found']:
+                return DetectedAttribute(
+                    attribute_id="author_brand_identity_verified",
+                    dimension="provenance",
+                    label="Author/brand identity verified",
+                    value=attribution_result['score'],
+                    evidence=attribution_result['evidence'],
+                    confidence=attribution_result['confidence']
+                )
+            else:
+                return DetectedAttribute(
+                    attribute_id="author_brand_identity_verified",
+                    dimension="provenance",
+                    label="Author/brand identity verified",
+                    value=3.0,
+                    evidence="No attribution found - consider adding structured data or footer credits",
+                    confidence=0.8
+                )
+
+        # For other content types, check both approaches
         else:
-            return DetectedAttribute(
-                attribute_id="author_brand_identity_verified",
-                dimension="provenance",
-                label="Author/brand identity verified",
-                value=3.0,
-                evidence="Author verification status unknown",
-                confidence=0.8
-            )
+            if has_visible_byline:
+                return DetectedAttribute(
+                    attribute_id="author_brand_identity_verified",
+                    dimension="provenance",
+                    label="Author/brand identity verified",
+                    value=7.0,
+                    evidence=f"Author attribution present: {content.author}",
+                    confidence=0.85
+                )
+            else:
+                attribution_result = self._check_alternative_attribution(content, meta)
+                if attribution_result['found']:
+                    return DetectedAttribute(
+                        attribute_id="author_brand_identity_verified",
+                        dimension="provenance",
+                        label="Author/brand identity verified",
+                        value=attribution_result['score'],
+                        evidence=attribution_result['evidence'],
+                        confidence=attribution_result['confidence']
+                    )
+                else:
+                    return DetectedAttribute(
+                        attribute_id="author_brand_identity_verified",
+                        dimension="provenance",
+                        label="Author/brand identity verified",
+                        value=3.0,
+                        evidence="Author verification status unknown",
+                        confidence=0.8
+                    )
+
+    def _determine_content_type(self, content: NormalizedContent) -> str:
+        """
+        Determine content type based on channel, URL patterns, and metadata.
+
+        Returns:
+            Content type: 'blog', 'article', 'news', 'landing_page', 'other'
+        """
+        url_lower = content.url.lower()
+
+        # Check for blog/article/news patterns in URL
+        blog_patterns = ['/blog/', '/article/', '/post/', '/news/', '/story/']
+        if any(pattern in url_lower for pattern in blog_patterns):
+            if '/blog/' in url_lower:
+                return 'blog'
+            elif '/news/' in url_lower or '/story/' in url_lower:
+                return 'news'
+            else:
+                return 'article'
+
+        # Check for landing page patterns
+        landing_patterns = [
+            url_lower.endswith('/'),  # Root or section homepage
+            '/product/' in url_lower,
+            '/solution/' in url_lower,
+            '/service/' in url_lower,
+            '/about' in url_lower,
+            '/home' in url_lower
+        ]
+        if any(landing_patterns):
+            return 'landing_page'
+
+        # Check metadata for content type hints
+        meta = content.meta or {}
+        meta_type = meta.get('type', '').lower()
+        if meta_type in ['article', 'blog', 'news', 'blogposting', 'newsarticle']:
+            return meta_type
+
+        # Check schema.org data
+        schema_org = meta.get('schema_org')
+        if schema_org:
+            try:
+                import json
+                schema_data = json.loads(schema_org) if isinstance(schema_org, str) else schema_org
+                if isinstance(schema_data, dict):
+                    schema_type = schema_data.get('@type', '')
+                    if isinstance(schema_type, str):
+                        if 'Article' in schema_type or 'BlogPosting' in schema_type:
+                            return 'blog' if 'Blog' in schema_type else 'article'
+                        elif 'NewsArticle' in schema_type:
+                            return 'news'
+                        elif 'WebPage' in schema_type or 'Organization' in schema_type:
+                            return 'landing_page'
+            except:
+                pass
+
+        # Default based on channel
+        if content.channel in ['reddit', 'twitter', 'facebook', 'instagram']:
+            return 'social_post'
+        elif content.channel in ['youtube', 'tiktok']:
+            return 'video'
+
+        return 'other'
+
+    def _check_alternative_attribution(self, content: NormalizedContent, meta: Dict) -> Dict[str, any]:
+        """
+        Check for alternative attribution methods suitable for corporate landing pages.
+
+        Looks for:
+        - Structured data (schema.org author/contributor/publisher)
+        - Meta author tags
+        - Footer attribution indicators
+        - About/credits page links
+
+        Returns:
+            Dict with keys: found (bool), score (float), evidence (str), confidence (float)
+        """
+        attribution_methods = []
+
+        # Check schema.org structured data
+        schema_org = meta.get('schema_org')
+        if schema_org:
+            try:
+                import json
+                schema_data = json.loads(schema_org) if isinstance(schema_org, str) else schema_org
+
+                # Handle both single object and list of objects
+                schema_list = schema_data if isinstance(schema_data, list) else [schema_data]
+
+                for schema_item in schema_list:
+                    if not isinstance(schema_item, dict):
+                        continue
+
+                    # Check for author
+                    if 'author' in schema_item:
+                        author = schema_item['author']
+                        if isinstance(author, dict):
+                            author_name = author.get('name', '')
+                        else:
+                            author_name = str(author)
+                        if author_name:
+                            attribution_methods.append(f"Schema.org author: {author_name}")
+
+                    # Check for contributor
+                    if 'contributor' in schema_item:
+                        contributor = schema_item['contributor']
+                        if isinstance(contributor, dict):
+                            contrib_name = contributor.get('name', '')
+                        else:
+                            contrib_name = str(contributor)
+                        if contrib_name:
+                            attribution_methods.append(f"Schema.org contributor: {contrib_name}")
+
+                    # Check for publisher
+                    if 'publisher' in schema_item:
+                        publisher = schema_item['publisher']
+                        if isinstance(publisher, dict):
+                            pub_name = publisher.get('name', '')
+                        else:
+                            pub_name = str(publisher)
+                        if pub_name:
+                            attribution_methods.append(f"Schema.org publisher: {pub_name}")
+            except:
+                pass
+
+        # Check meta author tag
+        meta_author = meta.get('author')
+        if meta_author and meta_author.lower() not in ['unknown', 'anonymous', '']:
+            attribution_methods.append(f"Meta author tag: {meta_author}")
+
+        # Check for footer attribution indicators in meta
+        footer_indicators = ['maintained_by', 'content_by', 'team', 'department']
+        for indicator in footer_indicators:
+            if indicator in meta and meta[indicator]:
+                attribution_methods.append(f"Footer attribution: {meta[indicator]}")
+
+        # Check for about/credits page links in meta
+        about_links = ['about_url', 'credits_url', 'team_url']
+        for link_key in about_links:
+            if link_key in meta and meta[link_key]:
+                attribution_methods.append(f"Credits page available: {meta[link_key]}")
+
+        # Determine score based on attribution methods found
+        if not attribution_methods:
+            return {
+                'found': False,
+                'score': 3.0,
+                'evidence': '',
+                'confidence': 0.8
+            }
+
+        # Score based on type and quantity of attribution
+        if any('Schema.org author:' in method for method in attribution_methods):
+            score = 8.0
+            confidence = 0.95
+        elif any('Meta author tag:' in method for method in attribution_methods):
+            score = 7.0
+            confidence = 0.9
+        elif any('Schema.org publisher:' in method or 'Schema.org contributor:' in method for method in attribution_methods):
+            score = 7.0
+            confidence = 0.9
+        elif any('Footer attribution:' in method for method in attribution_methods):
+            score = 6.0
+            confidence = 0.85
+        elif any('Credits page' in method for method in attribution_methods):
+            score = 6.0
+            confidence = 0.8
+        else:
+            score = 5.0
+            confidence = 0.75
+
+        evidence = "Alternative attribution found: " + "; ".join(attribution_methods[:2])  # Limit evidence length
+
+        return {
+            'found': True,
+            'score': score,
+            'evidence': evidence,
+            'confidence': confidence
+        }
 
     def _detect_c2pa_manifest(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect C2PA/CAI manifest presence"""

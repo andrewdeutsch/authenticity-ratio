@@ -173,3 +173,247 @@ class TestReadabilityDetection:
         evidence_parts = result.evidence.split()
         words_per_sent = float(evidence_parts[1])
         assert words_per_sent < 50, f"Words per sentence should be reasonable, got {words_per_sent}"
+
+
+class TestAuthorIdentityDetection:
+    """Test content-type aware author identity verification detection"""
+
+    def test_blog_with_visible_byline(self, detector):
+        """Test blog post with visible byline should score well"""
+        content = _make_content(
+            url="https://example.com/blog/my-post",
+            author="Jane Smith",
+            body="Blog content here"
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.attribute_id == "author_brand_identity_verified"
+        assert result.value == 8.0
+        assert "Visible byline present" in result.evidence
+        assert "Jane Smith" in result.evidence
+
+    def test_blog_without_byline(self, detector):
+        """Test blog post without byline should score low"""
+        content = _make_content(
+            url="https://example.com/blog/my-post",
+            author="unknown",
+            body="Blog content here"
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.value == 2.0
+        assert "Missing byline" in result.evidence
+
+    def test_article_with_byline(self, detector):
+        """Test article with visible byline should score well"""
+        content = _make_content(
+            url="https://example.com/article/news-story",
+            author="John Doe",
+            body="Article content here"
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.value == 8.0
+        assert "Visible byline present" in result.evidence
+
+    def test_landing_page_with_schema_author(self, detector):
+        """Test landing page with schema.org author should pass"""
+        import json
+        schema_data = {
+            "@context": "https://schema.org",
+            "@type": "WebPage",
+            "author": {
+                "@type": "Organization",
+                "name": "Acme Corp Marketing Team"
+            }
+        }
+        content = _make_content(
+            url="https://example.com/",
+            author="unknown",
+            body="Landing page content",
+            meta={"schema_org": json.dumps(schema_data)}
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.value == 8.0
+        assert "Schema.org author" in result.evidence
+        assert "Acme Corp Marketing Team" in result.evidence
+
+    def test_landing_page_with_schema_publisher(self, detector):
+        """Test landing page with schema.org publisher should pass"""
+        import json
+        schema_data = {
+            "@context": "https://schema.org",
+            "@type": "WebPage",
+            "publisher": {
+                "@type": "Organization",
+                "name": "Acme Corporation"
+            }
+        }
+        content = _make_content(
+            url="https://example.com/product/widget",
+            author="unknown",
+            body="Product page content",
+            meta={"schema_org": json.dumps(schema_data)}
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.value == 7.0
+        assert "Schema.org publisher" in result.evidence
+
+    def test_landing_page_with_meta_author(self, detector):
+        """Test landing page with meta author tag should pass"""
+        content = _make_content(
+            url="https://example.com/solution/enterprise",
+            author="unknown",
+            body="Solution page content",
+            meta={"author": "Enterprise Solutions Team"}
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.value == 7.0
+        assert "Meta author tag" in result.evidence
+        assert "Enterprise Solutions Team" in result.evidence
+
+    def test_landing_page_with_footer_attribution(self, detector):
+        """Test landing page with footer attribution should pass"""
+        content = _make_content(
+            url="https://example.com/",
+            author="unknown",
+            body="Home page content",
+            meta={"maintained_by": "Product Team"}
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.value == 6.0
+        assert "Footer attribution" in result.evidence
+
+    def test_landing_page_with_credits_page(self, detector):
+        """Test landing page with credits page link should pass"""
+        content = _make_content(
+            url="https://example.com/",
+            author="unknown",
+            body="Home page content",
+            meta={"about_url": "https://example.com/about"}
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.value == 6.0
+        assert "Credits page available" in result.evidence
+
+    def test_landing_page_without_attribution(self, detector):
+        """Test landing page without any attribution should get default score"""
+        content = _make_content(
+            url="https://example.com/",
+            author="unknown",
+            body="Home page content",
+            meta={}
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.value == 3.0
+        assert "No attribution found" in result.evidence
+
+    def test_explicitly_verified_author(self, detector):
+        """Test explicitly verified author should get highest score"""
+        content = _make_content(
+            url="https://example.com/blog/post",
+            author="Verified User",
+            body="Blog content",
+            meta={"author_verified": "true"}
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.value == 10.0
+        assert "Verified author" in result.evidence
+        assert result.confidence == 1.0
+
+    def test_verified_keyword_in_author(self, detector):
+        """Test author name containing 'verified' keyword"""
+        content = _make_content(
+            url="https://example.com/blog/post",
+            author="John Doe (Verified)",
+            body="Blog content"
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.value == 10.0
+        assert "Verified author" in result.evidence
+
+    def test_content_type_detection_blog(self, detector):
+        """Test content type detection for blog posts"""
+        content = _make_content(url="https://example.com/blog/my-post")
+        content_type = detector._determine_content_type(content)
+        assert content_type == 'blog'
+
+    def test_content_type_detection_article(self, detector):
+        """Test content type detection for articles"""
+        content = _make_content(url="https://example.com/article/news-story")
+        content_type = detector._determine_content_type(content)
+        assert content_type == 'article'
+
+    def test_content_type_detection_landing_page(self, detector):
+        """Test content type detection for landing pages"""
+        content = _make_content(url="https://example.com/")
+        content_type = detector._determine_content_type(content)
+        assert content_type == 'landing_page'
+
+    def test_content_type_detection_product_page(self, detector):
+        """Test content type detection for product pages"""
+        content = _make_content(url="https://example.com/product/widget")
+        content_type = detector._determine_content_type(content)
+        assert content_type == 'landing_page'
+
+    def test_schema_author_as_string(self, detector):
+        """Test schema.org author as simple string"""
+        import json
+        schema_data = {
+            "@context": "https://schema.org",
+            "@type": "Article",
+            "author": "Simple Author String"
+        }
+        content = _make_content(
+            url="https://example.com/blog/post",
+            author="unknown",
+            meta={"schema_org": json.dumps(schema_data)}
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.value >= 7.0
+        assert "Schema.org author" in result.evidence
+
+    def test_schema_org_json_ld_array(self, detector):
+        """Test schema.org data as array of objects"""
+        import json
+        schema_data = [
+            {
+                "@context": "https://schema.org",
+                "@type": "WebPage",
+                "publisher": {
+                    "@type": "Organization",
+                    "name": "Test Company"
+                }
+            }
+        ]
+        content = _make_content(
+            url="https://example.com/",
+            author="unknown",
+            meta={"schema_org": json.dumps(schema_data)}
+        )
+        result = detector._detect_author_verified(content)
+
+        assert result is not None
+        assert result.value >= 6.0
+        assert "publisher" in result.evidence.lower() or "Test Company" in result.evidence

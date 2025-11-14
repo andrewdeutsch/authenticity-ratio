@@ -178,7 +178,34 @@ def get_remedy_for_issue(issue_type: str, dimension: str) -> str:
     remedies = {
         # Provenance
         'AI vs Human Labeling Clarity': 'Add clear labels indicating whether content is AI-generated or human-created. Use schema.org markup to embed this metadata.',
-        'Author Brand Identity Verified': 'Implement author verification with clear attribution. Add structured author information using schema.org Person or Organization markup.',
+        'Author Brand Identity Verified': '''Implement appropriate author attribution based on content type:
+
+**For Blog Posts & Articles:** Add visible bylines with author names and optional author bio pages.
+
+**For Corporate Landing Pages:** Consider these options:
+• **Structured Data (Recommended):** Add schema.org markup with author/publisher info using JSON-LD format (invisible to users, visible to search engines)
+• **Meta Tags:** Add <meta name="author" content="Team/Organization"> tags
+• **Subtle Footer Attribution:** Include "Content by [Team]" or "Maintained by [Name/Team]" in page footer
+• **About/Credits Pages:** Create dedicated /about or /team page and link discretely from main pages
+• **Expandable Page Info:** Add a small "ⓘ" icon or "About this page" link showing contributors
+
+Example Schema.org markup for landing pages:
+```html
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "author": {
+    "@type": "Organization",
+    "name": "Acme Corp Marketing Team"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Acme Corporation"
+  }
+}
+</script>
+```''',
         'C2PA CAI Manifest Present': 'Implement Content Authenticity Initiative (C2PA) manifests for media files to provide cryptographic provenance.',
         'Canonical URL Matches Declared Source': 'Ensure canonical URLs match the declared source. Add proper <link rel="canonical"> tags to all pages.',
         'Digital Watermark Fingerprint Detected': 'Add digital watermarks or fingerprints to images and videos for traceability.',
