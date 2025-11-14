@@ -1032,21 +1032,26 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
 
                 # Create URLCollectionConfig for ratio enforcement
                 url_collection_config = None
-                if collection_strategy in ["brand_controlled", "both", "third_party"] and brand_domains:
-                    from ingestion.domain_classifier import URLCollectionConfig
+                if collection_strategy in ["brand_controlled", "both", "third_party"]:
+                    # For brand_controlled and both, we need brand_domains to identify brand URLs
+                    # For third_party, we can proceed with empty brand_domains (everything is 3rd party)
+                    if collection_strategy in ["brand_controlled", "both"] and not brand_domains:
+                        logger.warning(f"Cannot use {collection_strategy} strategy without brand_domains, falling back to no ratio enforcement")
+                    else:
+                        from ingestion.domain_classifier import URLCollectionConfig
 
-                    # Convert percentage to decimal ratio
-                    brand_ratio = brand_owned_ratio / 100.0
-                    third_party_ratio = 1.0 - brand_ratio
+                        # Convert percentage to decimal ratio
+                        brand_ratio = brand_owned_ratio / 100.0
+                        third_party_ratio = 1.0 - brand_ratio
 
-                    url_collection_config = URLCollectionConfig(
-                        brand_owned_ratio=brand_ratio,
-                        third_party_ratio=third_party_ratio,
-                        brand_domains=brand_domains or [],
-                        brand_subdomains=brand_subdomains or [],
-                        brand_social_handles=brand_social_handles or []
-                    )
-                    logger.info(f"Created URLCollectionConfig with {collection_strategy} strategy: {brand_ratio:.1%} brand-owned, {third_party_ratio:.1%} 3rd party")
+                        url_collection_config = URLCollectionConfig(
+                            brand_owned_ratio=brand_ratio,
+                            third_party_ratio=third_party_ratio,
+                            brand_domains=brand_domains or [],
+                            brand_subdomains=brand_subdomains or [],
+                            brand_social_handles=brand_social_handles or []
+                        )
+                        logger.info(f"Created URLCollectionConfig with {collection_strategy} strategy: {brand_ratio:.1%} brand-owned, {third_party_ratio:.1%} 3rd party")
 
                 progress_bar.progress(50)
 
