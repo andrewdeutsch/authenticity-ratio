@@ -35,6 +35,8 @@ logging.basicConfig(
     ]
 )
 
+logger = logging.getLogger(__name__)
+
 # Helper Functions
 def infer_brand_domains(brand_id: str) -> Dict[str, List[str]]:
     """
@@ -498,14 +500,16 @@ def show_analyze_page():
         with col1:
             brand_id = st.text_input(
                 "Brand ID*",
-                value="nike",
-                help="Unique identifier for the brand (e.g., 'nike', 'coca-cola')"
+                value="",
+                placeholder="e.g., nike or mastercard",
+                help="Unique identifier for the brand (e.g., 'nike', 'coca-cola'). Enter the desired brand before running analysis."
             )
 
             keywords = st.text_input(
                 "Search Keywords*",
-                value="nike",
-                help="Space-separated keywords to search for (e.g., 'nike swoosh')"
+                value="",
+                placeholder="Space-separated keywords (e.g., 'brand sustainability')",
+                help="Space-separated keywords to search for (e.g., 'nike swoosh'). Required to build the search query."
             )
 
             max_items = st.number_input(
