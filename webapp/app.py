@@ -599,7 +599,7 @@ def show_analyze_page():
 
             # Initialize session state for collection strategy if not exists
             if 'collection_strategy' not in st.session_state:
-                st.session_state['collection_strategy'] = 'both'
+                st.session_state['collection_strategy'] = 'brand_controlled'
 
             collection_strategy = st.radio(
                 "Collection Type",
@@ -703,10 +703,7 @@ def show_analyze_page():
                     brand_social_handles = inferred['social_handles']
 
                 # Show confirmation
-                if collection_strategy == "both":
-                    third_party_ratio = 100 - brand_owned_ratio
-                    st.success(f"✓ Balanced collection enabled: {brand_owned_ratio}% brand-owned / {third_party_ratio}% 3rd party")
-                else:
+                if collection_strategy == "brand_controlled":
                     st.success(f"✓ Brand-controlled collection enabled with {len(brand_domains)} auto-detected domains")
             else:
                 # No brand identification needed for 3rd party only
