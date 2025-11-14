@@ -284,23 +284,21 @@ def collect_serper_pages(
             body = content.get('body') or ''
             if body and len(body) >= min_body_length:
                 # Check if pools are full AFTER validating content.
-                # Key: only skip if BOTH conditions are true:
-                #   1. This URL's pool is full
-                #   2. The other pool is also full
-                # This allows continued searching for brand-owned URLs even if
-                # 3rd party is full, and vice versa.
+                # Skip a URL if its specific pool is full.
+                # This ensures proper filtering based on collection strategy:
+                # - Brand-Controlled only: skips all 3rd party URLs (target_third_party=0)
+                # - 3rd Party only: skips all brand-owned URLs (target_brand_owned=0)
+                # - Balanced: allows both until their respective targets are met
                 if is_brand_owned:
-                    if (len(brand_owned_collected) >= target_brand_owned and
-                        len(third_party_collected) >= target_third_party):
+                    if len(brand_owned_collected) >= target_brand_owned:
                         skip_stats['brand_owned_pool_full'] += 1
-                        logger.debug('[SERPER] Skipping brand-owned URL %s - both pools full',
+                        logger.debug('[SERPER] Skipping brand-owned URL %s - pool full',
                                    url)
                         continue
                 else:
-                    if (len(third_party_collected) >= target_third_party and
-                        len(brand_owned_collected) >= target_brand_owned):
+                    if len(third_party_collected) >= target_third_party:
                         skip_stats['third_party_pool_full'] += 1
-                        logger.debug('[SERPER] Skipping 3rd party URL %s - both pools full',
+                        logger.debug('[SERPER] Skipping 3rd party URL %s - pool full',
                                    url)
                         continue
 
