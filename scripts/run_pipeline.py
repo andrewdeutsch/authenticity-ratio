@@ -503,7 +503,7 @@ if __name__ == "__main__":
     main()
 
 
-def run_pipeline_for_contents(urls: list, output_dir: str = './output', brand_id: str = 'brand', sources: list | None = None, keywords: list | None = None, include_comments: bool | None = None, include_items_table: bool = False):
+def run_pipeline_for_contents(urls: list, output_dir: str = './output', brand_id: str = 'brand', sources: list | None = None, keywords: list | None = None, include_comments: bool | None = None, include_items_table: bool = False, brand_domains: list | None = None, brand_subdomains: list | None = None, brand_owned_ratio: float = 0.6) -> dict:
     """Run the pipeline for a set of URLs (used by the Streamlit webapp).
 
     This helper is intentionally lightweight: it will fetch each URL using
@@ -548,6 +548,83 @@ def run_pipeline_for_contents(urls: list, output_dir: str = './output', brand_id
                 platform_type='web'
             )
             fetched.append(nc)
+
+    # If brand_domains not supplied but brand_id is present, infer conservative defaults
+    if brand_domains is None and brand_id:
+        # keep inference minimal to avoid overreach
+        brand_domains = [f"{brand_id}.com", f"www.{brand_id}.com"]
+    if brand_subdomains is None and brand_id:
+        brand_subdomains = [f"blog.{brand_id}.com", f"shop.{brand_id}.com", f"store.{brand_id}.com"]
+
+    # If ratio enforcement requested, and brand-owned pages are insufficient,
+    # attempt to extract brand subpages from fetched brand-owned pages to hit target
+    try:
+        from ingestion.domain_classifier import URLCollectionConfig, classify_url, URLSourceType
+        from ingestion.brave_search import _extract_internal_links, fetch_page as _fetch_page
+        # Only attempt if we have any fetched items and a desired ratio
+        if fetched and brand_domains:
+            total_target = len(fetched)
+            config = URLCollectionConfig(
+                brand_owned_ratio=brand_owned_ratio,
+                third_party_ratio=1.0 - brand_owned_ratio,
+                brand_domains=brand_domains,
+                brand_subdomains=brand_subdomains or [],
+                brand_social_handles=[]
+            )
+
+            # Count current brand-owned items
+            brand_owned_now = 0
+            for item in fetched:
+                url = item.get('url') or item.get('platform_id') or item.get('source_url')
+                try:
+                    cl = classify_url(url, config)
+                    if cl.source_type == URLSourceType.BRAND_OWNED:
+                        brand_owned_now += 1
+                except Exception:
+                    continue
+
+            target_brand = int(total_target * config.brand_owned_ratio)
+            # If we need more brand-owned pages, try extracting subpages
+            if brand_owned_now < target_brand:
+                need = target_brand - brand_owned_now
+                # Iterate over fetched brand-owned primary pages and extract internal links
+                for item in list(fetched):
+                    if need <= 0:
+                        break
+                    url = item.get('url') or item.get('platform_id') or item.get('source_url')
+                    try:
+                        cl = classify_url(url, config)
+                        if cl.source_type != URLSourceType.BRAND_OWNED:
+                            continue
+                        # Try to extract internal links (limit per page)
+                        internal = _extract_internal_links(url, item.get('body', ''), max_links=10)
+                        for sub in internal:
+                            if need <= 0:
+                                break
+                            try:
+                                sub_page = _fetch_page(sub)
+                                body = sub_page.get('body') or ''
+                                if body and len(body) >= 200:
+                                    # attach minimal metadata similar to collectors
+                                    sub_page['source_type'] = 'brand_owned'
+                                    sub_page['source_tier'] = 'brand_subpage'
+                                    fetched.append({
+                                        'title': sub_page.get('title', ''),
+                                        'body': sub_page.get('body', ''),
+                                        'url': sub,
+                                        'terms': sub_page.get('terms', ''),
+                                        'privacy': sub_page.get('privacy', ''),
+                                        'source_type': 'brand_owned',
+                                        'source_tier': 'brand_subpage'
+                                    })
+                                    need -= 1
+                            except Exception:
+                                continue
+                    except Exception:
+                        continue
+    except Exception:
+        # If anything goes wrong in the optional enrichment step, continue gracefully
+        pass
 
     # Ingest Reddit if requested
     if 'reddit' in sources:

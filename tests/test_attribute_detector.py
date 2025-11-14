@@ -14,18 +14,20 @@ def detector():
 
 def _make_content(body="", title="", **kwargs):
     """Helper to create NormalizedContent for testing"""
-    return NormalizedContent(
+    # Prefer callers to pass `url` via kwargs to avoid duplicate keyword errors
+    init_kwargs = dict(
         content_id="test_id",
         src="test_src",
         platform_id="test_platform",
-        url="https://example.com",
         title=title,
         body=body,
         author="test_author",
         published_at="2024-01-01",
         event_ts="2024-01-01T00:00:00",
-        **kwargs
     )
+    # Merge but let explicit kwargs override defaults
+    init_kwargs.update(kwargs)
+    return NormalizedContent(**init_kwargs)
 
 
 class TestReadabilityDetection:

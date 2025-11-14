@@ -196,14 +196,32 @@ class TrustStackAttributeDetector:
                     confidence=0.9
                 )
             else:
-                return DetectedAttribute(
-                    attribute_id="author_brand_identity_verified",
-                    dimension="provenance",
-                    label="Author/brand identity verified",
-                    value=2.0,
-                    evidence="Missing byline - expected for blog/article content",
-                    confidence=1.0
-                )
+                # If no visible byline for blog/article/news, check for structured
+                # attribution (schema.org, meta tags, footer credits). Some pages
+                # embed author/publisher data in JSON-LD where the author may be
+                # a simple string; consult alternative attribution before
+                # failing the byline requirement.
+                attribution_result = self._check_alternative_attribution(content, meta)
+
+                if attribution_result['found']:
+                    # Use the attribution score (schema author/publisher or meta tag)
+                    return DetectedAttribute(
+                        attribute_id="author_brand_identity_verified",
+                        dimension="provenance",
+                        label="Author/brand identity verified",
+                        value=attribution_result['score'],
+                        evidence=attribution_result['evidence'],
+                        confidence=attribution_result['confidence']
+                    )
+                else:
+                    return DetectedAttribute(
+                        attribute_id="author_brand_identity_verified",
+                        dimension="provenance",
+                        label="Author/brand identity verified",
+                        value=2.0,
+                        evidence="Missing byline - expected for blog/article content",
+                        confidence=1.0
+                    )
 
         # For corporate landing pages, check alternative attribution methods
         elif content_type == 'landing_page':

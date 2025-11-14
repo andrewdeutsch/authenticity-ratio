@@ -149,6 +149,16 @@ class ChatClient:
                    f"Anthropic={bool(self.anthropic_api_key)}, "
                    f"Google={bool(self.google_api_key)}, "
                    f"DeepSeek={bool(self.deepseek_api_key)}")
+        # Eagerly initialize OpenAI client and require API key for local tests
+        if not self.openai_api_key:
+            raise ValueError("OpenAI API key not configured. Set OPENAI_API_KEY environment variable")
+
+        if OpenAI is not None:
+            try:
+                self.openai_client = OpenAI(api_key=self.openai_api_key)
+            except Exception:
+                # Keep None if construction fails; underlying calls will raise later
+                self.openai_client = None
 
     def _detect_provider(self, model: str) -> LLMProvider:
         """
