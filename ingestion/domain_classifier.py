@@ -112,10 +112,19 @@ KNOWN_EXPERT_DOMAINS = {
 def extract_domain_parts(url: str) -> Tuple[str, str, str]:
     """Extract domain, subdomain, and path from URL
 
+    Handles international domains with country-code TLDs (ccTLDs) like .com.au, .co.uk, etc.
+
     Returns:
         (domain, subdomain, path)
         e.g., ('nike.com', 'blog', '/article/123')
+        e.g., ('nike.com.au', 'www', '/products')
     """
+    # Common second-level ccTLDs that use format like .co.uk, .com.au
+    KNOWN_SECOND_LEVEL_TLDS = {
+        'co', 'com', 'net', 'org', 'edu', 'gov', 'ac', 'mil',
+        'ne', 'or', 'go', 'asn', 'id', 'geek'
+    }
+
     try:
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
@@ -126,10 +135,20 @@ def extract_domain_parts(url: str) -> Tuple[str, str, str]:
 
         # Handle common cases
         if len(parts) >= 2:
-            # Get the last 2 parts as the main domain
-            domain = '.'.join(parts[-2:])
-            # Everything before is subdomain
-            subdomain = '.'.join(parts[:-2]) if len(parts) > 2 else ''
+            # Check if this looks like a ccTLD (e.g., .com.au, .co.uk)
+            # Format: something.second-level.country-code
+            if (len(parts) >= 3 and
+                len(parts[-1]) == 2 and  # Last part is 2 chars (country code like 'au', 'uk')
+                parts[-2] in KNOWN_SECOND_LEVEL_TLDS):  # Second-to-last is common SLD
+                # This is a ccTLD, take last 3 parts as domain
+                # e.g., 'mastercard.com.au' from ['www', 'mastercard', 'com', 'au']
+                domain = '.'.join(parts[-3:])
+                subdomain = '.'.join(parts[:-3]) if len(parts) > 3 else ''
+            else:
+                # Regular TLD, take last 2 parts as domain
+                # e.g., 'mastercard.com' from ['www', 'mastercard', 'com']
+                domain = '.'.join(parts[-2:])
+                subdomain = '.'.join(parts[:-2]) if len(parts) > 2 else ''
         else:
             domain = netloc
             subdomain = ''
@@ -153,8 +172,28 @@ def classify_url(url: str, config: URLCollectionConfig) -> URLClassification:
     domain, subdomain, path = extract_domain_parts(url)
     full_domain = f"{subdomain}.{domain}" if subdomain else domain
 
-    # Check brand-owned domains
+    # Check brand-owned domains with flexible matching
+    # Supports exact match and international variants (e.g., nike.com matches nike.com.au)
+    is_brand_owned = False
+
+    # Check exact matches first
     if domain in config.brand_domains or full_domain in config.brand_subdomains:
+        is_brand_owned = True
+    else:
+        # Check for international variants by comparing base domains
+        # E.g., if brand_domains contains "nike.com", match "nike.com.au", "nike.co.uk"
+        for brand_domain in config.brand_domains:
+            # Remove www. prefix if present for comparison
+            brand_base = brand_domain.replace('www.', '')
+            domain_base = domain
+
+            # Check if the domain starts with the brand domain
+            # E.g., "nike.com.au" starts with "nike.com"
+            if domain_base.startswith(brand_base + '.') or domain_base == brand_base:
+                is_brand_owned = True
+                break
+
+    if is_brand_owned:
         return _classify_brand_owned(url, domain, subdomain, path, config)
 
     # Check if it's a social media URL with brand handle
