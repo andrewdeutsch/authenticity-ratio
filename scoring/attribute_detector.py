@@ -472,6 +472,10 @@ class TrustStackAttributeDetector:
 
     def _detect_engagement_trust(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect engagement-to-trust correlation"""
+        # Skip detection for content types where engagement metrics aren't applicable
+        if not self._should_have_engagement_metrics(content):
+            return None
+
         # Use engagement metrics as proxy
         upvotes = content.upvotes or 0
         rating = content.rating or 0.0
@@ -495,6 +499,65 @@ class TrustStackAttributeDetector:
             evidence=evidence,
             confidence=0.6
         )
+
+    def _should_have_engagement_metrics(self, content: NormalizedContent) -> bool:
+        """
+        Determine if engagement metrics (upvotes, ratings) are expected for this content type.
+
+        Returns False for:
+        - Job boards and career sites
+        - Corporate websites and landing pages
+        - Documentation and knowledge bases
+        - News sites (unless they have commenting systems)
+        - Government and educational sites
+        - Static informational pages
+
+        Returns True for:
+        - Social media platforms (reddit, youtube, instagram, tiktok)
+        - Marketplaces with reviews (amazon, etsy, yelp)
+        - Community forums and discussion boards
+        - Review platforms
+        """
+        # Social platforms and marketplaces always have engagement features
+        engagement_channels = {'reddit', 'youtube', 'amazon', 'instagram', 'tiktok',
+                              'facebook', 'twitter', 'yelp', 'tripadvisor', 'etsy'}
+        if content.channel.lower() in engagement_channels:
+            return True
+
+        # Platform types that typically have engagement
+        if content.platform_type.lower() in {'social', 'marketplace'}:
+            return True
+
+        # Check URL patterns for non-engagement sites
+        url_lower = content.url.lower()
+
+        # Job boards and career sites
+        job_patterns = ['careers.', 'jobs.', '/careers/', '/jobs/', 'apply.',
+                       'greenhouse.io', 'lever.co', 'workday.com', 'taleo.net',
+                       'jobvite.com', 'indeed.com', 'linkedin.com/jobs']
+        if any(pattern in url_lower for pattern in job_patterns):
+            return False
+
+        # Corporate landing pages and marketing sites
+        if content.platform_type.lower() == 'owned' and content.source_type.lower() == 'brand_owned':
+            # Brand-owned content typically doesn't have engagement features
+            # unless it's explicitly a community or review section
+            if not any(keyword in url_lower for keyword in ['/reviews/', '/community/', '/forum/', '/comments/']):
+                return False
+
+        # Documentation and knowledge bases
+        doc_patterns = ['docs.', '/docs/', '/documentation/', 'developer.', '/api/',
+                       'help.', '/help/', 'support.', '/kb/', 'wiki.']
+        if any(pattern in url_lower for pattern in doc_patterns):
+            return False
+
+        # Government and educational sites (typically informational)
+        if any(domain in url_lower for domain in ['.gov', '.edu', '.mil']):
+            return False
+
+        # Default to True if we can't determine - let the metric run
+        # This is conservative: we'd rather have false positives than miss real engagement issues
+        return True
 
     def _detect_multimodal_consistency(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect multimodal consistency (placeholder)"""
