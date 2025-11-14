@@ -100,12 +100,12 @@
       "source_row": {
         "Unified Dimension": "Provenance",
         "Attribute (Objective Signal)": "Author/brand identity verified",
-        "How to Collect (API/Scrape)": "Extract byline; cross-check against verified accounts",
-        "Field Type": "boolean",
-        "Scoring Rule (1\u201310)": "10 if verified; 3 if unknown",
-        "Thresholds / Flags": "Flag: unknown author",
-        "Frequency": "per article",
-        "Notes / Example Tools": "Twitter/X, LinkedIn, site schema.org/Person",
+        "How to Collect (API/Scrape)": "Content-type aware detection: Extract visible byline for blog/article content; check schema.org author/publisher, meta tags, or footer attribution for landing pages",
+        "Field Type": "categorical",
+        "Scoring Rule (1\u201310)": "10 if explicitly verified; 8 if visible byline (blog/article) or schema.org author; 7 if meta author tag or schema.org publisher; 6 if footer attribution or credits page; 3 if unknown; 2 if missing for blog/article content",
+        "Thresholds / Flags": "Flag: missing byline on blog/article; no attribution on landing page",
+        "Frequency": "per page",
+        "Notes / Example Tools": "Twitter/X, LinkedIn, schema.org/Person, schema.org/Organization, meta author tags, footer credits",
         "Modality": "",
         "Channel/ Platform": "",
         "Ecosystem (Owned/Social/Marketplace/Email)": ""
@@ -115,9 +115,9 @@
         "type": "categorical",
         "min_value": 1,
         "max_value": 10,
-        "description": "10 if verified; 3 if unknown"
+        "description": "10 if explicitly verified; 8 if visible byline or schema.org author; 7 if meta author or schema.org publisher/contributor; 6 if footer attribution or credits page; 3 if unknown; 2 if missing for blog/article"
       },
-      "detection_method": "Extract byline; cross-check against verified accounts"
+      "detection_method": "Content-type aware: Visible byline for articles/blogs; schema.org author/publisher/contributor, meta author tags, or footer attribution for landing pages"
     },
     {
       "id": "c2pa_cai_manifest_present",
