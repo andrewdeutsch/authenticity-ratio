@@ -172,26 +172,64 @@ def classify_url(url: str, config: URLCollectionConfig) -> URLClassification:
     domain, subdomain, path = extract_domain_parts(url)
     full_domain = f"{subdomain}.{domain}" if subdomain else domain
 
+    # Helper function to extract brand name from domain
+    def extract_brand_name(domain_str: str) -> str:
+        """Extract brand name from domain (part before TLD)
+
+        Examples:
+            'mastercard.com' -> 'mastercard'
+            'mastercard.co.uk' -> 'mastercard'
+            'mastercard.com.au' -> 'mastercard'
+            'www.mastercard.com' -> 'mastercard'
+        """
+        # Remove www. prefix
+        clean_domain = domain_str.replace('www.', '')
+        # Take first part before any dot
+        return clean_domain.split('.')[0]
+
     # Check brand-owned domains with flexible matching
-    # Supports exact match and international variants (e.g., nike.com matches nike.com.au)
+    # Supports exact match and international variants (e.g., nike.com matches nike.com.au, nike.co.uk)
     is_brand_owned = False
 
     # Check exact matches first
     if domain in config.brand_domains or full_domain in config.brand_subdomains:
         is_brand_owned = True
     else:
-        # Check for international variants by comparing base domains
+        # Check for international variants by comparing brand names
         # E.g., if brand_domains contains "nike.com", match "nike.com.au", "nike.co.uk"
-        for brand_domain in config.brand_domains:
-            # Remove www. prefix if present for comparison
-            brand_base = brand_domain.replace('www.', '')
-            domain_base = domain
+        url_brand_name = extract_brand_name(domain)
 
-            # Check if the domain starts with the brand domain
-            # E.g., "nike.com.au" starts with "nike.com"
-            if domain_base.startswith(brand_base + '.') or domain_base == brand_base:
+        # Check domain-level matching
+        for brand_domain in config.brand_domains:
+            brand_name = extract_brand_name(brand_domain)
+
+            # Match if brand names are the same
+            # This handles: mastercard.com == mastercard.co.uk == mastercard.com.au
+            if url_brand_name == brand_name:
                 is_brand_owned = True
+                logger.debug('[CLASSIFIER] Matched %s to brand domain %s (brand name: %s)',
+                           domain, brand_domain, brand_name)
                 break
+
+        # Also check subdomain-level matching if we have a subdomain
+        # E.g., shop.nike.com should match shop.nike.co.uk
+        if not is_brand_owned and subdomain:
+            for brand_subdomain in config.brand_subdomains:
+                # Extract subdomain and domain parts from the brand_subdomain
+                brand_sub_parts = brand_subdomain.split('.')
+                if len(brand_sub_parts) >= 3:
+                    # Get subdomain part (e.g., "shop" from "shop.nike.com")
+                    brand_sub = brand_sub_parts[0]
+                    # Get domain part (e.g., "nike.com" from "shop.nike.com")
+                    brand_dom = '.'.join(brand_sub_parts[1:])
+                    brand_name = extract_brand_name(brand_dom)
+
+                    # Match if both subdomain and brand name match
+                    if subdomain == brand_sub and url_brand_name == brand_name:
+                        is_brand_owned = True
+                        logger.debug('[CLASSIFIER] Matched %s.%s to brand subdomain %s',
+                                   subdomain, domain, brand_subdomain)
+                        break
 
     if is_brand_owned:
         return _classify_brand_owned(url, domain, subdomain, path, config)
