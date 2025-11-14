@@ -22,8 +22,13 @@ import time
 from datetime import datetime
 from typing import Dict, List, Any
 import glob as file_glob
+import re
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse
 
 from config.settings import APIConfig
+from scoring.llm_client import ChatClient
 
 # Configure logging for the webapp
 import logging
@@ -163,6 +168,69 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
                 })
 
     return dimension_issues
+
+
+def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str = 'gpt-4o-mini', max_urls: int = 10) -> List[str]:
+    """
+    Ask an LLM to enumerate likely brand-owned URLs for the given brand.
+
+    Args:
+        brand_id: Brand identifier
+        keywords: Search keywords to provide context
+        model: LLM model to use
+        max_urls: Maximum number of URLs to return
+
+    Returns:
+        List of unique URLs extracted from the LLM response
+    """
+    prompt = (
+        f"Provide up to {max_urls} canonical brand-owned URLs for {brand_id}. "
+        f"Include the most relevant domains/subdomains and any investor/careers/brand pages that belong to {brand_id}. "
+        "Return only the URLs (one per line), without numbering or explanations."
+    )
+    try:
+        client = ChatClient(default_model=model)
+        messages = [
+            {'role': 'system', 'content': 'You are a helpful research assistant.'},
+            {'role': 'user', 'content': prompt}
+        ]
+        response = client.chat(messages=messages, max_tokens=512)
+        text = response.get('content') or response.get('text') or ''
+        url_candidates = re.findall(r'https?://[\w\-\.\/%\?&=#:]+', text)
+        unique_urls = []
+        for url in url_candidates:
+            clean_url = url.strip().rstrip('.,;')
+            if clean_url not in unique_urls:
+                unique_urls.append(clean_url)
+            if len(unique_urls) >= max_urls:
+                break
+        return unique_urls
+    except Exception as exc:
+        logger.warning('LLM brand URL suggestion failed: %s', exc)
+        return []
+
+
+def fetch_page_title(url: str, timeout: float = 5.0) -> str:
+    """Retrieve a human-readable title for a given URL, falling back to hostname."""
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (compatible; TrustStackBot/1.0; +https://example.com/bot)'
+    }
+    try:
+        response = requests.get(url, timeout=timeout, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        title_tag = soup.title
+        if title_tag and title_tag.string:
+            title = title_tag.string.strip()
+            if title:
+                return title
+    except Exception as exc:
+        logger.debug('Unable to fetch title for %s: %s', url, exc)
+
+    parsed = urlparse(url)
+    hostname = parsed.hostname or url
+    return hostname
 
 
 def get_remedy_for_issue(issue_type: str, dimension: str) -> str:
@@ -568,7 +636,12 @@ def show_analyze_page():
                 )
 
             # Web search settings
-            use_web_search = st.checkbox("🌐 Enable Web Search", value=True, help="Search web content via selected provider")
+            use_web_search = st.checkbox(
+                "🌐 Enable Web Search",
+                value=False,
+                disabled=True,
+                help="Temporarily disabled while the LLM-driven URL finder is in use."
+            )
             # Use max_items for web pages to fetch (removed separate input to avoid confusion)
             web_pages = max_items if use_web_search else max_items
 
@@ -780,7 +853,7 @@ def show_analyze_page():
 
         col_search, col_submit, col_clear = st.columns([1, 1, 3])
         with col_search:
-            search_urls = st.form_submit_button("🔍 Search URLs", use_container_width=True)
+            search_urls = st.form_submit_button("🔍 Find URLs (LLM)", use_container_width=True)
         with col_submit:
             submit = st.form_submit_button("▶️ Run Analysis", type="primary", use_container_width=True)
         with col_clear:
@@ -796,23 +869,29 @@ def show_analyze_page():
             st.error("⚠️ Brand ID and Keywords are required")
             return
 
-        # Build sources list
-        sources = []
-        if use_web_search:
-            sources.append('web')
-        if use_reddit:
-            sources.append('reddit')
-        if use_youtube:
-            sources.append('youtube')
+        st.info("LLM-driven URL discovery is in progress. This uses ChatGPT to enumerate brand-owned domains.")
+        llm_urls = suggest_brand_urls_from_llm(brand_id, keywords.split(), model=summary_model, max_urls=web_pages)
 
-        if not sources:
-            st.error("⚠️ Please select at least one data source")
+        if not llm_urls:
+            st.warning("No brand URLs were returned by the LLM. Try a different brand or provide more keywords.")
             return
 
-        # Search for URLs without running analysis
-        search_for_urls(brand_id, keywords.split(), sources, web_pages, search_provider,
-                       brand_domains, brand_subdomains, brand_social_handles,
-                       collection_strategy, brand_owned_ratio)
+        found_urls = []
+        for url in llm_urls:
+            title = fetch_page_title(url)
+            found_urls.append({
+                'url': url,
+                'title': title,
+                'description': 'Provided by LLM',
+                'is_brand_owned': True,
+                'source_type': 'brand_owned',
+                'source_tier': 'primary_website',
+                'classification_reason': 'LLM-suggested brand URL',
+                'selected': True
+            })
+
+        st.session_state['found_urls'] = found_urls
+        st.success(f"✓ Found {len(found_urls)} brand-owned URLs via LLM")
 
     # Display found URLs for selection
     if 'found_urls' in st.session_state and st.session_state['found_urls']:
