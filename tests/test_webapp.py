@@ -3,6 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from webapp.app import classify_brand_url
+
 
 def test_programmatic_quick_run_monkeypatched(tmp_path, monkeypatch):
     """Ensure programmatic_quick_run returns the expected shape and uses run_pipeline_for_contents."""
@@ -37,3 +39,12 @@ def test_programmatic_quick_run_monkeypatched(tmp_path, monkeypatch):
     assert res['run_id'] == fake_result['run_id']
     assert res['items'] == fake_result['items']
     assert os.path.exists(outdir)
+
+
+def test_classify_brand_url_primary_vs_subdomain():
+    brand_domains = ['mastercard.com', 'www.mastercard.com']
+
+    assert classify_brand_url('https://mastercard.com', 'Mastercard', brand_domains) == 'primary'
+    assert classify_brand_url('https://mastercard.co.uk', 'Mastercard', brand_domains) == 'primary'
+    assert classify_brand_url('https://www.mastercard.com/about', 'Mastercard', brand_domains) == 'primary'
+    assert classify_brand_url('https://investor.mastercard.com', 'Mastercard', brand_domains) == 'subdomain'

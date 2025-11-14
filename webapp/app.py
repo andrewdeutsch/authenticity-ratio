@@ -170,7 +170,8 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
     return dimension_issues
 
 
-def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str = 'gpt-4o-mini', max_urls: int = 10) -> List[str]:
+def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str = 'gpt-4o-mini', max_urls: int = 10,
+                               brand_domains: List[str] = None) -> List[Dict[str, Any]]:
     """
     Ask an LLM to enumerate likely brand-owned URLs for the given brand.
 
@@ -181,11 +182,12 @@ def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str =
         max_urls: Maximum number of URLs to return
 
     Returns:
-        List of unique URLs extracted from the LLM response
+        Ordered list of dictionaries with keys `url` and `is_primary`, where primary entries come first
     """
     prompt = (
         f"Provide up to {max_urls} canonical brand-owned URLs for {brand_id}. "
-        f"Include the most relevant domains/subdomains and any investor/careers/brand pages that belong to {brand_id}. "
+        f"Include the most relevant primary domains first, followed by any supporting subdomains and country-specific pages that belong to {brand_id}. "
+        "Highlight international domains (e.g., .com.au, .co.uk, .ca, .de) as well as global brand hubs. "
         "Return only the URLs (one per line), without numbering or explanations."
     )
     try:
@@ -204,10 +206,43 @@ def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str =
                 unique_urls.append(clean_url)
             if len(unique_urls) >= max_urls:
                 break
-        return unique_urls
+
+        primary_urls: List[Dict[str, Any]] = []
+        subdomain_urls: List[Dict[str, Any]] = []
+
+        for url in unique_urls:
+            is_primary = classify_brand_url(url, brand_id, brand_domains) == 'primary'
+            entry = {'url': url, 'is_primary': is_primary}
+            if is_primary:
+                primary_urls.append(entry)
+            else:
+                subdomain_urls.append(entry)
+
+        return primary_urls + subdomain_urls
     except Exception as exc:
         logger.warning('LLM brand URL suggestion failed: %s', exc)
         return []
+
+
+def classify_brand_url(url: str, brand_id: str, brand_domains: List[str] = None) -> str:
+    """Label a brand URL as primary or a supporting subdomain."""
+
+    parsed = urlparse(url)
+    host = (parsed.hostname or '').lower()
+    if not host:
+        return 'subdomain'
+
+    stripped_host = host[4:] if host.startswith('www.') else host
+    normalized_domains = {d.lower().lstrip('www.') for d in (brand_domains or []) if d}
+    brand_slug = re.sub(r'[^a-z0-9]', '', brand_id.lower())
+
+    if stripped_host in normalized_domains:
+        return 'primary'
+    if brand_slug:
+        if stripped_host == brand_slug or stripped_host.startswith(f"{brand_slug}."):
+            return 'primary'
+
+    return 'subdomain'
 
 
 def fetch_page_title(url: str, timeout: float = 5.0) -> str:
@@ -870,14 +905,21 @@ def show_analyze_page():
             return
 
         st.info("LLM-driven URL discovery is in progress. This uses ChatGPT to enumerate brand-owned domains.")
-        llm_urls = suggest_brand_urls_from_llm(brand_id, keywords.split(), model=summary_model, max_urls=web_pages)
+        llm_urls = suggest_brand_urls_from_llm(
+            brand_id,
+            keywords.split(),
+            model=summary_model,
+            max_urls=web_pages,
+            brand_domains=brand_domains
+        )
 
         if not llm_urls:
             st.warning("No brand URLs were returned by the LLM. Try a different brand or provide more keywords.")
             return
 
         found_urls = []
-        for url in llm_urls:
+        for url_info in llm_urls:
+            url = url_info['url']
             title = fetch_page_title(url)
             found_urls.append({
                 'url': url,
@@ -885,8 +927,8 @@ def show_analyze_page():
                 'description': 'Provided by LLM',
                 'is_brand_owned': True,
                 'source_type': 'brand_owned',
-                'source_tier': 'primary_website',
-                'classification_reason': 'LLM-suggested brand URL',
+                'source_tier': 'primary_website' if url_info.get('is_primary') else 'brand_subdomain',
+                'classification_reason': 'LLM-suggested brand URL (primary)' if url_info.get('is_primary') else 'LLM-suggested brand URL (subdomain)',
                 'selected': True
             })
 
