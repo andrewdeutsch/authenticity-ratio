@@ -1384,48 +1384,11 @@ def show_analyze_page():
             count = st.session_state.get('llm_search_fallback_count', 0)
             st.info(f"Web search fallback was used — found {count} verified URLs via configured search provider.")
 
-        if not llm_urls:
-            st.warning("No brand URLs were returned by the LLM. Try a different brand or provide more keywords.")
-            return
-
         # If the LLM returned nothing (e.g. no verified URLs were found),
-        # provide a fallback by showing raw LLM candidates so the user can
-        # inspect and optionally verify them.
+        # the web search fallback should have already been triggered in suggest_brand_urls_from_llm
         if not llm_urls:
-            st.warning("No brand URLs were returned by the LLM. Showing raw candidates for debugging...")
-            raw_candidates = enumerate_brand_urls_from_llm_raw(brand_id, keywords.split(), model=summary_model, candidate_limit=100)
-            if raw_candidates:
-                with st.expander("🔎 LLM Raw Candidate URLs (unverified)"):
-                    for rc in raw_candidates:
-                        st.markdown(rc)
-
-                    if st.button("✅ Verify these candidates"):
-                        verified = []
-                        for rc in raw_candidates:
-                            if verify_url(rc, brand_id):
-                                verified.append(rc)
-                        if not verified:
-                            st.warning("None of the raw candidates verified successfully. Try changing keywords or re-running LLM with broader prompt.")
-                        else:
-                            st.success(f"Verified {len(verified)} candidates")
-                            found_urls = []
-                            for url in verified:
-                                found_urls.append({
-                                    'url': url,
-                                    'title': fetch_page_title(url, brand_id),
-                                    'description': 'Provided by LLM (raw, verified after re-check)',
-                                    'is_brand_owned': True,
-                                    'source_type': 'brand_owned',
-                                    'source_tier': 'primary_website' if classify_brand_url(url, brand_id, brand_domains) == 'primary' else 'brand_subdomain',
-                                    'classification_reason': 'LLM-suggested (verified after re-check)',
-                                    'verified': True,
-                                    'is_promotional': is_promotional_url(url),
-                                    'synthesized': False,
-                                    'selected': True
-                                })
-                            st.session_state['found_urls'] = found_urls
-            else:
-                st.warning("LLM didn't provide any raw URL candidates either. Try less constrained keywords or a different summary model.")
+            st.warning("⚠️ No brand URLs were returned. The LLM and web search fallback found no verified URLs.")
+            st.info("💡 **Try:**\n- Different or broader keywords\n- Check if the brand domain exists and is accessible\n- Verify your search provider API keys are configured")
             return
 
         found_urls = []
