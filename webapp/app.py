@@ -20,7 +20,7 @@ import pandas as pd
 import json
 import time
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import glob as file_glob
 import re
 import requests
@@ -245,8 +245,37 @@ def classify_brand_url(url: str, brand_id: str, brand_domains: List[str] = None)
     return 'subdomain'
 
 
-def fetch_page_title(url: str, timeout: float = 5.0) -> str:
-    """Retrieve a human-readable title for a given URL, falling back to hostname."""
+def normalize_international_url(url: str, brand_id: str) -> Optional[str]:
+    """Rewrite invalid brand hosts like `brand.com.xx` to `brand.xx` if sensible."""
+
+    parsed = urlparse(url)
+    host = (parsed.hostname or '').lower()
+    if not host:
+        return None
+
+    brand_slug = re.sub(r'[^a-z0-9]', '', brand_id.lower())
+    if not brand_slug:
+        return None
+
+    if host.startswith('www.'):
+        prefix = 'www.'
+        stripped = host[4:]
+    else:
+        prefix = ''
+        stripped = host
+
+    if stripped.startswith(f"{brand_slug}.com.") and stripped.count('.') >= 2:
+        parts = stripped.split('.')
+        normalized = '.'.join([parts[0]] + parts[2:])
+        new_host = f"{prefix}{normalized}"
+        parsed = parsed._replace(netloc=new_host)
+        return parsed.geturl()
+
+    return None
+
+
+def fetch_page_title(url: str, brand_id: str = '', timeout: float = 5.0) -> str:
+    """Retrieve a human-readable title for a given URL, fallback to hostname, and handle hostname mismatches."""
 
     headers = {
         'User-Agent': 'Mozilla/5.0 (compatible; TrustStackBot/1.0; +https://example.com/bot)'
@@ -260,9 +289,23 @@ def fetch_page_title(url: str, timeout: float = 5.0) -> str:
             title = title_tag.string.strip()
             if title:
                 return title
+    except requests.exceptions.SSLError as exc:
+        logger.debug('SSL error fetching %s: %s', url, exc)
+        normalized_url = normalize_international_url(url, brand_id)
+        if normalized_url and normalized_url != url:
+            logger.info('Retrying with normalized host: %s', normalized_url)
+            return fetch_page_title(normalized_url, brand_id, timeout)
+        return _fallback_title(url)
     except Exception as exc:
         logger.debug('Unable to fetch title for %s: %s', url, exc)
+        return _fallback_title(url)
 
+    parsed = urlparse(url)
+    hostname = parsed.hostname or url
+    return hostname
+
+
+def _fallback_title(url: str) -> str:
     parsed = urlparse(url)
     hostname = parsed.hostname or url
     return hostname
@@ -920,7 +963,7 @@ def show_analyze_page():
         found_urls = []
         for url_info in llm_urls:
             url = url_info['url']
-            title = fetch_page_title(url)
+            title = fetch_page_title(url, brand_id)
             found_urls.append({
                 'url': url,
                 'title': title,
