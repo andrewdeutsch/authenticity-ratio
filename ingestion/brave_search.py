@@ -872,6 +872,7 @@ def collect_brave_pages(
     target_count: int = 10,
     pool_size: int | None = None,
     min_body_length: int = 200,
+    min_brand_body_length: int | None = None,
     url_collection_config: 'URLCollectionConfig' | None = None
 ) -> List[Dict[str, str]]:
     """Collect up to `target_count` successfully fetched pages for a Brave search query.
@@ -881,7 +882,8 @@ def collect_brave_pages(
     - If url_collection_config is provided, enforces brand-owned vs 3rd party ratio
     - Iterate results in order, skip URLs disallowed by robots.txt.
     - Attempt to fetch each allowed URL via `fetch_page` and only count pages whose
-      `body` length >= `min_body_length` as successful.
+      `body` length >= min_body_length as successful.
+    - Brand-owned URLs can use a lower threshold (min_brand_body_length) if specified
     - Stop once `target_count` successful pages are collected or the pool is exhausted.
 
     This function honors robots.txt directives and will not fetch pages explicitly
@@ -891,11 +893,16 @@ def collect_brave_pages(
         query: Search query
         target_count: Target number of pages to collect
         pool_size: Number of search results to request
-        min_body_length: Minimum body length for a page to be considered valid
+        min_body_length: Minimum body length for third-party pages (default: 200)
+        min_brand_body_length: Minimum body length for brand-owned pages (default: 50, lower threshold)
         url_collection_config: Optional ratio enforcement configuration
     """
     if pool_size is None:
         pool_size = max(30, target_count * 3)
+
+    # Default brand threshold to 50 bytes if not specified (more lenient for brand landing pages)
+    if min_brand_body_length is None:
+        min_brand_body_length = 50
 
     # Import classifier here to avoid circular imports
     if url_collection_config:
@@ -1022,9 +1029,11 @@ def collect_brave_pages(
                 continue
 
             # Attempt to fetch and only count if body meets minimum length
+            # Use lower threshold for brand-owned URLs (landing pages often have less text)
             content = fetch_page(url)
             body = content.get('body') or ''
-            if body and len(body) >= min_body_length:
+            required_length = min_brand_body_length if is_brand_owned else min_body_length
+            if body and len(body) >= required_length:
                 # Check if pools are full AFTER validating content.
                 # Skip a URL if its specific pool is full.
                 # This ensures proper filtering based on collection strategy:
@@ -1116,7 +1125,8 @@ def collect_brave_pages(
         logger.info('[BRAVE] Skip reasons:')
         logger.info('[BRAVE]   - No URL: %d', skip_stats['no_url'])
         logger.info('[BRAVE]   - Robots.txt blocked: %d', skip_stats['robots_txt'])
-        logger.info('[BRAVE]   - Thin/empty content (<%d bytes): %d', min_body_length, skip_stats['thin_content'])
+        logger.info('[BRAVE]   - Thin/empty content (brand <%d bytes, 3rd party <%d bytes): %d',
+                   min_brand_body_length, min_body_length, skip_stats['thin_content'])
         logger.info('[BRAVE]   - Brand-owned pool full: %d', skip_stats['brand_owned_pool_full'])
         logger.info('[BRAVE]   - 3rd party pool full: %d', skip_stats['third_party_pool_full'])
         logger.info('[BRAVE] ═══════════════════════════════════════════════════════════')
