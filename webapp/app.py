@@ -1136,7 +1136,7 @@ def show_analyze_page():
                 "🌐 Enable Web Search",
                 value=True,
                 disabled=False,
-                help="Enable web-search fallback when the LLM-driven URL finder returns no verified results."
+                help="Enable web search to find and collect URLs for analysis."
             )
             # Use max_items for web pages to fetch (removed separate input to avoid confusion)
             web_pages = max_items if use_web_search else max_items
@@ -1349,7 +1349,7 @@ def show_analyze_page():
 
         col_search, col_submit, col_clear = st.columns([1, 1, 3])
         with col_search:
-            search_urls = st.form_submit_button("🔍 Find URLs (LLM)", use_container_width=True)
+            search_urls = st.form_submit_button("🔍 Search URLs", use_container_width=True)
         with col_submit:
             submit = st.form_submit_button("▶️ Run Analysis", type="primary", use_container_width=True)
         with col_clear:
@@ -1370,59 +1370,23 @@ def show_analyze_page():
             st.error("⚠️ Brand ID and Keywords are required")
             return
 
-        st.info("LLM-driven URL discovery is in progress. This uses ChatGPT to enumerate brand-owned domains.")
-        llm_urls = suggest_brand_urls_from_llm(
-            brand_id,
-            keywords.split(),
-            model=summary_model,
-            max_urls=web_pages,
-            brand_domains=brand_domains
-        )
+        # Build sources list
+        sources = []
+        if use_web_search:
+            sources.append('web')
+        if use_reddit:
+            sources.append('reddit')
+        if use_youtube:
+            sources.append('youtube')
 
-        # If the LLM flow triggered the web-search fallback, show a small banner
-        if st.session_state.get('llm_search_fallback'):
-            count = st.session_state.get('llm_search_fallback_count', 0)
-            st.info(f"Web search fallback was used — found {count} verified URLs via configured search provider.")
-
-        # If the LLM returned nothing (e.g. no verified URLs were found),
-        # the web search fallback should have already been triggered in suggest_brand_urls_from_llm
-        if not llm_urls:
-            st.warning("⚠️ No brand URLs were returned. The LLM and web search fallback found no verified URLs.")
-            st.info("💡 **Try:**\n- Different or broader keywords\n- Check if the brand domain exists and is accessible\n- Verify your search provider API keys are configured")
+        if not sources:
+            st.error("⚠️ Please select at least one data source")
             return
 
-        found_urls = []
-        for url_info in llm_urls:
-            url = url_info['url']
-            title = fetch_page_title(url, brand_id)
-            found_urls.append({
-                'url': url,
-                'title': title,
-                'description': 'Provided by LLM',
-                'is_brand_owned': True,
-                'source_type': 'brand_owned',
-                'source_tier': 'primary_website' if url_info.get('is_primary') else 'brand_subdomain',
-                'classification_reason': 'LLM-suggested brand URL (primary)' if url_info.get('is_primary') else 'LLM-suggested brand URL (subdomain)',
-                'is_promotional': is_promotional_url(url),
-                'synthesized': url_info.get('synthesized', False),
-                'selected': True
-            })
-
-        st.session_state['found_urls'] = found_urls
-
-        # Show quick metrics about promotional and synthesized URLs
-        total = len(found_urls)
-        promo_count = sum(1 for u in found_urls if u.get('is_promotional'))
-        synthesized_count = sum(1 for u in found_urls if u.get('synthesized'))
-        llm_returned = total - synthesized_count
-
-        mcol1, mcol2, mcol3, mcol4 = st.columns(4)
-        mcol1.metric("Total URLs", str(total))
-        mcol2.metric("Promotional URLs", f"{promo_count} ({(promo_count/total*100):.0f}% )" if total else "0")
-        mcol3.metric("Synthesized URLs", str(synthesized_count))
-        mcol4.metric("LLM Returned", str(llm_returned))
-
-        st.success(f"✓ Found {len(found_urls)} brand-owned URLs via LLM")
+        # Search for URLs without running analysis
+        search_for_urls(brand_id, keywords.split(), sources, web_pages, search_provider,
+                       brand_domains, brand_subdomains, brand_social_handles,
+                       collection_strategy, brand_owned_ratio)
 
     # Display found URLs for selection
     if 'found_urls' in st.session_state and st.session_state['found_urls']:
