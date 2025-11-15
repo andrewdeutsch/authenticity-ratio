@@ -182,6 +182,7 @@ def collect_serper_pages(
     target_count: int = 10,
     pool_size: int | None = None,
     min_body_length: int = 200,
+    min_brand_body_length: int | None = None,
     url_collection_config: 'URLCollectionConfig' | None = None
 ) -> List[Dict[str, str]]:
     """Collect up to `target_count` successfully fetched pages from Serper search.
@@ -190,14 +191,16 @@ def collect_serper_pages(
     - Request `pool_size` search results (defaults to max(30, target_count*3)).
     - If url_collection_config is provided, enforces brand-owned vs 3rd party ratio
     - Iterate results in order and fetch page content
-    - Only count pages whose `body` length >= `min_body_length` as successful
+    - Only count pages whose `body` length >= min_body_length as successful
+    - Brand-owned URLs can use a lower threshold (min_brand_body_length) if specified
     - Stop once `target_count` successful pages are collected or the pool is exhausted
 
     Args:
         query: Search query
         target_count: Target number of pages to collect
         pool_size: Number of search results to request
-        min_body_length: Minimum body length for a page to be considered valid
+        min_body_length: Minimum body length for third-party pages (default: 200)
+        min_brand_body_length: Minimum body length for brand-owned pages (default: 50, lower threshold)
         url_collection_config: Optional ratio enforcement configuration
 
     Returns:
@@ -208,6 +211,10 @@ def collect_serper_pages(
 
     if pool_size is None:
         pool_size = max(30, target_count * 3)
+
+    # Default brand threshold to 50 bytes if not specified (more lenient for brand landing pages)
+    if min_brand_body_length is None:
+        min_brand_body_length = 50
 
     # Import classifier here to avoid circular imports
     if url_collection_config:
@@ -280,9 +287,11 @@ def collect_serper_pages(
             is_brand_owned = classification.source_type == URLSourceType.BRAND_OWNED
 
             # Attempt to fetch and only count if body meets minimum length
+            # Use lower threshold for brand-owned URLs (landing pages often have less text)
             content = fetch_page(url)
             body = content.get('body') or ''
-            if body and len(body) >= min_body_length:
+            required_length = min_brand_body_length if is_brand_owned else min_body_length
+            if body and len(body) >= required_length:
                 # Check if pools are full AFTER validating content.
                 # Skip a URL if its specific pool is full.
                 # This ensures proper filtering based on collection strategy:
@@ -336,7 +345,8 @@ def collect_serper_pages(
                                         subpage_content = fetch_page(subpage_url)
                                         subpage_body = subpage_content.get('body') or ''
 
-                                        if subpage_body and len(subpage_body) >= min_body_length:
+                                        # Subpages are brand-owned, use lower threshold
+                                        if subpage_body and len(subpage_body) >= min_brand_body_length:
                                             subpage_content['source_type'] = 'brand_owned'
                                             subpage_content['source_tier'] = 'brand_subpage'
                                             brand_owned_collected.append(subpage_content)
@@ -356,7 +366,7 @@ def collect_serper_pages(
             else:
                 skip_stats['thin_content'] += 1
                 logger.debug('[SERPER] Skipping %s - thin/empty content (len=%s, min=%d) [%s]',
-                           url, len(body), min_body_length,
+                           url, len(body), required_length,
                            'brand-owned' if is_brand_owned else '3rd party')
 
         # Combine results
@@ -375,7 +385,8 @@ def collect_serper_pages(
         logger.info('[SERPER] ───────────────────────────────────────────────────────────')
         logger.info('[SERPER] Skip reasons:')
         logger.info('[SERPER]   - No URL: %d', skip_stats['no_url'])
-        logger.info('[SERPER]   - Thin/empty content (<%d bytes): %d', min_body_length, skip_stats['thin_content'])
+        logger.info('[SERPER]   - Thin/empty content (brand <%d bytes, 3rd party <%d bytes): %d',
+                   min_brand_body_length, min_body_length, skip_stats['thin_content'])
         logger.info('[SERPER]   - Brand-owned pool full: %d', skip_stats['brand_owned_pool_full'])
         logger.info('[SERPER]   - 3rd party pool full: %d', skip_stats['third_party_pool_full'])
         logger.info('[SERPER] ═══════════════════════════════════════════════════════════')
