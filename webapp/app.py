@@ -170,6 +170,74 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
     return dimension_issues
 
 
+ENGLISH_DOMAIN_SUFFIXES = (
+    '.com',
+    '.us',
+    '.ca',
+    '.co.uk',
+    '.com.au',
+    '.ie',
+    '.nz',
+    '.sg',
+    '.co.nz',
+    '.com.sg',
+    '.com.my',
+    '.com.ph'
+)
+
+ENGLISH_COUNTRY_SUFFIXES = tuple(s for s in ENGLISH_DOMAIN_SUFFIXES if s != '.com')
+
+PROMOTIONAL_SUBPATHS = [
+    '/about', '/about-us', '/press', '/press-room', '/newsroom', '/stories', '/careers',
+    '/investor-relations', '/sustainability', '/insights', '/promotions', '/offers', '/events'
+]
+
+
+def normalize_brand_slug(brand_id: str) -> str:
+    return re.sub(r'[^a-z0-9]', '', brand_id.lower())
+
+
+def extract_hostname(url: str) -> str:
+    return (urlparse(url).hostname or '').lower()
+
+
+def is_english_host(url: str) -> bool:
+    host = extract_hostname(url)
+    return any(host.endswith(suffix) for suffix in ENGLISH_DOMAIN_SUFFIXES)
+
+
+def find_main_american_url(entries: List[Dict[str, Any]], brand_id: str) -> Optional[str]:
+    slug = normalize_brand_slug(brand_id)
+    for entry in entries:
+        host = extract_hostname(entry['url'])
+        if host.endswith('.com') and slug and slug in host:
+            return entry['url']
+        if host.endswith('.com') and host.startswith('www.'):
+            return entry['url']
+    return None
+
+
+def has_country_variants(entries: List[Dict[str, Any]], main_url: str) -> bool:
+    main_host = extract_hostname(main_url)
+    for entry in entries:
+        host = extract_hostname(entry['url'])
+        if host != main_host and host.endswith(ENGLISH_COUNTRY_SUFFIXES):
+            return True
+    return False
+
+
+def add_primary_subpages(entries: List[Dict[str, Any]], main_url: str) -> List[Dict[str, Any]]:
+    parsed_main = urlparse(main_url)
+    base = f"{parsed_main.scheme}://{parsed_main.netloc}"
+    seen = {entry['url'] for entry in entries}
+    for path in PROMOTIONAL_SUBPATHS:
+        candidate = f"{base}{path}"
+        if candidate not in seen:
+            entries.append({'url': candidate, 'is_primary': True})
+            seen.add(candidate)
+    return entries
+
+
 def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str = 'gpt-4o-mini', max_urls: int = 10,
                                brand_domains: List[str] = None) -> List[Dict[str, Any]]:
     """
@@ -186,8 +254,8 @@ def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str =
     """
     prompt = (
         f"Provide up to {max_urls} canonical brand-owned URLs for {brand_id}. "
-        f"Include the most relevant primary domains first, followed by any supporting subdomains and country-specific pages that belong to {brand_id}. "
-        "Highlight international domains (e.g., .com.au, .co.uk, .ca, .de) as well as global brand hubs. "
+    f"Include the most relevant primary domains first, followed by any supporting subdomains, english-speaking country variants, and promotional hubs that belong to {brand_id}. "
+    "Highlight international domains (e.g., .com.au, .co.uk, .ca, .ie) and other brand-owned marketing sites. "
         "Return only the URLs (one per line), without numbering or explanations."
     )
     try:
@@ -218,7 +286,14 @@ def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str =
             else:
                 subdomain_urls.append(entry)
 
-        return primary_urls + subdomain_urls
+        combined = primary_urls + subdomain_urls
+        combined = [entry for entry in combined if is_english_host(entry['url'])]
+
+        main_url = find_main_american_url(combined, brand_id)
+        if main_url and has_country_variants(combined, main_url):
+            combined = add_primary_subpages(combined, main_url)
+
+        return combined
     except Exception as exc:
         logger.warning('LLM brand URL suggestion failed: %s', exc)
         return []
