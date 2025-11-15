@@ -979,6 +979,10 @@ def collect_brave_pages(
         brand_owned_collected: List[Dict[str, str]] = []
         third_party_collected: List[Dict[str, str]] = []
 
+        # Track URLs per domain to enforce diversity (max 20% per domain)
+        domain_counts: Dict[str, int] = {}
+        max_per_domain = max(1, int(target_count * 0.2))  # 20% of target, minimum 1
+
         # Track skip reasons for debugging
         skip_stats = {
             'no_url': 0,
@@ -986,6 +990,7 @@ def collect_brave_pages(
             'thin_content': 0,
             'brand_owned_pool_full': 0,
             'third_party_pool_full': 0,
+            'domain_limit_reached': 0,
             'processed': 0
         }
 
@@ -1055,12 +1060,22 @@ def collect_brave_pages(
                                    url)
                         continue
 
+                # Check domain diversity limit (max 20% per domain)
+                parsed_url = urlparse(url)
+                domain = parsed_url.netloc.lower()
+                if domain_counts.get(domain, 0) >= max_per_domain:
+                    skip_stats['domain_limit_reached'] += 1
+                    logger.debug('[BRAVE] Skipping %s - domain limit reached (%d/%d URLs from %s)',
+                               url, domain_counts[domain], max_per_domain, domain)
+                    continue
+
                 # Add source type metadata
                 content['source_type'] = classification.source_type.value
                 content['source_tier'] = classification.tier.value if classification.tier else 'unknown'
 
                 if is_brand_owned:
                     brand_owned_collected.append(content)
+                    domain_counts[domain] = domain_counts.get(domain, 0) + 1
                     logger.debug('[BRAVE] ✓ Collected brand-owned page (%d/%d): %s [len=%d]',
                                len(brand_owned_collected), target_brand_owned, url, len(body))
 
@@ -1084,13 +1099,22 @@ def collect_brave_pages(
                                         break
 
                                     try:
+                                        # Check domain limit for subpage
+                                        subpage_parsed = urlparse(subpage_url)
+                                        subpage_domain = subpage_parsed.netloc.lower()
+                                        if domain_counts.get(subpage_domain, 0) >= max_per_domain:
+                                            logger.debug('[BRAVE] Skipping subpage %s - domain limit reached', subpage_url)
+                                            continue
+
                                         subpage_content = fetch_page(subpage_url)
                                         subpage_body = subpage_content.get('body') or ''
 
-                                        if subpage_body and len(subpage_body) >= min_body_length:
+                                        # Subpages are brand-owned, use lower threshold
+                                        if subpage_body and len(subpage_body) >= min_brand_body_length:
                                             subpage_content['source_type'] = 'brand_owned'
                                             subpage_content['source_tier'] = 'brand_subpage'
                                             brand_owned_collected.append(subpage_content)
+                                            domain_counts[subpage_domain] = domain_counts.get(subpage_domain, 0) + 1
                                             logger.debug('[BRAVE] ✓ Collected brand subpage (%d/%d): %s [len=%d]',
                                                        len(brand_owned_collected), target_brand_owned,
                                                        subpage_url, len(subpage_body))
@@ -1102,6 +1126,7 @@ def collect_brave_pages(
                             logger.debug('[BRAVE] Failed to extract subpages from %s: %s', url, e)
                 else:
                     third_party_collected.append(content)
+                    domain_counts[domain] = domain_counts.get(domain, 0) + 1
                     logger.debug('[BRAVE] ✓ Collected 3rd party page (%d/%d): %s [len=%d]',
                                len(third_party_collected), target_third_party, url, len(body))
             else:
@@ -1123,12 +1148,15 @@ def collect_brave_pages(
                    target_count, target_brand_owned, target_third_party)
         logger.info('[BRAVE] Collected: %d total (%d brand-owned + %d 3rd party)',
                    len(collected), len(brand_owned_collected), len(third_party_collected))
+        logger.info('[BRAVE] Domain diversity: %d unique domains (max %d URLs per domain)',
+                   len(domain_counts), max_per_domain)
         logger.info('[BRAVE] ───────────────────────────────────────────────────────────')
         logger.info('[BRAVE] Skip reasons:')
         logger.info('[BRAVE]   - No URL: %d', skip_stats['no_url'])
         logger.info('[BRAVE]   - Robots.txt blocked: %d', skip_stats['robots_txt'])
         logger.info('[BRAVE]   - Thin/empty content (brand <%d bytes, 3rd party <%d bytes): %d',
                    min_brand_body_length, min_body_length, skip_stats['thin_content'])
+        logger.info('[BRAVE]   - Domain limit reached (max %d per domain): %d', max_per_domain, skip_stats['domain_limit_reached'])
         logger.info('[BRAVE]   - Brand-owned pool full: %d', skip_stats['brand_owned_pool_full'])
         logger.info('[BRAVE]   - 3rd party pool full: %d', skip_stats['third_party_pool_full'])
         logger.info('[BRAVE] ═══════════════════════════════════════════════════════════')
