@@ -249,12 +249,18 @@ def collect_serper_pages(
         brand_owned_collected: List[Dict[str, str]] = []
         third_party_collected: List[Dict[str, str]] = []
 
+        # Track URLs per domain to enforce diversity (max 20% per domain)
+        from urllib.parse import urlparse
+        domain_counts: Dict[str, int] = {}
+        max_per_domain = max(1, int(target_count * 0.2))  # 20% of target, minimum 1
+
         # Track skip reasons for debugging
         skip_stats = {
             'no_url': 0,
             'thin_content': 0,
             'brand_owned_pool_full': 0,
             'third_party_pool_full': 0,
+            'domain_limit_reached': 0,
             'processed': 0
         }
 
@@ -313,12 +319,22 @@ def collect_serper_pages(
                                    url)
                         continue
 
+                # Check domain diversity limit (max 20% per domain)
+                parsed_url = urlparse(url)
+                domain = parsed_url.netloc.lower()
+                if domain_counts.get(domain, 0) >= max_per_domain:
+                    skip_stats['domain_limit_reached'] += 1
+                    logger.debug('[SERPER] Skipping %s - domain limit reached (%d/%d URLs from %s)',
+                               url, domain_counts[domain], max_per_domain, domain)
+                    continue
+
                 # Add source type metadata
                 content['source_type'] = classification.source_type.value
                 content['source_tier'] = classification.tier.value if classification.tier else 'unknown'
 
                 if is_brand_owned:
                     brand_owned_collected.append(content)
+                    domain_counts[domain] = domain_counts.get(domain, 0) + 1
                     logger.debug('[SERPER] ✓ Collected brand-owned page (%d/%d): %s [len=%d]',
                                len(brand_owned_collected), target_brand_owned, url, len(body))
 
@@ -344,6 +360,13 @@ def collect_serper_pages(
                                         break
 
                                     try:
+                                        # Check domain limit for subpage
+                                        subpage_parsed = urlparse(subpage_url)
+                                        subpage_domain = subpage_parsed.netloc.lower()
+                                        if domain_counts.get(subpage_domain, 0) >= max_per_domain:
+                                            logger.debug('[SERPER] Skipping subpage %s - domain limit reached', subpage_url)
+                                            continue
+
                                         subpage_content = fetch_page(subpage_url)
                                         subpage_body = subpage_content.get('body') or ''
 
@@ -352,6 +375,7 @@ def collect_serper_pages(
                                             subpage_content['source_type'] = 'brand_owned'
                                             subpage_content['source_tier'] = 'brand_subpage'
                                             brand_owned_collected.append(subpage_content)
+                                            domain_counts[subpage_domain] = domain_counts.get(subpage_domain, 0) + 1
                                             logger.debug('[SERPER] ✓ Collected brand subpage (%d/%d): %s [len=%d]',
                                                        len(brand_owned_collected), target_brand_owned,
                                                        subpage_url, len(subpage_body))
@@ -363,6 +387,7 @@ def collect_serper_pages(
                             logger.debug('[SERPER] Failed to extract subpages from %s: %s', url, e)
                 else:
                     third_party_collected.append(content)
+                    domain_counts[domain] = domain_counts.get(domain, 0) + 1
                     logger.debug('[SERPER] ✓ Collected 3rd party page (%d/%d): %s [len=%d]',
                                len(third_party_collected), target_third_party, url, len(body))
             else:
@@ -384,11 +409,14 @@ def collect_serper_pages(
                    target_count, target_brand_owned, target_third_party)
         logger.info('[SERPER] Collected: %d total (%d brand-owned + %d 3rd party)',
                    len(collected), len(brand_owned_collected), len(third_party_collected))
+        logger.info('[SERPER] Domain diversity: %d unique domains (max %d URLs per domain)',
+                   len(domain_counts), max_per_domain)
         logger.info('[SERPER] ───────────────────────────────────────────────────────────')
         logger.info('[SERPER] Skip reasons:')
         logger.info('[SERPER]   - No URL: %d', skip_stats['no_url'])
         logger.info('[SERPER]   - Thin/empty content (brand <%d bytes, 3rd party <%d bytes): %d',
                    min_brand_body_length, min_body_length, skip_stats['thin_content'])
+        logger.info('[SERPER]   - Domain limit reached (max %d per domain): %d', max_per_domain, skip_stats['domain_limit_reached'])
         logger.info('[SERPER]   - Brand-owned pool full: %d', skip_stats['brand_owned_pool_full'])
         logger.info('[SERPER]   - 3rd party pool full: %d', skip_stats['third_party_pool_full'])
         logger.info('[SERPER] ═══════════════════════════════════════════════════════════')
