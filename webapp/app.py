@@ -187,6 +187,9 @@ ENGLISH_DOMAIN_SUFFIXES = (
 
 ENGLISH_COUNTRY_SUFFIXES = tuple(s for s in ENGLISH_DOMAIN_SUFFIXES if s != '.com')
 
+# For this task the user requested USA-only sites
+USA_DOMAIN_SUFFIXES = ('.com', '.us')
+
 PROMOTIONAL_SUBPATHS = [
     '/about', '/about-us', '/press', '/press-room', '/newsroom', '/stories', '/careers',
     '/investor-relations', '/sustainability', '/insights', '/promotions', '/offers', '/events'
@@ -204,6 +207,11 @@ def extract_hostname(url: str) -> str:
 def is_english_host(url: str) -> bool:
     host = extract_hostname(url)
     return any(host.endswith(suffix) for suffix in ENGLISH_DOMAIN_SUFFIXES)
+
+
+def is_usa_host(url: str) -> bool:
+    host = extract_hostname(url)
+    return any(host.endswith(suffix) for suffix in USA_DOMAIN_SUFFIXES)
 
 
 def find_main_american_url(entries: List[Dict[str, Any]], brand_id: str) -> Optional[str]:
@@ -233,8 +241,48 @@ def add_primary_subpages(entries: List[Dict[str, Any]], main_url: str) -> List[D
     for path in PROMOTIONAL_SUBPATHS:
         candidate = f"{base}{path}"
         if candidate not in seen:
-            entries.append({'url': candidate, 'is_primary': True})
+            entries.append({'url': candidate, 'is_primary': True, 'synthesized': True})
             seen.add(candidate)
+    return entries
+
+
+def is_promotional_url(url: str) -> bool:
+    parsed = urlparse(url)
+    path = parsed.path.lower()
+    if any(path.startswith(p) for p in PROMOTIONAL_SUBPATHS):
+        return True
+    # also accept query-based promo links or common promo words
+    if any(k in path for k in ('promo', 'campaign', 'offer', 'deal', 'discount')):
+        return True
+    return False
+
+
+def ensure_promotional_quota(entries: List[Dict[str, Any]], main_url: Optional[str], max_urls: int) -> List[Dict[str, Any]]:
+    """Ensure at least 25% of the returned entries are promotional brand-owned pages.
+
+    If not enough promotional URLs exist, generate subpage promotional URLs from the main_url
+    (e.g., /promotions, /offers) until we hit the quota or reach max_urls.
+    """
+    if not entries:
+        return entries
+
+    target = max(1, int((0.25 * max_urls) + 0.999))  # ceil(25% of max_urls)
+    promo_count = sum(1 for e in entries if is_promotional_url(e['url']))
+
+    if promo_count >= target:
+        return entries
+
+    # Attempt to create promotional URLs from main_url
+    if not main_url:
+        return entries
+
+    parsed_main = urlparse(main_url)
+    base = f"{parsed_main.scheme}://{parsed_main.netloc}"
+    seen = {e['url'] for e in entries}
+
+    # We no longer synthesize promotional URLs. If the verified set does not
+    # contain enough promotional pages, we return what we have and let the
+    # caller decide whether to re-run the LLM with a targeted prompt.
     return entries
 
 
@@ -266,34 +314,52 @@ def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str =
         ]
         response = client.chat(messages=messages, max_tokens=512)
         text = response.get('content') or response.get('text') or ''
-        url_candidates = re.findall(r'https?://[\w\-\.\/%\?&=#:]+', text)
+        # Ask the LLM for a larger candidate pool so we can verify and dedupe
+        candidate_limit = max(50, max_urls * 4)
+        url_candidates = re.findall(r'https?://[\w\-\.\/\%\?&=#:]+', text)
         unique_urls = []
         for url in url_candidates:
             clean_url = url.strip().rstrip('.,;')
             if clean_url not in unique_urls:
                 unique_urls.append(clean_url)
-            if len(unique_urls) >= max_urls:
+            if len(unique_urls) >= candidate_limit:
                 break
 
+        # Filter to USA hosts and classify into primary/subdomain buckets
         primary_urls: List[Dict[str, Any]] = []
         subdomain_urls: List[Dict[str, Any]] = []
-
         for url in unique_urls:
+            if not is_usa_host(url):
+                continue
             is_primary = classify_brand_url(url, brand_id, brand_domains) == 'primary'
-            entry = {'url': url, 'is_primary': is_primary}
+            entry = {'url': url, 'is_primary': is_primary, 'synthesized': False}
             if is_primary:
                 primary_urls.append(entry)
             else:
                 subdomain_urls.append(entry)
 
-        combined = primary_urls + subdomain_urls
-        combined = [entry for entry in combined if is_english_host(entry['url'])]
+        # Verify URLs (prioritize primary first) and collect up to max_urls verified entries
+        verified_entries: List[Dict[str, Any]] = []
+        for bucket in (primary_urls, subdomain_urls):
+            for entry in bucket:
+                url = entry['url']
+                if verify_url(url, brand_id):
+                    entry['verified'] = True
+                    entry['is_promotional'] = is_promotional_url(url)
+                    verified_entries.append(entry)
+                else:
+                    logger.info('Excluding unverified URL: %s', url)
+                if len(verified_entries) >= max_urls:
+                    break
+            if len(verified_entries) >= max_urls:
+                break
 
-        main_url = find_main_american_url(combined, brand_id)
-        if main_url and has_country_variants(combined, main_url):
-            combined = add_primary_subpages(combined, main_url)
+        # If we couldn't fill the requested slot, return whatever verified URLs we have
+        if not verified_entries:
+            logger.warning('No verified URLs found for brand: %s', brand_id)
 
-        return combined
+        # Ensure we return at most max_urls
+        return verified_entries[:max_urls]
     except Exception as exc:
         logger.warning('LLM brand URL suggestion failed: %s', exc)
         return []
@@ -378,6 +444,30 @@ def fetch_page_title(url: str, brand_id: str = '', timeout: float = 5.0) -> str:
     parsed = urlparse(url)
     hostname = parsed.hostname or url
     return hostname
+
+
+def verify_url(url: str, brand_id: str = '', timeout: float = 3.0) -> bool:
+    """Verify that a URL is reachable (2xx or 3xx). Retry with normalized host on SSL errors."""
+    headers = {'User-Agent': 'Mozilla/5.0 (compatible; TrustStackBot/1.0; +https://example.com/bot)'}
+    try:
+        resp = requests.head(url, timeout=timeout, headers=headers, allow_redirects=True)
+        if resp.status_code >= 200 and resp.status_code < 400:
+            return True
+        # Some servers don't like HEAD; fall back to GET
+        if resp.status_code in (405, 501):
+            resp = requests.get(url, timeout=timeout, headers=headers, allow_redirects=True)
+            return 200 <= resp.status_code < 400
+        return False
+    except requests.exceptions.SSLError as exc:
+        logger.debug('SSL error verifying %s: %s', url, exc)
+        normalized = normalize_international_url(url, brand_id)
+        if normalized and normalized != url:
+            logger.info('Retrying verification with normalized host: %s', normalized)
+            return verify_url(normalized, brand_id, timeout)
+        return False
+    except Exception as exc:
+        logger.debug('URL verification failed for %s: %s', url, exc)
+        return False
 
 
 def _fallback_title(url: str) -> str:
@@ -1047,10 +1137,25 @@ def show_analyze_page():
                 'source_type': 'brand_owned',
                 'source_tier': 'primary_website' if url_info.get('is_primary') else 'brand_subdomain',
                 'classification_reason': 'LLM-suggested brand URL (primary)' if url_info.get('is_primary') else 'LLM-suggested brand URL (subdomain)',
+                'is_promotional': is_promotional_url(url),
+                'synthesized': url_info.get('synthesized', False),
                 'selected': True
             })
 
         st.session_state['found_urls'] = found_urls
+
+        # Show quick metrics about promotional and synthesized URLs
+        total = len(found_urls)
+        promo_count = sum(1 for u in found_urls if u.get('is_promotional'))
+        synthesized_count = sum(1 for u in found_urls if u.get('synthesized'))
+        llm_returned = total - synthesized_count
+
+        mcol1, mcol2, mcol3, mcol4 = st.columns(4)
+        mcol1.metric("Total URLs", str(total))
+        mcol2.metric("Promotional URLs", f"{promo_count} ({(promo_count/total*100):.0f}% )" if total else "0")
+        mcol3.metric("Synthesized URLs", str(synthesized_count))
+        mcol4.metric("LLM Returned", str(llm_returned))
+
         st.success(f"✓ Found {len(found_urls)} brand-owned URLs via LLM")
 
     # Display found URLs for selection
