@@ -200,7 +200,7 @@ def collect_serper_pages(
         target_count: Target number of pages to collect
         pool_size: Number of search results to request
         min_body_length: Minimum body length for third-party pages (default: 200)
-        min_brand_body_length: Minimum body length for brand-owned pages (default: 50, lower threshold)
+        min_brand_body_length: Minimum body length for brand-owned pages (default: 150, filters error pages)
         url_collection_config: Optional ratio enforcement configuration
 
     Returns:
@@ -210,11 +210,13 @@ def collect_serper_pages(
     from ingestion.brave_search import fetch_page
 
     if pool_size is None:
-        pool_size = max(30, target_count * 3)
+        # Use 5x multiplier to account for access-denied URLs and content filtering
+        pool_size = max(30, target_count * 5)
 
-    # Default brand threshold to 50 bytes if not specified (more lenient for brand landing pages)
+    # Default brand threshold to 150 bytes if not specified
+    # This filters out error pages and access-denied responses while allowing landing pages
     if min_brand_body_length is None:
-        min_brand_body_length = 50
+        min_brand_body_length = 150
 
     # Import classifier here to avoid circular imports
     if url_collection_config:

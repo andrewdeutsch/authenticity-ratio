@@ -1657,8 +1657,8 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
 
                 # Use collect functions for ratio enforcement
                 search_results = []
-                # Use 3x pool size - with content validation before pool checks, this should be sufficient
-                pool_size = web_pages * 3
+                # Use 5x pool size to account for access-denied URLs and stricter content filtering
+                pool_size = web_pages * 5
 
                 if search_provider == 'brave':
                     from ingestion.brave_search import collect_brave_pages
