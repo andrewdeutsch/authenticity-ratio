@@ -99,6 +99,8 @@ SETTINGS = {
     'exclude_demoted_from_upload': False,
     # Global control: whether to include parsed comments in the analysis
     'include_comments_in_analysis': False,
+    # Brands to explicitly exclude from automated review (comma-separated env var or list)
+    'excluded_brands': [b.strip().lower() for b in os.getenv('EXCLUDED_BRANDS', '').split(',') if b.strip()],
 }
 
 # URL Collection Ratio Configuration

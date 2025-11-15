@@ -27,7 +27,7 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 
-from config.settings import APIConfig
+from config.settings import APIConfig, SETTINGS
 from scoring.llm_client import ChatClient
 
 # Configure logging for the webapp
@@ -312,10 +312,162 @@ def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str =
             {'role': 'system', 'content': 'You are a helpful research assistant.'},
             {'role': 'user', 'content': prompt}
         ]
-        response = client.chat(messages=messages, max_tokens=512)
-        text = response.get('content') or response.get('text') or ''
-        # Ask the LLM for a larger candidate pool so we can verify and dedupe
-        candidate_limit = max(50, max_urls * 4)
+        # Respect config: do not perform LLM/verification for explicitly excluded brands
+        excluded = SETTINGS.get('excluded_brands', []) or []
+        if brand_id and brand_id.lower() in excluded:
+            logger.info('Brand %s is in excluded_brands; skipping LLM enumeration', brand_id)
+            return []
+
+        # Ask the model for structured JSON-per-line output: url, evidence, confidence
+        # Temporarily enable debug logging for this call so we can capture raw model output
+        prev_level = logger.level
+        try:
+            logger.setLevel(logging.DEBUG)
+            response = client.chat(messages=messages, max_tokens=1024)
+            text = response.get('content') or response.get('text') or ''
+            logger.debug('LLM raw response:\n%s', text)
+        finally:
+            logger.setLevel(prev_level)
+
+        # Parse JSON lines if available (model should return one JSON object per line)
+        candidates: List[Dict[str, Any]] = []
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                url = obj.get('url')
+                evidence = obj.get('evidence')
+                confidence = int(obj.get('confidence') or 0)
+                if url:
+                    candidates.append({'url': url.strip(), 'evidence': evidence, 'confidence': confidence})
+            except Exception:
+                # Fall back to regex extraction per-line if JSON parse fails
+                m = re.search(r'(https?://[\w\-\.\/\%\?&=#:]+)', line)
+                if m:
+                    candidates.append({'url': m.group(1).strip(), 'evidence': None, 'confidence': 0})
+        # Build a deduped candidate list, respecting the order and any model confidence
+        seen_urls = set()
+        deduped_candidates: List[Dict[str, Any]] = []
+        for c in candidates:
+            url = c['url'].rstrip('.,;')
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            # prefer US/.com hosts only
+            if not is_usa_host(url):
+                continue
+            is_primary = classify_brand_url(url, brand_id, brand_domains) == 'primary'
+            deduped_candidates.append({
+                'url': url,
+                'evidence': c.get('evidence'),
+                'confidence': c.get('confidence', 0),
+                'is_primary': is_primary
+            })
+        # Log parsed candidates for debugging (INFO so it appears in typical logs)
+        try:
+            logger.info('Parsed LLM candidates (deduped, US-only): %s', json.dumps(deduped_candidates, indent=2))
+        except Exception:
+            logger.info('Parsed LLM candidates (deduped, US-only): %s', str(deduped_candidates))
+
+        # Verify candidates in parallel, prioritizing primaries
+        ordered = sorted(deduped_candidates, key=lambda x: (0 if x['is_primary'] else 1, -int(x.get('confidence', 0))))
+
+        verified_entries: List[Dict[str, Any]] = []
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        max_workers = min(20, max(4, len(ordered)))
+        with ThreadPoolExecutor(max_workers=max_workers) as exe:
+            future_to_entry = {exe.submit(verify_url, e['url'], brand_id): e for e in ordered}
+            for fut in as_completed(future_to_entry):
+                entry = future_to_entry[fut]
+                try:
+                    result = fut.result()
+                except Exception as exc:
+                    logger.debug('Verification raised for %s: %s', entry['url'], exc)
+                    continue
+                if result and result.get('ok'):
+                    # fetch title for display
+                    title = fetch_page_title(result.get('final_url') or entry['url'], brand_id)
+                    verified_entries.append({
+                        'url': result.get('final_url') or entry['url'],
+                        'is_primary': entry['is_primary'],
+                        'verified': True,
+                        'status': result.get('status'),
+                        'soft_verified': result.get('soft_verified', False),
+                        'verification_method': result.get('method'),
+                        'title': title,
+                        'evidence': entry.get('evidence'),
+                        'confidence': entry.get('confidence', 0),
+                        'is_promotional': is_promotional_url(entry['url'])
+                    })
+                else:
+                    logger.debug('Unverified candidate: %s (status=%s)', entry['url'], result.get('status') if isinstance(result, dict) else None)
+                if len(verified_entries) >= max_urls:
+                    break
+
+        if verified_entries:
+            # Clear any previous fallback indicator
+            try:
+                if 'llm_search_fallback' in st.session_state:
+                    del st.session_state['llm_search_fallback']
+                if 'llm_search_fallback_count' in st.session_state:
+                    del st.session_state['llm_search_fallback_count']
+            except Exception:
+                pass
+
+        if not verified_entries:
+            logger.info('No verified URLs found after LLM verification for brand: %s. Attempting web-search fallback...', brand_id)
+            try:
+                fallback = search_urls_fallback(brand_id, keywords, target_count=max_urls)
+                if fallback:
+                    logger.info('Search fallback returned %d verified URLs for %s', len(fallback), brand_id)
+                    verified_entries = fallback[:max_urls]
+                    # Mark that fallback was used so UI can show a banner
+                    try:
+                        st.session_state['llm_search_fallback'] = True
+                        st.session_state['llm_search_fallback_count'] = len(verified_entries)
+                    except Exception:
+                        pass
+                else:
+                    logger.warning('Search fallback did not return any verified URLs for brand: %s', brand_id)
+            except Exception as e:
+                logger.warning('Search fallback failed for %s: %s', brand_id, e)
+
+        return verified_entries[:max_urls]
+    except Exception as exc:
+        logger.warning('LLM brand URL suggestion failed: %s', exc)
+        return []
+
+
+def enumerate_brand_urls_from_llm_raw(brand_id: str, keywords: List[str], model: str = 'gpt-4o-mini', candidate_limit: int = 100) -> List[str]:
+    """Return raw LLM candidates (unverified) so the UI can show them for debugging/verification."""
+    # Respect excluded brands config
+    excluded = SETTINGS.get('excluded_brands', []) or []
+    if brand_id and brand_id.lower() in excluded:
+        logger.info('Brand %s is in excluded_brands; skipping raw LLM enumeration', brand_id)
+        return []
+    prompt = (
+        f"Provide up to {candidate_limit} canonical brand-owned URLs for {brand_id}. "
+        f"Include primary domains, localized variants, investor/careers pages and promotional hubs. "
+        "Return only the URLs (one per line), without numbering or explanations."
+    )
+    try:
+        client = ChatClient(default_model=model)
+        messages = [
+            {'role': 'system', 'content': 'You are a helpful research assistant.'},
+            {'role': 'user', 'content': prompt}
+        ]
+        # Turn on debug briefly and log the raw response
+        prev_level = logger.level
+        try:
+            logger.setLevel(logging.DEBUG)
+            response = client.chat(messages=messages, max_tokens=512)
+            text = response.get('content') or response.get('text') or ''
+            logger.debug('LLM raw (raw enumerator) response:\n%s', text)
+        finally:
+            logger.setLevel(prev_level)
         url_candidates = re.findall(r'https?://[\w\-\.\/\%\?&=#:]+', text)
         unique_urls = []
         for url in url_candidates:
@@ -324,44 +476,8 @@ def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str =
                 unique_urls.append(clean_url)
             if len(unique_urls) >= candidate_limit:
                 break
-
-        # Filter to USA hosts and classify into primary/subdomain buckets
-        primary_urls: List[Dict[str, Any]] = []
-        subdomain_urls: List[Dict[str, Any]] = []
-        for url in unique_urls:
-            if not is_usa_host(url):
-                continue
-            is_primary = classify_brand_url(url, brand_id, brand_domains) == 'primary'
-            entry = {'url': url, 'is_primary': is_primary, 'synthesized': False}
-            if is_primary:
-                primary_urls.append(entry)
-            else:
-                subdomain_urls.append(entry)
-
-        # Verify URLs (prioritize primary first) and collect up to max_urls verified entries
-        verified_entries: List[Dict[str, Any]] = []
-        for bucket in (primary_urls, subdomain_urls):
-            for entry in bucket:
-                url = entry['url']
-                if verify_url(url, brand_id):
-                    entry['verified'] = True
-                    entry['is_promotional'] = is_promotional_url(url)
-                    verified_entries.append(entry)
-                else:
-                    logger.info('Excluding unverified URL: %s', url)
-                if len(verified_entries) >= max_urls:
-                    break
-            if len(verified_entries) >= max_urls:
-                break
-
-        # If we couldn't fill the requested slot, return whatever verified URLs we have
-        if not verified_entries:
-            logger.warning('No verified URLs found for brand: %s', brand_id)
-
-        # Ensure we return at most max_urls
-        return verified_entries[:max_urls]
-    except Exception as exc:
-        logger.warning('LLM brand URL suggestion failed: %s', exc)
+        return unique_urls
+    except Exception:
         return []
 
 
@@ -417,19 +533,35 @@ def normalize_international_url(url: str, brand_id: str) -> Optional[str]:
 
 def fetch_page_title(url: str, brand_id: str = '', timeout: float = 5.0) -> str:
     """Retrieve a human-readable title for a given URL, fallback to hostname, and handle hostname mismatches."""
-
     headers = {
         'User-Agent': 'Mozilla/5.0 (compatible; TrustStackBot/1.0; +https://example.com/bot)'
     }
+    browser_headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
     try:
+        # Try with a polite bot UA first
         response = requests.get(url, timeout=timeout, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        title_tag = soup.title
-        if title_tag and title_tag.string:
-            title = title_tag.string.strip()
-            if title:
-                return title
+        status = getattr(response, 'status_code', None)
+        if status and 200 <= status < 400:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            title_tag = soup.title
+            if title_tag and title_tag.string:
+                title = title_tag.string.strip()
+                if title:
+                    return title
+        # If we get a 403, retry with a browser UA which some sites accept
+        if status == 403:
+            logger.debug('Received 403 fetching title for %s; retrying with browser UA', url)
+            try:
+                resp2 = requests.get(url, timeout=max(timeout, 6.0), headers=browser_headers)
+                if getattr(resp2, 'status_code', None) and 200 <= resp2.status_code < 400:
+                    soup = BeautifulSoup(resp2.text, 'html.parser')
+                    title_tag = soup.title
+                    if title_tag and title_tag.string:
+                        return title_tag.string.strip()
+            except Exception as e:
+                logger.debug('Browser-UA retry failed for %s: %s', url, e)
     except requests.exceptions.SSLError as exc:
         logger.debug('SSL error fetching %s: %s', url, exc)
         normalized_url = normalize_international_url(url, brand_id)
@@ -446,28 +578,149 @@ def fetch_page_title(url: str, brand_id: str = '', timeout: float = 5.0) -> str:
     return hostname
 
 
-def verify_url(url: str, brand_id: str = '', timeout: float = 3.0) -> bool:
-    """Verify that a URL is reachable (2xx or 3xx). Retry with normalized host on SSL errors."""
+def verify_url(url: str, brand_id: str = '', timeout: float = 5.0) -> bool:
+    """Verify that a URL is reachable (2xx or 3xx).
+
+    Returns a dict: {'ok': bool, 'status': int|None, 'final_url': str|None}
+
+    Retries with normalized host on SSL errors.
+    """
     headers = {'User-Agent': 'Mozilla/5.0 (compatible; TrustStackBot/1.0; +https://example.com/bot)'}
     try:
+        # Prefer HEAD for lightweight check
         resp = requests.head(url, timeout=timeout, headers=headers, allow_redirects=True)
-        if resp.status_code >= 200 and resp.status_code < 400:
-            return True
-        # Some servers don't like HEAD; fall back to GET
-        if resp.status_code in (405, 501):
-            resp = requests.get(url, timeout=timeout, headers=headers, allow_redirects=True)
-            return 200 <= resp.status_code < 400
-        return False
+        status = getattr(resp, 'status_code', None)
+        final = getattr(resp, 'url', url)
+        if status and 200 <= status < 400:
+            return {'ok': True, 'status': status, 'final_url': final}
+        # If forbidden (403), try again with a browser UA via GET
+        if status == 403:
+            logger.debug('HEAD returned 403 for %s; retrying GET with browser UA', url)
+            try:
+                browser_headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+                resp2 = requests.get(url, timeout=max(timeout, 6.0), headers=browser_headers, allow_redirects=True)
+                status2 = getattr(resp2, 'status_code', None)
+                final2 = getattr(resp2, 'url', url)
+                if status2 and 200 <= status2 < 400:
+                    return {'ok': True, 'status': status2, 'final_url': final2}
+                # If still forbidden, attempt DNS resolution as a soft-verification
+                try:
+                    from socket import getaddrinfo
+                    host = extract_hostname(url)
+                    if host:
+                        addrs = getaddrinfo(host, None)
+                        if addrs:
+                            logger.info('Host %s resolves via DNS; marking soft-verified', host)
+                            return {'ok': True, 'status': status2, 'final_url': final2, 'soft_verified': True, 'method': 'dns_resolution'}
+                except Exception as _:
+                    pass
+                return {'ok': False, 'status': status2, 'final_url': final2}
+            except Exception as e:
+                logger.debug('Browser-UA GET retry failed for %s: %s', url, e)
+                return {'ok': False, 'status': status, 'final_url': final}
+        # Some servers don't like HEAD; fall back to GET for verification
+        if status in (405, 501) or status is None:
+            try:
+                resp = requests.get(url, timeout=max(timeout, 6.0), headers=headers, allow_redirects=True)
+                status = getattr(resp, 'status_code', None)
+                final = getattr(resp, 'url', url)
+                return {'ok': bool(status and 200 <= status < 400), 'status': status, 'final_url': final}
+            except Exception as e:
+                logger.debug('GET fallback failed for %s after HEAD status=%s: %s', url, status, e)
+                return {'ok': False, 'status': status, 'final_url': final}
+        return {'ok': False, 'status': status, 'final_url': final}
     except requests.exceptions.SSLError as exc:
         logger.debug('SSL error verifying %s: %s', url, exc)
         normalized = normalize_international_url(url, brand_id)
         if normalized and normalized != url:
             logger.info('Retrying verification with normalized host: %s', normalized)
             return verify_url(normalized, brand_id, timeout)
-        return False
+        return {'ok': False, 'status': None, 'final_url': None}
     except Exception as exc:
-        logger.debug('URL verification failed for %s: %s', url, exc)
-        return False
+        # Some network/HEAD-specific errors can be resolved by trying GET once
+        logger.debug('HEAD request failed for %s: %s -- attempting GET fallback', url, exc)
+        try:
+            resp = requests.get(url, timeout=max(timeout, 6.0), headers=headers, allow_redirects=True)
+            status = getattr(resp, 'status_code', None)
+            final = getattr(resp, 'url', url)
+            return {'ok': bool(status and 200 <= status < 400), 'status': status, 'final_url': final}
+        except requests.exceptions.SSLError as exc2:
+            logger.debug('SSL error on GET fallback for %s: %s', url, exc2)
+            normalized = normalize_international_url(url, brand_id)
+            if normalized and normalized != url:
+                logger.info('Retrying verification with normalized host (GET fallback): %s', normalized)
+                return verify_url(normalized, brand_id, timeout)
+            return {'ok': False, 'status': None, 'final_url': None}
+        except Exception as exc2:
+            logger.debug('GET fallback also failed for %s: %s', url, exc2)
+            return {'ok': False, 'status': None, 'final_url': None}
+
+
+def search_urls_fallback(brand_id: str, keywords: List[str], target_count: int = 20) -> List[Dict[str, Any]]:
+    """Run a quick web search fallback to collect candidate URLs, classify and verify them.
+
+    This uses the unified search interface (ingestion.search_unified.search) and returns
+    entries in the same shape as suggest_brand_urls_from_llm produces so the UI can consume them.
+    """
+    try:
+        from ingestion.search_unified import search, validate_provider_config
+    except Exception as e:
+        logger.info('Search fallback not available: %s', e)
+        return []
+
+    # Validate provider readiness
+    cfg = validate_provider_config()
+    if not cfg.get('ready'):
+        logger.info('Search provider not configured or available for fallback: %s', cfg.get('message'))
+        return []
+
+    query = ' '.join(keywords) if keywords else brand_id
+    try:
+        results = search(query, size=target_count)
+    except Exception as e:
+        logger.warning('Search fallback failed: %s', e)
+        return []
+
+    # Collect candidate URLs and classify
+    candidates = []
+    for r in results:
+        url = r.get('url')
+        if not url:
+            continue
+        is_primary = classify_brand_url(url, brand_id, None) == 'primary'
+        candidates.append({'url': url, 'is_primary': is_primary, 'title': r.get('title', ''), 'snippet': r.get('snippet', '')})
+
+    # Verify candidates in parallel
+    verified: List[Dict[str, Any]] = []
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    max_workers = min(20, max(4, len(candidates)))
+    with ThreadPoolExecutor(max_workers=max_workers) as exe:
+        future_to_c = {exe.submit(verify_url, c['url'], brand_id): c for c in candidates}
+        for fut in as_completed(future_to_c):
+            c = future_to_c[fut]
+            try:
+                res = fut.result()
+            except Exception as e:
+                logger.debug('Search fallback verification raised for %s: %s', c['url'], e)
+                continue
+            if res and res.get('ok'):
+                title = fetch_page_title(res.get('final_url') or c['url'], brand_id)
+                verified.append({
+                    'url': res.get('final_url') or c['url'],
+                    'is_primary': c.get('is_primary', False),
+                    'verified': True,
+                    'status': res.get('status'),
+                    'soft_verified': res.get('soft_verified', False),
+                    'verification_method': res.get('method'),
+                    'title': title,
+                    'evidence': None,
+                    'confidence': 0,
+                    'is_promotional': is_promotional_url(c['url'])
+                })
+            if len(verified) >= target_count:
+                break
+
+    return verified
 
 
 def _fallback_title(url: str) -> str:
@@ -881,9 +1134,9 @@ def show_analyze_page():
             # Web search settings
             use_web_search = st.checkbox(
                 "🌐 Enable Web Search",
-                value=False,
-                disabled=True,
-                help="Temporarily disabled while the LLM-driven URL finder is in use."
+                value=True,
+                disabled=False,
+                help="Enable web-search fallback when the LLM-driven URL finder returns no verified results."
             )
             # Use max_items for web pages to fetch (removed separate input to avoid confusion)
             web_pages = max_items if use_web_search else max_items
@@ -1103,6 +1356,11 @@ def show_analyze_page():
             if st.form_submit_button("Clear Results", use_container_width=True):
                 st.session_state['last_run'] = None
                 st.session_state['found_urls'] = None
+                # clear any fallback indicator
+                if 'llm_search_fallback' in st.session_state:
+                    del st.session_state['llm_search_fallback']
+                if 'llm_search_fallback_count' in st.session_state:
+                    del st.session_state['llm_search_fallback_count']
                 st.rerun()
 
     # Handle URL search
@@ -1121,8 +1379,53 @@ def show_analyze_page():
             brand_domains=brand_domains
         )
 
+        # If the LLM flow triggered the web-search fallback, show a small banner
+        if st.session_state.get('llm_search_fallback'):
+            count = st.session_state.get('llm_search_fallback_count', 0)
+            st.info(f"Web search fallback was used — found {count} verified URLs via configured search provider.")
+
         if not llm_urls:
             st.warning("No brand URLs were returned by the LLM. Try a different brand or provide more keywords.")
+            return
+
+        # If the LLM returned nothing (e.g. no verified URLs were found),
+        # provide a fallback by showing raw LLM candidates so the user can
+        # inspect and optionally verify them.
+        if not llm_urls:
+            st.warning("No brand URLs were returned by the LLM. Showing raw candidates for debugging...")
+            raw_candidates = enumerate_brand_urls_from_llm_raw(brand_id, keywords.split(), model=summary_model, candidate_limit=100)
+            if raw_candidates:
+                with st.expander("🔎 LLM Raw Candidate URLs (unverified)"):
+                    for rc in raw_candidates:
+                        st.markdown(rc)
+
+                    if st.button("✅ Verify these candidates"):
+                        verified = []
+                        for rc in raw_candidates:
+                            if verify_url(rc, brand_id):
+                                verified.append(rc)
+                        if not verified:
+                            st.warning("None of the raw candidates verified successfully. Try changing keywords or re-running LLM with broader prompt.")
+                        else:
+                            st.success(f"Verified {len(verified)} candidates")
+                            found_urls = []
+                            for url in verified:
+                                found_urls.append({
+                                    'url': url,
+                                    'title': fetch_page_title(url, brand_id),
+                                    'description': 'Provided by LLM (raw, verified after re-check)',
+                                    'is_brand_owned': True,
+                                    'source_type': 'brand_owned',
+                                    'source_tier': 'primary_website' if classify_brand_url(url, brand_id, brand_domains) == 'primary' else 'brand_subdomain',
+                                    'classification_reason': 'LLM-suggested (verified after re-check)',
+                                    'verified': True,
+                                    'is_promotional': is_promotional_url(url),
+                                    'synthesized': False,
+                                    'selected': True
+                                })
+                            st.session_state['found_urls'] = found_urls
+            else:
+                st.warning("LLM didn't provide any raw URL candidates either. Try less constrained keywords or a different summary model.")
             return
 
         found_urls = []
@@ -1210,8 +1513,22 @@ def show_analyze_page():
                     }.get(tier, '📄')
                     tier_label = tier.replace('_', ' ').title()
 
-                    st.markdown(f"**{url_data['title'][:70]}{'...' if len(url_data['title']) > 70 else ''}** {tier_emoji} `{tier_label}`")
-                    st.caption(f"🔗 {url_data['url']}")
+                    # Show title with tier and soft-verify badge if present
+                    short_title = url_data.get('title', url_data.get('url', ''))[:70]
+                    ellips = '...' if len(url_data.get('title', '')) > 70 else ''
+                    title_line = f"**{short_title}{ellips}** {tier_emoji} `{tier_label}`"
+                    if url_data.get('soft_verified'):
+                        # Show a clear soft-verified badge with method (DNS resolution, etc.)
+                        method = url_data.get('verification_method') or url_data.get('method') or 'soft-verified'
+                        title_line += f" ⚠️ *Soft-verified ({method})*"
+
+                    st.markdown(title_line)
+                    # Show URL and optionally verification status
+                    status = url_data.get('status')
+                    if status:
+                        st.caption(f"🔗 {url_data['url']} — HTTP {status}")
+                    else:
+                        st.caption(f"🔗 {url_data['url']}")
 
             st.divider()
 
@@ -1240,8 +1557,20 @@ def show_analyze_page():
                     }.get(tier, '🌐')
                     tier_label = tier.replace('_', ' ').title()
 
-                    st.markdown(f"**{url_data['title'][:70]}{'...' if len(url_data['title']) > 70 else ''}** {tier_emoji} `{tier_label}`")
-                    st.caption(f"🔗 {url_data['url']}")
+                    # Show title with tier and soft-verify badge if present
+                    short_title = url_data.get('title', url_data.get('url', ''))[:70]
+                    ellips = '...' if len(url_data.get('title', '')) > 70 else ''
+                    title_line = f"**{short_title}{ellips}** {tier_emoji} `{tier_label}`"
+                    if url_data.get('soft_verified'):
+                        method = url_data.get('verification_method') or url_data.get('method') or 'soft-verified'
+                        title_line += f" ⚠️ *Soft-verified ({method})*"
+
+                    st.markdown(title_line)
+                    status = url_data.get('status')
+                    if status:
+                        st.caption(f"🔗 {url_data['url']} — HTTP {status}")
+                    else:
+                        st.caption(f"🔗 {url_data['url']}")
 
     if submit:
         # Validate inputs
