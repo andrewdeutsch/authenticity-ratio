@@ -1691,7 +1691,7 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                     logger.info(f'Using cached domains for {brand_id}: {llm_domains}')
                 else:
                     status_text.text(f"🤖 Discovering brand domains for {brand_id}...")
-                    llm_domains = get_brand_domains_from_llm(brand_id, model=summary_model)
+                    llm_domains = get_brand_domains_from_llm(brand_id, model='gpt-4o-mini')
                     # Cache for this session
                     st.session_state[cache_key] = llm_domains
 
