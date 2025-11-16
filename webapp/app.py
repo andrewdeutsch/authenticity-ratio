@@ -286,6 +286,84 @@ def ensure_promotional_quota(entries: List[Dict[str, Any]], main_url: Optional[s
     return entries
 
 
+def get_brand_domains_from_llm(brand_id: str, model: str = 'gpt-4o-mini') -> List[str]:
+    """
+    Use LLM to discover all official domains owned by a brand.
+
+    This is used to build site-restricted search queries for more efficient
+    brand-controlled URL collection.
+
+    Args:
+        brand_id: Brand identifier (e.g., 'mastercard', 'nike')
+        model: LLM model to use (default: gpt-4o-mini for cost efficiency)
+
+    Returns:
+        List of domains (e.g., ['mastercard.com', 'investor.mastercard.com'])
+    """
+    import openai
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    prompt = f"""List all official domains and subdomains owned by {brand_id}.
+
+Include:
+- Main corporate website
+- Investor relations sites
+- Product/service sites
+- Career/jobs sites
+- Newsroom/press sites
+- Developer/API sites
+- International variants (e.g., .co.uk, .com.au)
+
+Rules:
+- One domain per line
+- Domain only, no 'www.' prefix
+- No URLs, just domains
+- No explanations or numbering
+- Maximum 15 domains
+
+Example format:
+mastercard.com
+investor.mastercard.com
+priceless.com
+"""
+
+    try:
+        response = openai.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_tokens=500
+        )
+
+        text = response.choices[0].message.content.strip()
+        logger.debug('LLM domain discovery response:\n%s', text)
+
+        # Parse domains from response
+        domains = []
+        for line in text.split('\n'):
+            line = line.strip()
+            # Remove common prefixes/formatting
+            line = line.replace('www.', '').replace('http://', '').replace('https://', '')
+            line = line.split('/')[0]  # Remove any paths
+            line = line.split()[0]  # Take first word if multiple
+
+            # Validate: must contain a dot and look like a domain
+            if '.' in line and len(line) > 3 and not line.startswith('#'):
+                domains.append(line.lower())
+
+        # Deduplicate and limit
+        domains = list(dict.fromkeys(domains))[:15]
+        logger.info(f'LLM discovered {len(domains)} domains for {brand_id}: {domains}')
+
+        return domains
+
+    except Exception as e:
+        logger.warning(f'LLM domain discovery failed for {brand_id}: {e}')
+        return []
+
+
 def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str = 'gpt-4o-mini', max_urls: int = 10,
                                brand_domains: List[str] = None) -> List[Dict[str, Any]]:
     """
@@ -1602,10 +1680,36 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
 
         # Web search (using selected provider: Brave or Serper)
         if 'web' in sources:
-            query = ' '.join(keywords)
+            base_query = ' '.join(keywords)
+
+            # For brand-controlled searches, use LLM to discover domains and restrict search
+            if collection_strategy == 'brand_controlled':
+                # Check cache first to avoid repeated LLM calls
+                cache_key = f'brand_domains_{brand_id}'
+                if cache_key in st.session_state:
+                    llm_domains = st.session_state[cache_key]
+                    logger.info(f'Using cached domains for {brand_id}: {llm_domains}')
+                else:
+                    status_text.text(f"🤖 Discovering brand domains for {brand_id}...")
+                    llm_domains = get_brand_domains_from_llm(brand_id, model=summary_model)
+                    # Cache for this session
+                    st.session_state[cache_key] = llm_domains
+
+                if llm_domains:
+                    # Build site-restricted query using discovered domains
+                    site_filters = " OR ".join([f"site:{domain}" for domain in llm_domains[:10]])
+                    query = f"{base_query} ({site_filters})"
+                    logger.info(f'Built site-restricted query for {brand_id}: {len(llm_domains)} domains')
+                    status_text.text(f"🔍 Searching {len(llm_domains)} brand domains...")
+                else:
+                    # Fallback to regular query if LLM fails
+                    query = base_query
+                    logger.warning(f'LLM domain discovery returned no domains for {brand_id}, using regular query')
+            else:
+                query = base_query
 
             provider_display = '🌐 Brave' if search_provider == 'brave' else '🔍 Serper'
-            status_text.text(f"{provider_display} Searching for '{query}' (requesting {web_pages} URLs)...")
+            status_text.text(f"{provider_display} Searching for '{query[:100]}...' (requesting {web_pages} URLs)...")
             progress_bar.progress(30)
 
             try:
