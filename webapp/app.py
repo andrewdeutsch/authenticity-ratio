@@ -1649,15 +1649,28 @@ def show_analyze_page():
                         label_visibility="collapsed"
                     )
                 with col2:
-                    # Tier badge
+                    # Tier badge with platform-specific emoji for social media
                     tier = url_data.get('source_tier', 'unknown')
-                    tier_emoji = {
-                        'primary_website': '🏠',
-                        'content_hub': '📚',
-                        'direct_to_consumer': '🛒',
-                        'brand_social': '📱'
-                    }.get(tier, '📄')
-                    tier_label = tier.replace('_', ' ').title()
+                    platform = url_data.get('platform', '')
+
+                    # Use platform-specific emoji if this is a social media channel
+                    if platform:
+                        platform_emoji_map = {
+                            'Instagram': '📸',
+                            'LinkedIn': '💼',
+                            'Twitter': '🐦',
+                            'X (Twitter)': '✖️'
+                        }
+                        tier_emoji = platform_emoji_map.get(platform, '📱')
+                        tier_label = platform
+                    else:
+                        tier_emoji = {
+                            'primary_website': '🏠',
+                            'content_hub': '📚',
+                            'direct_to_consumer': '🛒',
+                            'brand_social': '📱'
+                        }.get(tier, '📄')
+                        tier_label = tier.replace('_', ' ').title()
 
                     # Show title with tier and soft-verify badge if present
                     short_title = url_data.get('title', url_data.get('url', ''))[:70]
@@ -1921,6 +1934,179 @@ def detect_brand_owned_url(url: str, brand_id: str, brand_domains: List[str] = N
         }
 
 
+def search_social_media_channels(brand_id: str, search_provider: str, progress_animator, logger) -> List[Dict[str, Any]]:
+    """
+    Search for official brand social media channels on Instagram, LinkedIn, and Twitter.
+
+    Args:
+        brand_id: The brand identifier (e.g., "Mastercard")
+        search_provider: The search provider to use ('brave' or 'serper')
+        progress_animator: Progress animator instance
+        logger: Logger instance
+
+    Returns:
+        List of social media channel results
+    """
+    social_results = []
+
+    # Social media platforms to search
+    social_platforms = [
+        {
+            'name': 'Instagram',
+            'site': 'instagram.com',
+            'emoji': '📸',
+            'tier': 'brand_social'
+        },
+        {
+            'name': 'LinkedIn',
+            'site': 'linkedin.com',
+            'emoji': '💼',
+            'tier': 'brand_social'
+        },
+        {
+            'name': 'Twitter',
+            'site': 'twitter.com',
+            'emoji': '🐦',
+            'tier': 'brand_social'
+        },
+        {
+            'name': 'X (Twitter)',
+            'site': 'x.com',
+            'emoji': '✖️',
+            'tier': 'brand_social'
+        }
+    ]
+
+    for platform in social_platforms:
+        try:
+            # Build site-specific query
+            query = f"{brand_id} official site:{platform['site']}"
+
+            progress_animator.show(
+                f"Searching {platform['name']} for official {brand_id} channel...",
+                platform['emoji']
+            )
+
+            logger.info(f"Searching {platform['name']}: {query}")
+
+            # Use the appropriate search provider
+            search_results = []
+
+            if search_provider == 'brave':
+                from ingestion.brave_search import brave_search
+                # Get top 3 results from this platform
+                results = brave_search(query, count=3)
+                if results:
+                    for result in results:
+                        search_results.append({
+                            'url': result.get('url', ''),
+                            'title': result.get('title', f'{brand_id} on {platform["name"]}'),
+                            'snippet': result.get('description', '')
+                        })
+            else:  # serper
+                from ingestion.serper_search import serper_search
+                # Get top 3 results from this platform
+                results = serper_search(query, num=3)
+                if results and 'organic' in results:
+                    for result in results['organic'][:3]:
+                        search_results.append({
+                            'url': result.get('link', ''),
+                            'title': result.get('title', f'{brand_id} on {platform["name"]}'),
+                            'snippet': result.get('snippet', '')
+                        })
+
+            # Filter to only actual social media profile URLs (not just mentions)
+            for result in search_results:
+                url = result.get('url', '')
+                if url and _is_valid_social_profile(url, platform['site'], brand_id):
+                    social_results.append({
+                        'url': url,
+                        'title': result.get('title', f'{brand_id} on {platform["name"]}'),
+                        'description': result.get('snippet', ''),
+                        'is_brand_owned': True,
+                        'is_core_domain': False,
+                        'source_type': 'brand_owned',
+                        'source_tier': platform['tier'],
+                        'classification_reason': f'Official {platform["name"]} channel',
+                        'selected': True,
+                        'source': f'{search_provider}_social',
+                        'platform': platform['name']
+                    })
+                    logger.info(f"Found {platform['name']} channel: {url}")
+                    # Only take the first valid profile per platform
+                    break
+
+        except Exception as e:
+            logger.warning(f"Error searching {platform['name']}: {e}")
+            continue
+
+    return social_results
+
+
+def _is_valid_social_profile(url: str, platform_site: str, brand_id: str) -> bool:
+    """
+    Validate that a URL is an actual social media profile page.
+
+    Args:
+        url: The URL to validate
+        platform_site: The social media site (e.g., 'instagram.com')
+        brand_id: The brand identifier
+
+    Returns:
+        True if this is a valid profile URL, False otherwise
+    """
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url.lower())
+
+        # Must be on the correct domain
+        if platform_site not in parsed.netloc:
+            return False
+
+        path = parsed.path.lower()
+
+        # Instagram profiles
+        if 'instagram.com' in platform_site:
+            # Valid: /username or /username/
+            # Invalid: /p/, /tv/, /explore/, /accounts/
+            invalid_patterns = ['/p/', '/tv/', '/explore/', '/accounts/', '/reels/', '/stories/']
+            if any(pattern in path for pattern in invalid_patterns):
+                return False
+            # Should have a username path (starts with /)
+            if not path or path == '/' or len(path.split('/')) < 2:
+                return False
+            return True
+
+        # LinkedIn profiles
+        elif 'linkedin.com' in platform_site:
+            # Valid: /company/name or /in/name
+            # Invalid: /posts/, /feed/, /search/
+            if '/company/' in path or '/showcase/' in path:
+                return True
+            invalid_patterns = ['/posts/', '/feed/', '/search/', '/in/', '/pulse/']
+            if any(pattern in path for pattern in invalid_patterns):
+                return False
+            return '/company/' in path or '/showcase/' in path
+
+        # Twitter/X profiles
+        elif 'twitter.com' in platform_site or 'x.com' in platform_site:
+            # Valid: /username or /username/
+            # Invalid: /i/, /search/, /hashtag/, /status/
+            invalid_patterns = ['/i/', '/search/', '/hashtag/', '/status/', '/explore/', '/notifications/']
+            if any(pattern in path for pattern in invalid_patterns):
+                return False
+            # Should have a username path
+            if not path or path == '/' or len(path.split('/')) < 2:
+                return False
+            return True
+
+        return False
+
+    except Exception:
+        return False
+
+
 def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_pages: int, search_provider: str = 'serper',
                     brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None,
                     collection_strategy: str = 'both', brand_owned_ratio: int = 60):
@@ -1939,6 +2125,15 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
         progress_bar.progress(10)
 
         found_urls = []
+
+        # Social media search - find official brand channels
+        progress_animator.show("Searching for official social media channels...", "📱")
+        progress_bar.progress(15)
+        social_results = search_social_media_channels(brand_id, search_provider, progress_animator, logger)
+        if social_results:
+            logger.info(f"Found {len(social_results)} potential social media channels")
+            for result in social_results:
+                found_urls.append(result)
 
         # Web search (using selected provider: Brave or Serper)
         if 'web' in sources:
@@ -2202,13 +2397,20 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
 
                 brand_owned_count = sum(1 for u in found_urls if u['is_brand_owned'])
                 third_party_count = sum(1 for u in found_urls if not u['is_brand_owned'])
+                social_count = sum(1 for u in found_urls if u.get('platform'))
 
                 progress_bar.progress(100)
-                progress_animator.show(f"Search complete! Found {brand_owned_count} brand + {third_party_count} 3rd-party URLs", "✅")
+                if social_count > 0:
+                    progress_animator.show(f"Search complete! Found {brand_owned_count} brand + {third_party_count} 3rd-party URLs (including {social_count} social channels)", "✅")
+                else:
+                    progress_animator.show(f"Search complete! Found {brand_owned_count} brand + {third_party_count} 3rd-party URLs", "✅")
                 progress_animator.clear()
                 progress_bar.empty()
 
-                st.success(f"✓ Found {len(found_urls)} URLs ({brand_owned_count} brand-owned, {third_party_count} third-party)")
+                if social_count > 0:
+                    st.success(f"✓ Found {len(found_urls)} URLs ({brand_owned_count} brand-owned including {social_count} social channels, {third_party_count} third-party)")
+                else:
+                    st.success(f"✓ Found {len(found_urls)} URLs ({brand_owned_count} brand-owned, {third_party_count} third-party)")
                 st.rerun()
 
             except TimeoutError as e:
