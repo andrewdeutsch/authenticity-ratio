@@ -1117,39 +1117,22 @@ st.markdown("""
 
     .progress-logs {
         margin-top: 0.75rem;
-        font-size: 0.65rem;
+        font-size: 0.325rem;
         color: white;
-        opacity: 0.4;
-        text-align: left;
-        max-width: 90%;
-        max-height: 200px;
-        overflow-y: auto;
+        opacity: 0.24;
+        text-align: center;
+        width: 100%;
+        max-height: 0.91rem;
+        overflow: hidden;
         font-family: monospace;
         line-height: 1.4;
-        padding: 0.5rem;
-        background: rgba(0, 0, 0, 0.2);
-        border-radius: 0.25rem;
         animation: fadeIn 0.3s ease-out;
     }
 
-    .progress-logs::-webkit-scrollbar {
-        width: 4px;
-    }
-
-    .progress-logs::-webkit-scrollbar-track {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 2px;
-    }
-
-    .progress-logs::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.3);
-        border-radius: 2px;
-    }
-
     .progress-log-entry {
-        margin-bottom: 0.25rem;
-        white-space: pre-wrap;
-        word-break: break-word;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1255,7 +1238,7 @@ class ProgressAnimator:
         logs_html = ""
         if self.logs:
             # Escape HTML in log messages for security
-            escaped_logs = [html_module.escape(log) for log in self.logs[-20:]]  # Show last 20 logs
+            escaped_logs = [html_module.escape(log) for log in self.logs[-2:]]  # Show last 2 logs
             log_entries = ''.join([f'<div class="progress-log-entry">{log}</div>' for log in escaped_logs])
             logs_html = f'<div class="progress-logs">{log_entries}</div>'
 
