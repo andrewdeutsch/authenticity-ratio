@@ -1448,7 +1448,7 @@ def show_analyze_page():
                     st.caption("The system automatically detects brand domains. Only customize if you need specific overrides.")
 
                     brand_domains_input = st.text_input(
-                        "Override Brand Domains",
+                        "Additional Brand Domains",
                         value="",
                         placeholder="Leave empty to use auto-detected domains",
                         help="Comma-separated list. Leave empty to use auto-detected domains."
