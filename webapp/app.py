@@ -2084,26 +2084,26 @@ def search_social_media_channels(brand_id: str, search_provider: str, progress_a
             search_results = []
 
             if search_provider == 'brave':
-                from ingestion.brave_search import brave_search
+                from ingestion.brave_search import search_brave
                 # Get top 3 results from this platform
-                results = brave_search(query, count=3)
+                results = search_brave(query, size=3)
                 if results:
                     for result in results:
                         search_results.append({
                             'url': result.get('url', ''),
                             'title': result.get('title', f'{brand_id} on {platform["name"]}'),
-                            'snippet': result.get('description', '')
+                            'snippet': result.get('snippet', result.get('description', ''))
                         })
             else:  # serper
-                from ingestion.serper_search import serper_search
+                from ingestion.serper_search import search_serper
                 # Get top 3 results from this platform
-                results = serper_search(query, num=3)
-                if results and 'organic' in results:
-                    for result in results['organic'][:3]:
+                results = search_serper(query, size=3)
+                if results:
+                    for result in results:
                         search_results.append({
-                            'url': result.get('link', ''),
+                            'url': result.get('url', ''),
                             'title': result.get('title', f'{brand_id} on {platform["name"]}'),
-                            'snippet': result.get('snippet', '')
+                            'snippet': result.get('snippet', result.get('description', ''))
                         })
 
             # Filter to only actual social media profile URLs (not just mentions)
