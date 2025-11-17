@@ -1114,8 +1114,76 @@ st.markdown("""
         font-family: monospace;
         animation: fadeIn 0.3s ease-out;
     }
+
+    .progress-logs {
+        margin-top: 0.75rem;
+        font-size: 0.65rem;
+        color: white;
+        opacity: 0.4;
+        text-align: left;
+        max-width: 90%;
+        max-height: 200px;
+        overflow-y: auto;
+        font-family: monospace;
+        line-height: 1.4;
+        padding: 0.5rem;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 0.25rem;
+        animation: fadeIn 0.3s ease-out;
+    }
+
+    .progress-logs::-webkit-scrollbar {
+        width: 4px;
+    }
+
+    .progress-logs::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 2px;
+    }
+
+    .progress-logs::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 2px;
+    }
+
+    .progress-log-entry {
+        margin-bottom: 0.25rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+
+class StreamlitLogHandler(logging.Handler):
+    """
+    Custom logging handler that captures log messages and sends them to a ProgressAnimator.
+    """
+
+    def __init__(self, progress_animator):
+        """
+        Initialize the handler.
+
+        Args:
+            progress_animator: ProgressAnimator instance to send logs to
+        """
+        super().__init__()
+        self.progress_animator = progress_animator
+
+    def emit(self, record):
+        """
+        Emit a log record.
+
+        Args:
+            record: LogRecord to emit
+        """
+        try:
+            # Format the log message
+            msg = self.format(record)
+            # Send to progress animator
+            self.progress_animator.add_log(msg)
+        except Exception:
+            self.handleError(record)
 
 
 class ProgressAnimator:
@@ -1134,6 +1202,22 @@ class ProgressAnimator:
         self.container = container if container is not None else st.empty()
         self.current_message = None
         self.current_emoji = None
+        self.logs = []
+        self.max_logs = 50  # Keep last 50 log entries
+
+    def add_log(self, message: str):
+        """
+        Add a log message to the display.
+
+        Args:
+            message: The log message to add
+        """
+        self.logs.append(message)
+        # Keep only the last max_logs entries
+        if len(self.logs) > self.max_logs:
+            self.logs = self.logs[-self.max_logs:]
+        # Re-render with the new log
+        self._render()
 
     def show(self, message: str, emoji: str = "🔍", url: str = None):
         """
@@ -1151,22 +1235,43 @@ class ProgressAnimator:
 
         self.current_message = message
         self.current_emoji = emoji
+        self.current_url = url
+
+        self._render()
+
+    def _render(self):
+        """Internal method to render the current state."""
+        import html as html_module
 
         # Build URL display if provided
         url_html = ""
-        if url:
+        if hasattr(self, 'current_url') and self.current_url:
             # Truncate URL for display
-            display_url = url if len(url) <= 80 else url[:77] + "..."
+            display_url = self.current_url if len(self.current_url) <= 80 else self.current_url[:77] + "..."
+            display_url = html_module.escape(display_url)
             url_html = f'<div class="progress-urls">{display_url}</div>'
+
+        # Build logs display
+        logs_html = ""
+        if self.logs:
+            # Escape HTML in log messages for security
+            escaped_logs = [html_module.escape(log) for log in self.logs[-20:]]  # Show last 20 logs
+            log_entries = ''.join([f'<div class="progress-log-entry">{log}</div>' for log in escaped_logs])
+            logs_html = f'<div class="progress-logs">{log_entries}</div>'
+
+        # Escape message and emoji
+        safe_message = html_module.escape(self.current_message) if self.current_message else ""
+        safe_emoji = html_module.escape(self.current_emoji) if self.current_emoji else ""
 
         # Display with pulsing animation (stays visible until next call)
         html = f"""
         <div class="progress-container">
             <div class="progress-item progress-item-pulsing">
-                <span class="progress-emoji">{emoji}</span>
-                <span>{message}</span>
+                <span class="progress-emoji">{safe_emoji}</span>
+                <span>{safe_message}</span>
             </div>
             {url_html}
+            {logs_html}
         </div>
         """
 
@@ -1177,6 +1282,7 @@ class ProgressAnimator:
         self.container.empty()
         self.current_message = None
         self.current_emoji = None
+        self.logs = []
 
 
 def show_home_page():
@@ -1911,12 +2017,26 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                 if search_provider == 'brave':
                     from ingestion.brave_search import collect_brave_pages
                     progress_animator.show(f"Executing Brave Search API requests ({brand_owned_ratio}% brand-owned target)", "⚡")
-                    pages = collect_brave_pages(
-                        query=query,
-                        target_count=web_pages,
-                        pool_size=pool_size,
-                        url_collection_config=url_collection_config
-                    )
+
+                    # Set up log capture for the search process
+                    search_logger = logging.getLogger('ingestion.brave_search')
+                    log_handler = StreamlitLogHandler(progress_animator)
+                    log_handler.setLevel(logging.INFO)
+                    # Use a simple formatter without timestamp for cleaner display
+                    log_formatter = logging.Formatter('%(message)s')
+                    log_handler.setFormatter(log_formatter)
+                    search_logger.addHandler(log_handler)
+
+                    try:
+                        pages = collect_brave_pages(
+                            query=query,
+                            target_count=web_pages,
+                            pool_size=pool_size,
+                            url_collection_config=url_collection_config
+                        )
+                    finally:
+                        # Clean up handler
+                        search_logger.removeHandler(log_handler)
                     # Convert to search result format and show URLs as we process them
                     total_pages = len(pages)
                     for idx, page in enumerate(pages):
@@ -1938,12 +2058,26 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                 else:  # serper
                     from ingestion.serper_search import collect_serper_pages
                     progress_animator.show(f"Executing Google Search API requests ({brand_owned_ratio}% brand-owned target)", "⚡")
-                    pages = collect_serper_pages(
-                        query=query,
-                        target_count=web_pages,
-                        pool_size=pool_size,
-                        url_collection_config=url_collection_config
-                    )
+
+                    # Set up log capture for the search process
+                    search_logger = logging.getLogger('ingestion.serper_search')
+                    log_handler = StreamlitLogHandler(progress_animator)
+                    log_handler.setLevel(logging.INFO)
+                    # Use a simple formatter without timestamp for cleaner display
+                    log_formatter = logging.Formatter('%(message)s')
+                    log_handler.setFormatter(log_formatter)
+                    search_logger.addHandler(log_handler)
+
+                    try:
+                        pages = collect_serper_pages(
+                            query=query,
+                            target_count=web_pages,
+                            pool_size=pool_size,
+                            url_collection_config=url_collection_config
+                        )
+                    finally:
+                        # Clean up handler
+                        search_logger.removeHandler(log_handler)
                     # Convert to search result format and show URLs as we process them
                     total_pages = len(pages)
                     for idx, page in enumerate(pages):
