@@ -1050,6 +1050,10 @@ st.markdown("""
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
+        box-sizing: border-box;
     }
 
     .progress-item {
@@ -1128,14 +1132,15 @@ st.markdown("""
         line-height: 1.3;
         animation: fadeIn 0.3s ease-out;
         box-sizing: border-box;
-        padding: 0 1rem;
     }
 
     .progress-log-entry {
-        white-space: normal;
+        white-space: pre-wrap;
         word-wrap: break-word;
-        word-break: break-word;
-        overflow-wrap: break-word;
+        word-break: break-all;
+        overflow-wrap: anywhere;
+        max-width: 100%;
+        overflow: hidden;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1198,12 +1203,15 @@ class ProgressAnimator:
         Args:
             message: The log message to add
         """
+        import time
         self.logs.append(message)
         # Keep only the last max_logs entries
         if len(self.logs) > self.max_logs:
             self.logs = self.logs[-self.max_logs:]
         # Re-render with the new log
         self._render()
+        # Small sleep to allow Streamlit to update UI
+        time.sleep(0.01)
 
     def show(self, message: str, emoji: str = "🔍", url: str = None):
         """
@@ -2005,6 +2013,8 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
 
                     # Set up log capture for the search process
                     search_logger = logging.getLogger('ingestion.brave_search')
+                    original_level = search_logger.level
+                    search_logger.setLevel(logging.INFO)  # Ensure logger captures INFO level
                     log_handler = StreamlitLogHandler(progress_animator)
                     log_handler.setLevel(logging.INFO)
                     # Use full formatter with timestamp
@@ -2020,8 +2030,9 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                             url_collection_config=url_collection_config
                         )
                     finally:
-                        # Clean up handler
+                        # Clean up handler and restore original level
                         search_logger.removeHandler(log_handler)
+                        search_logger.setLevel(original_level)
                     # Convert to search result format and show URLs as we process them
                     total_pages = len(pages)
                     for idx, page in enumerate(pages):
@@ -2046,6 +2057,8 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
 
                     # Set up log capture for the search process
                     search_logger = logging.getLogger('ingestion.serper_search')
+                    original_level = search_logger.level
+                    search_logger.setLevel(logging.INFO)  # Ensure logger captures INFO level
                     log_handler = StreamlitLogHandler(progress_animator)
                     log_handler.setLevel(logging.INFO)
                     # Use full formatter with timestamp
@@ -2061,8 +2074,9 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                             url_collection_config=url_collection_config
                         )
                     finally:
-                        # Clean up handler
+                        # Clean up handler and restore original level
                         search_logger.removeHandler(log_handler)
+                        search_logger.setLevel(original_level)
                     # Convert to search result format and show URLs as we process them
                     total_pages = len(pages)
                     for idx, page in enumerate(pages):
