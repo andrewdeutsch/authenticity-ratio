@@ -261,6 +261,7 @@ def collect_serper_pages(
             'brand_owned_pool_full': 0,
             'third_party_pool_full': 0,
             'domain_limit_reached': 0,
+            'error_page': 0,
             'processed': 0
         }
 
@@ -300,6 +301,15 @@ def collect_serper_pages(
             body = content.get('body') or ''
             required_length = min_brand_body_length if is_brand_owned else min_body_length
             if body and len(body) >= required_length:
+                # Filter out error pages based on title
+                title = content.get('title', '').lower()
+                error_indicators = ['access denied', 'forbidden', '403', '401', 'error', 'not found', '404']
+                if any(indicator in title for indicator in error_indicators):
+                    skip_stats['error_page'] += 1
+                    logger.debug('[SERPER] Skipping %s - error page detected (title: "%s")',
+                               url, content.get('title', '')[:50])
+                    continue
+
                 # Check if pools are full AFTER validating content.
                 # Skip a URL if its specific pool is full.
                 # This ensures proper filtering based on collection strategy:
@@ -416,6 +426,7 @@ def collect_serper_pages(
         logger.info('[SERPER]   - No URL: %d', skip_stats['no_url'])
         logger.info('[SERPER]   - Thin/empty content (brand <%d bytes, 3rd party <%d bytes): %d',
                    min_brand_body_length, min_body_length, skip_stats['thin_content'])
+        logger.info('[SERPER]   - Error page (Access Denied, 403, etc.): %d', skip_stats['error_page'])
         logger.info('[SERPER]   - Domain limit reached (max %d per domain): %d', max_per_domain, skip_stats['domain_limit_reached'])
         logger.info('[SERPER]   - Brand-owned pool full: %d', skip_stats['brand_owned_pool_full'])
         logger.info('[SERPER]   - 3rd party pool full: %d', skip_stats['third_party_pool_full'])
