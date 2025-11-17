@@ -1047,6 +1047,7 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         min-height: 80px;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
     }
@@ -1057,36 +1058,30 @@ st.markdown("""
         font-weight: 500;
         text-align: center;
         line-height: 1.5;
-        animation: fadeInOut 1.25s ease-in-out;
+        animation: fadeIn 0.3s ease-out;
     }
 
-    .progress-item-fadeout {
-        animation: fadeOut 0.25s ease-out forwards;
+    .progress-item-pulsing {
+        animation: waitingPulse 1s ease-in-out infinite;
     }
 
-    @keyframes fadeInOut {
+    @keyframes fadeIn {
         0% {
             opacity: 0;
             transform: translateY(10px);
         }
-        8% {
-            opacity: 1;
-            transform: translateY(0);
-        }
         100% {
             opacity: 1;
             transform: translateY(0);
         }
     }
 
-    @keyframes fadeOut {
+    @keyframes waitingPulse {
         0% {
-            opacity: 1;
-            transform: translateY(0);
+            opacity: 0.8;
         }
         100% {
-            opacity: 0;
-            transform: translateY(-10px);
+            opacity: 1;
         }
     }
 
@@ -1094,10 +1089,10 @@ st.markdown("""
         font-size: 1.5rem;
         margin-right: 0.5rem;
         display: inline-block;
-        animation: pulse 2s ease-in-out infinite;
+        animation: emojiPulse 2s ease-in-out infinite;
     }
 
-    @keyframes pulse {
+    @keyframes emojiPulse {
         0%, 100% {
             transform: scale(1);
         }
@@ -1105,14 +1100,28 @@ st.markdown("""
             transform: scale(1.1);
         }
     }
+
+    .progress-urls {
+        margin-top: 0.75rem;
+        font-size: 0.75rem;
+        color: white;
+        opacity: 0.4;
+        text-align: center;
+        max-width: 90%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: monospace;
+        animation: fadeIn 0.3s ease-out;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 
 class ProgressAnimator:
     """
-    Animated progress indicator that displays messages with fade-in/fade-out effects.
-    Each message appears at 100% visibility, remains for 1 second, then fades out over 0.25s.
+    Animated progress indicator that displays messages with pulsing effects.
+    Each message appears at 100% visibility, then pulses (80% -> 100%) until replaced.
     """
 
     def __init__(self, container=None):
@@ -1124,14 +1133,16 @@ class ProgressAnimator:
         """
         self.container = container if container is not None else st.empty()
         self.current_message = None
+        self.current_emoji = None
 
-    def show(self, message: str, emoji: str = "🔍"):
+    def show(self, message: str, emoji: str = "🔍", url: str = None):
         """
-        Display an animated progress message.
+        Display an animated progress message that pulses until next update.
 
         Args:
             message: The progress message to display (will be truncated if too long)
             emoji: Emoji to show with the message
+            url: Optional URL to display below the message (shown at 40% opacity)
         """
         # Truncate message if too long (keep it concise for animation effect)
         max_length = 120
@@ -1139,39 +1150,33 @@ class ProgressAnimator:
             message = message[:max_length-3] + "..."
 
         self.current_message = message
+        self.current_emoji = emoji
 
-        # Display with animation
+        # Build URL display if provided
+        url_html = ""
+        if url:
+            # Truncate URL for display
+            display_url = url if len(url) <= 80 else url[:77] + "..."
+            url_html = f'<div class="progress-urls">{display_url}</div>'
+
+        # Display with pulsing animation (stays visible until next call)
         html = f"""
         <div class="progress-container">
-            <div class="progress-item">
+            <div class="progress-item progress-item-pulsing">
                 <span class="progress-emoji">{emoji}</span>
                 <span>{message}</span>
             </div>
+            {url_html}
         </div>
         """
 
         self.container.markdown(html, unsafe_allow_html=True)
 
-        # Stay visible for 1 second
-        time.sleep(1.0)
-
-        # Fade out over 0.25 seconds
-        html_fadeout = f"""
-        <div class="progress-container">
-            <div class="progress-item progress-item-fadeout">
-                <span class="progress-emoji">{emoji}</span>
-                <span>{message}</span>
-            </div>
-        </div>
-        """
-
-        self.container.markdown(html_fadeout, unsafe_allow_html=True)
-        time.sleep(0.25)
-
     def clear(self):
         """Clear the progress display."""
         self.container.empty()
         self.current_message = None
+        self.current_emoji = None
 
 
 def show_home_page():
@@ -1937,7 +1942,6 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                         })
 
                 progress_bar.progress(70)
-                progress_animator.show(f"Processing {len(search_results)} collected URLs (target: {web_pages})", "📊")
 
                 # Restore original timeout
                 if original_timeout is not None:
@@ -1991,9 +1995,18 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                     progress_animator.clear()
                     return
 
-                for result in search_results:
+                # Classify URLs and show them as we process them
+                total_results = len(search_results)
+                for idx, result in enumerate(search_results):
                     url = result.get('url', '')
                     if url:
+                        # Show the current URL being reviewed (rotate through them)
+                        progress_animator.show(
+                            f"Reviewing URL {idx + 1}/{total_results}",
+                            "🔍",
+                            url=url
+                        )
+
                         classification = detect_brand_owned_url(url, brand_id, brand_domains, brand_subdomains, brand_social_handles)
                         found_urls.append({
                             'url': url,
@@ -2007,13 +2020,17 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                             'source': search_provider
                         })
 
+                        # Update progress bar proportionally
+                        progress_percent = 70 + int((idx + 1) / total_results * 20)
+                        progress_bar.progress(min(progress_percent, 90))
+
                 # Prioritize brand-owned URLs by sorting them first
                 # This ensures brand domains appear at the top of the list
                 found_urls.sort(key=lambda x: (not x['is_brand_owned'], x['url']))
                 logger.info(f"Sorted {len(found_urls)} URLs with brand-owned URLs prioritized")
 
                 progress_bar.progress(90)
-                progress_animator.show(f"Classifying URLs and applying brand ownership filters", "🏷️")
+                progress_animator.show(f"Finalizing URL classification results", "🏷️")
                 st.session_state['found_urls'] = found_urls
 
                 brand_owned_count = sum(1 for u in found_urls if u['is_brand_owned'])
