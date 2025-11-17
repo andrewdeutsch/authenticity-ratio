@@ -1663,6 +1663,11 @@ def show_analyze_page():
                     short_title = url_data.get('title', url_data.get('url', ''))[:70]
                     ellips = '...' if len(url_data.get('title', '')) > 70 else ''
                     title_line = f"**{short_title}{ellips}** {tier_emoji} `{tier_label}`"
+
+                    # Add core domain badge
+                    if url_data.get('is_core_domain'):
+                        title_line += " ⭐ `Core Domain`"
+
                     if url_data.get('soft_verified'):
                         # Show a clear soft-verified badge with method (DNS resolution, etc.)
                         method = url_data.get('verification_method') or url_data.get('method') or 'soft-verified'
@@ -1749,6 +1754,122 @@ def show_analyze_page():
         run_analysis(brand_id, keywords.split(), sources, max_items, web_pages, include_comments, selected_urls, search_provider,
                     brand_domains, brand_subdomains, brand_social_handles,
                     summary_model=summary_model, recommendations_model=recommendations_model)
+
+
+def is_core_domain(url: str, brand_domains: List[str] = None) -> bool:
+    """
+    Check if a URL is a core domain (e.g., mastercard.com, mastercard.co.uk)
+    rather than a subdomain (e.g., blog.mastercard.com).
+
+    Args:
+        url: The URL to check
+        brand_domains: List of brand domains to check against
+
+    Returns:
+        True if this is a core domain, False otherwise
+    """
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+        netloc = parsed.netloc.lower()
+
+        # Remove www. prefix for comparison
+        if netloc.startswith('www.'):
+            netloc = netloc[4:]
+
+        # If no brand domains provided, can't determine
+        if not brand_domains:
+            return False
+
+        # Check if the netloc matches any brand domain exactly
+        for domain in brand_domains:
+            domain_lower = domain.lower()
+            if domain_lower.startswith('www.'):
+                domain_lower = domain_lower[4:]
+
+            # Exact match = core domain
+            if netloc == domain_lower:
+                return True
+
+            # Also consider international variants as core domains
+            # e.g., mastercard.co.uk, mastercard.com.au
+            # Check if it's domain.TLD or domain.co.TLD format
+            parts = netloc.split('.')
+            domain_parts = domain_lower.split('.')
+
+            # If netloc has 2-3 parts and starts with the same base domain name
+            # Examples: mastercard.com (2 parts), mastercard.co.uk (3 parts)
+            if len(parts) in [2, 3] and len(domain_parts) >= 2:
+                # Compare the brand name part (e.g., "mastercard")
+                if parts[0] == domain_parts[0]:
+                    return True
+
+        return False
+    except Exception:
+        return False
+
+
+def is_login_page(url: str) -> bool:
+    """
+    Detect if a URL is a login/signin/authentication page.
+
+    Args:
+        url: The URL to check
+
+    Returns:
+        True if this appears to be a login page, False otherwise
+    """
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+        path = parsed.path.lower()
+        query = parsed.query.lower()
+
+        # Common login/auth patterns in URLs
+        login_patterns = [
+            '/login',
+            '/signin',
+            '/sign-in',
+            '/log-in',
+            '/auth',
+            '/authenticate',
+            '/authentication',
+            '/account/login',
+            '/user/login',
+            '/customer/login',
+            '/sso',
+            '/oauth',
+            '/saml',
+            '/session/new',
+            '/sessions/new',
+            '/portal/login',
+            '/access/login',
+        ]
+
+        # Check path for login patterns
+        for pattern in login_patterns:
+            if pattern in path:
+                return True
+
+        # Check query parameters for login indicators
+        login_query_params = [
+            'login',
+            'signin',
+            'auth',
+            'authenticate',
+            'redirect_to_login',
+            'return_url',
+        ]
+
+        for param in login_query_params:
+            if param in query:
+                return True
+
+        return False
+    except Exception:
+        return False
 
 
 def detect_brand_owned_url(url: str, brand_id: str, brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None) -> Dict[str, Any]:
@@ -2022,9 +2143,16 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
 
                 # Classify URLs and show them as we process them
                 total_results = len(search_results)
+                filtered_count = 0
                 for idx, result in enumerate(search_results):
                     url = result.get('url', '')
                     if url:
+                        # Filter out login pages
+                        if is_login_page(url):
+                            filtered_count += 1
+                            logger.debug(f"Filtered out login page: {url}")
+                            continue
+
                         # Show the current URL being classified (rotate through them)
                         progress_animator.show(
                             f"Classifying URL {idx + 1}/{total_results}",
@@ -2033,11 +2161,16 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                         )
 
                         classification = detect_brand_owned_url(url, brand_id, brand_domains, brand_subdomains, brand_social_handles)
+
+                        # Check if this is a core domain
+                        is_core = is_core_domain(url, brand_domains)
+
                         found_urls.append({
                             'url': url,
                             'title': result.get('title', 'No title'),
                             'description': result.get('snippet', result.get('description', '')),
                             'is_brand_owned': classification['is_brand_owned'],
+                            'is_core_domain': is_core,
                             'source_type': classification['source_type'],
                             'source_tier': classification['source_tier'],
                             'classification_reason': classification['reason'],
@@ -2049,10 +2182,20 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                         progress_percent = 70 + int((idx + 1) / total_results * 20)
                         progress_bar.progress(min(progress_percent, 90))
 
-                # Prioritize brand-owned URLs by sorting them first
-                # This ensures brand domains appear at the top of the list
-                found_urls.sort(key=lambda x: (not x['is_brand_owned'], x['url']))
-                logger.info(f"Sorted {len(found_urls)} URLs with brand-owned URLs prioritized")
+                if filtered_count > 0:
+                    logger.info(f"Filtered out {filtered_count} login pages from results")
+
+                # Prioritize URLs by:
+                # 1. Core domains first (mastercard.com, mastercard.co.uk)
+                # 2. Other brand-owned URLs
+                # 3. Third-party URLs
+                # Within each category, sort alphabetically by URL
+                found_urls.sort(key=lambda x: (
+                    not x.get('is_core_domain', False),  # Core domains first
+                    not x['is_brand_owned'],              # Then brand-owned
+                    x['url']                               # Then alphabetically
+                ))
+                logger.info(f"Sorted {len(found_urls)} URLs with core domains prioritized (filtered {filtered_count} login pages)")
 
                 progress_bar.progress(90)
                 st.session_state['found_urls'] = found_urls
