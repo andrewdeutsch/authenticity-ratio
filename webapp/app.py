@@ -1037,8 +1037,141 @@ st.markdown("""
         margin: 1rem 0;
         color: #e65100;
     }
+
+    /* Animated progress indicator styles */
+    .progress-container {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem;
+        border-radius: 0.75rem;
+        margin: 1rem 0;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        min-height: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .progress-item {
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 500;
+        text-align: center;
+        line-height: 1.5;
+        animation: fadeInOut 1.25s ease-in-out;
+    }
+
+    .progress-item-fadeout {
+        animation: fadeOut 0.25s ease-out forwards;
+    }
+
+    @keyframes fadeInOut {
+        0% {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        8% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes fadeOut {
+        0% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        100% {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+    }
+
+    .progress-emoji {
+        font-size: 1.5rem;
+        margin-right: 0.5rem;
+        display: inline-block;
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.1);
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
+
+
+class ProgressAnimator:
+    """
+    Animated progress indicator that displays messages with fade-in/fade-out effects.
+    Each message appears at 100% visibility, remains for 1 second, then fades out over 0.25s.
+    """
+
+    def __init__(self, container=None):
+        """
+        Initialize the progress animator.
+
+        Args:
+            container: Streamlit container to use. If None, creates a new empty container.
+        """
+        self.container = container if container is not None else st.empty()
+        self.current_message = None
+
+    def show(self, message: str, emoji: str = "🔍"):
+        """
+        Display an animated progress message.
+
+        Args:
+            message: The progress message to display (will be truncated if too long)
+            emoji: Emoji to show with the message
+        """
+        # Truncate message if too long (keep it concise for animation effect)
+        max_length = 120
+        if len(message) > max_length:
+            message = message[:max_length-3] + "..."
+
+        self.current_message = message
+
+        # Display with animation
+        html = f"""
+        <div class="progress-container">
+            <div class="progress-item">
+                <span class="progress-emoji">{emoji}</span>
+                <span>{message}</span>
+            </div>
+        </div>
+        """
+
+        self.container.markdown(html, unsafe_allow_html=True)
+
+        # Stay visible for 1 second
+        time.sleep(1.0)
+
+        # Fade out over 0.25 seconds
+        html_fadeout = f"""
+        <div class="progress-container">
+            <div class="progress-item progress-item-fadeout">
+                <span class="progress-emoji">{emoji}</span>
+                <span>{message}</span>
+            </div>
+        </div>
+        """
+
+        self.container.markdown(html_fadeout, unsafe_allow_html=True)
+        time.sleep(0.25)
+
+    def clear(self):
+        """Clear the progress display."""
+        self.container.empty()
+        self.current_message = None
 
 
 def show_home_page():
@@ -1669,11 +1802,11 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
     # Set up logging
     logger = logging.getLogger(__name__)
 
-    status_text = st.empty()
+    progress_animator = ProgressAnimator()
     progress_bar = st.progress(0)
 
     try:
-        status_text.text("🔍 Initializing search...")
+        progress_animator.show("Initializing web search engine...", "🚀")
         progress_bar.progress(10)
 
         found_urls = []
@@ -1689,8 +1822,9 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                 if cache_key in st.session_state:
                     llm_domains = st.session_state[cache_key]
                     logger.info(f'Using cached domains for {brand_id}: {llm_domains}')
+                    progress_animator.show(f"Using {len(llm_domains)} cached brand domains for {brand_id}", "📦")
                 else:
-                    status_text.text(f"🤖 Discovering brand domains for {brand_id}...")
+                    progress_animator.show(f"Discovering brand domains for {brand_id} using AI...", "🤖")
                     llm_domains = get_brand_domains_from_llm(brand_id, model='gpt-4o-mini')
                     # Cache for this session
                     st.session_state[cache_key] = llm_domains
@@ -1700,16 +1834,18 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                     site_filters = " OR ".join([f"site:{domain}" for domain in llm_domains[:10]])
                     query = f"{base_query} ({site_filters})"
                     logger.info(f'Built site-restricted query for {brand_id}: {len(llm_domains)} domains')
-                    status_text.text(f"🔍 Searching {len(llm_domains)} brand domains...")
+                    progress_animator.show(f"Targeting {len(llm_domains)} verified brand domains", "🎯")
                 else:
                     # Fallback to regular query if LLM fails
                     query = base_query
                     logger.warning(f'LLM domain discovery returned no domains for {brand_id}, using regular query')
+                    progress_animator.show("Proceeding with general web search", "🌐")
             else:
                 query = base_query
 
-            provider_display = '🌐 Brave' if search_provider == 'brave' else '🔍 Serper'
-            status_text.text(f"{provider_display} Searching for '{query[:100]}...' (requesting {web_pages} URLs)...")
+            provider_display = 'Brave Search' if search_provider == 'brave' else 'Google (via Serper)'
+            provider_emoji = '🌐' if search_provider == 'brave' else '🔍'
+            progress_animator.show(f"Querying {provider_display} for: {query[:80]}...", provider_emoji)
             progress_bar.progress(30)
 
             try:
@@ -1730,9 +1866,10 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
 
                 if expected_requests > 1:
                     logger.info(f"Searching {search_provider}: query={query}, size={web_pages}, will make ~{expected_requests} paginated requests")
-                    status_text.text(f"{provider_display} Searching (will make ~{expected_requests} API requests for {web_pages} URLs)...")
+                    progress_animator.show(f"Preparing {expected_requests} API requests to fetch {web_pages} URLs", "📡")
                 else:
                     logger.info(f"Searching {search_provider}: query={query}, size={web_pages}")
+                    progress_animator.show(f"Fetching up to {web_pages} search results", "📡")
 
                 # Create URLCollectionConfig for ratio enforcement
                 url_collection_config = None
@@ -1764,8 +1901,11 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                 # Use 5x pool size to account for access-denied URLs and stricter content filtering
                 pool_size = web_pages * 5
 
+                progress_animator.show(f"Collecting from pool of {pool_size} URLs with {collection_strategy} filtering", "🔄")
+
                 if search_provider == 'brave':
                     from ingestion.brave_search import collect_brave_pages
+                    progress_animator.show(f"Executing Brave Search API requests ({brand_owned_ratio}% brand-owned target)", "⚡")
                     pages = collect_brave_pages(
                         query=query,
                         target_count=web_pages,
@@ -1781,6 +1921,7 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                         })
                 else:  # serper
                     from ingestion.serper_search import collect_serper_pages
+                    progress_animator.show(f"Executing Google Search API requests ({brand_owned_ratio}% brand-owned target)", "⚡")
                     pages = collect_serper_pages(
                         query=query,
                         target_count=web_pages,
@@ -1796,7 +1937,7 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                         })
 
                 progress_bar.progress(70)
-                status_text.text(f"✓ Collected {len(search_results)} URLs (target: {web_pages}) with {collection_strategy} ratio enforcement, processing...")
+                progress_animator.show(f"Processing {len(search_results)} collected URLs (target: {web_pages})", "📊")
 
                 # Restore original timeout
                 if original_timeout is not None:
@@ -1847,7 +1988,7 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
 """)
 
                     progress_bar.empty()
-                    status_text.empty()
+                    progress_animator.clear()
                     return
 
                 for result in search_results:
@@ -1872,13 +2013,15 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                 logger.info(f"Sorted {len(found_urls)} URLs with brand-owned URLs prioritized")
 
                 progress_bar.progress(90)
+                progress_animator.show(f"Classifying URLs and applying brand ownership filters", "🏷️")
                 st.session_state['found_urls'] = found_urls
 
                 brand_owned_count = sum(1 for u in found_urls if u['is_brand_owned'])
                 third_party_count = sum(1 for u in found_urls if not u['is_brand_owned'])
 
                 progress_bar.progress(100)
-                status_text.empty()
+                progress_animator.show(f"Search complete! Found {brand_owned_count} brand + {third_party_count} 3rd-party URLs", "✅")
+                progress_animator.clear()
                 progress_bar.empty()
 
                 st.success(f"✓ Found {len(found_urls)} URLs ({brand_owned_count} brand-owned, {third_party_count} third-party)")
@@ -1911,7 +2054,7 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
         # Clean up progress indicators
         try:
             progress_bar.empty()
-            status_text.empty()
+            progress_animator.clear()
         except:
             pass
 
