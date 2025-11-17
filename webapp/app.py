@@ -1117,22 +1117,25 @@ st.markdown("""
 
     .progress-logs {
         margin-top: 0.75rem;
-        font-size: 0.325rem;
+        font-size: 0.55rem;
         color: white;
         opacity: 0.24;
-        text-align: center;
+        text-align: left;
         width: 100%;
-        max-height: 0.91rem;
+        max-width: 100%;
         overflow: hidden;
         font-family: monospace;
-        line-height: 1.4;
+        line-height: 1.3;
         animation: fadeIn 0.3s ease-out;
+        box-sizing: border-box;
+        padding: 0 1rem;
     }
 
     .progress-log-entry {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        white-space: normal;
+        word-wrap: break-word;
+        word-break: break-word;
+        overflow-wrap: break-word;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1237,10 +1240,9 @@ class ProgressAnimator:
         # Build logs display
         logs_html = ""
         if self.logs:
-            # Escape HTML in log messages for security
-            escaped_logs = [html_module.escape(log) for log in self.logs[-2:]]  # Show last 2 logs
-            log_entries = ''.join([f'<div class="progress-log-entry">{log}</div>' for log in escaped_logs])
-            logs_html = f'<div class="progress-logs">{log_entries}</div>'
+            # Escape HTML in log messages for security and show only the last log
+            last_log = html_module.escape(self.logs[-1])
+            logs_html = f'<div class="progress-logs"><div class="progress-log-entry">{last_log}</div></div>'
 
         # Escape message and emoji
         safe_message = html_module.escape(self.current_message) if self.current_message else ""
@@ -2005,8 +2007,8 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                     search_logger = logging.getLogger('ingestion.brave_search')
                     log_handler = StreamlitLogHandler(progress_animator)
                     log_handler.setLevel(logging.INFO)
-                    # Use a simple formatter without timestamp for cleaner display
-                    log_formatter = logging.Formatter('%(message)s')
+                    # Use full formatter with timestamp
+                    log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
                     log_handler.setFormatter(log_formatter)
                     search_logger.addHandler(log_handler)
 
@@ -2046,8 +2048,8 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                     search_logger = logging.getLogger('ingestion.serper_search')
                     log_handler = StreamlitLogHandler(progress_animator)
                     log_handler.setLevel(logging.INFO)
-                    # Use a simple formatter without timestamp for cleaner display
-                    log_formatter = logging.Formatter('%(message)s')
+                    # Use full formatter with timestamp
+                    log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
                     log_handler.setFormatter(log_formatter)
                     search_logger.addHandler(log_handler)
 
