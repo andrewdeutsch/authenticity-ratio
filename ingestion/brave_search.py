@@ -20,10 +20,23 @@ import threading
 import re
 from pathlib import Path
 
+# Import fetch configuration module
+from ingestion.fetch_config import (
+    get_domain_config,
+    get_random_delay,
+    get_realistic_headers,
+    should_use_playwright,
+    get_retry_config,
+)
+
 # Rate limiting: minimum interval (seconds) between outbound Brave requests
 _BRAVE_REQUEST_INTERVAL = float(os.getenv('BRAVE_REQUEST_INTERVAL', '1.2'))
 _LAST_BRAVE_REQUEST_TS = 0.0
 _BRAVE_RATE_LOCK = threading.Lock()
+
+# Session management for connection pooling and cookie handling
+_SESSIONS_CACHE: Dict[str, requests.Session] = {}
+_SESSIONS_LOCK = threading.Lock()
 
 
 def _wait_for_rate_limit():
@@ -40,6 +53,28 @@ def _wait_for_rate_limit():
         # Update the timestamp to now after sleeping
         _LAST_BRAVE_REQUEST_TS = time.monotonic()
     # end _wait_for_rate_limit
+
+
+def _get_session(domain: str) -> requests.Session:
+    """
+    Get or create a requests.Session for the given domain.
+
+    Sessions provide connection pooling and automatic cookie handling,
+    making scraping more efficient and realistic.
+
+    Args:
+        domain: The domain (netloc) for which to get a session
+
+    Returns:
+        A requests.Session object
+    """
+    with _SESSIONS_LOCK:
+        if domain not in _SESSIONS_CACHE:
+            session = requests.Session()
+            # Configure session for better compatibility
+            session.max_redirects = 10
+            _SESSIONS_CACHE[domain] = session
+        return _SESSIONS_CACHE[domain]
 
 
 # Module-level robots.txt cache to share across functions
@@ -631,20 +666,37 @@ def _extract_body_text(soup: BeautifulSoup) -> str:
 
 def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
     """Fetch a URL and return a simple content dict {title, body, url}"""
-    headers = {
-        "User-Agent": os.getenv('AR_USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-    }
+    # Get realistic headers for this URL
+    headers = get_realistic_headers(url)
 
-    retries = int(os.getenv('AR_FETCH_RETRIES', '3'))
-    backoff = float(os.getenv('AR_FETCH_BACKOFF', '0.6'))
+    # Get retry configuration
+    retry_config = get_retry_config(url)
+    retries = retry_config['max_retries']
+    timeout = retry_config['timeout']
+
+    # Get session for this domain (for connection pooling and cookie handling)
+    parsed = urlparse(url)
+    domain = parsed.netloc
+    session = _get_session(domain)
 
     resp = None
+    last_status_code = None
+
     for attempt in range(1, retries + 1):
         try:
-            _wait_for_rate_limit()
-            resp = requests.get(url, headers=headers, timeout=timeout)
+            # Use randomized delay instead of fixed rate limit
+            if attempt == 1:
+                # First attempt: use configured rate limit
+                _wait_for_rate_limit()
+            else:
+                # Retry attempts: use randomized delay
+                delay = get_random_delay(url)
+                logger.debug('Retry attempt %s/%s for %s - waiting %.2fs', attempt, retries, url, delay)
+                time.sleep(delay)
+
+            # Use session.get instead of requests.get for better session management
+            resp = session.get(url, headers=headers, timeout=timeout)
+            last_status_code = resp.status_code
             break
         except Exception as e:
             # Handle both requests.RequestException and generic exceptions from monkeypatches
@@ -653,6 +705,9 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
                 logger.error('Error fetching page %s after %s attempts: %s', url, retries, e)
                 # No resp to dump; just return empty
                 return {"title": "", "body": "", "url": url}
+            # Get smarter backoff based on status code if available
+            retry_config_updated = get_retry_config(url, last_status_code)
+            backoff = retry_config_updated['base_backoff']
             time.sleep(backoff * (2 ** (attempt - 1)))
 
     try:
@@ -661,19 +716,21 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
 
         if resp.status_code != 200:
             logger.warning("Fetching %s returned %s", url, resp.status_code)
-            # If Playwright fallback is enabled and allowed by robots.txt, try rendering
-            use_playwright = os.getenv('AR_USE_PLAYWRIGHT', '0') == '1'
-            try_playwright = use_playwright and _PLAYWRIGHT_AVAILABLE
+            # Check if Playwright should be used (global override or domain-specific config)
+            use_pw = should_use_playwright(url)
+            try_playwright = use_pw and _PLAYWRIGHT_AVAILABLE
             if try_playwright:
                 try:
-                    ua = os.getenv('AR_USER_AGENT', 'Mozilla/5.0 (compatible; ar-bot/1.0)')
+                    # Use realistic browser headers for Playwright too
+                    pw_headers = get_realistic_headers(url)
+                    ua = pw_headers['User-Agent']
                     # Respect robots.txt before attempting a headful fetch
                     try:
                         allowed = _is_allowed_by_robots(url, ua)
                     except Exception:
                         allowed = True
                     if allowed:
-                        logger.info('Attempting Playwright-rendered fetch for %s (AR_USE_PLAYWRIGHT=1)', url)
+                        logger.info('Attempting Playwright-rendered fetch for %s (domain config or AR_USE_PLAYWRIGHT)', url)
                         with sync_playwright() as pw:
                             browser = pw.chromium.launch(headless=True)
                             page = browser.new_page(user_agent=ua)
@@ -766,11 +823,13 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
                 body = og_desc.get('content').strip()
         if (not title or not body or len(body) < 200):
             # Attempt Playwright fallback for thin content if enabled and allowed
-            use_playwright = os.getenv('AR_USE_PLAYWRIGHT', '0') == '1'
-            try_playwright = use_playwright and _PLAYWRIGHT_AVAILABLE
+            use_pw = should_use_playwright(url)
+            try_playwright = use_pw and _PLAYWRIGHT_AVAILABLE
             if try_playwright:
                 try:
-                    ua = os.getenv('AR_USER_AGENT', 'Mozilla/5.0 (compatible; ar-bot/1.0)')
+                    # Use realistic browser headers for Playwright too
+                    pw_headers = get_realistic_headers(url)
+                    ua = pw_headers['User-Agent']
                     allowed = True
                     try:
                         allowed = _is_allowed_by_robots(url, ua)

@@ -29,6 +29,7 @@ from urllib.parse import urlparse
 
 from config.settings import APIConfig, SETTINGS
 from scoring.llm_client import ChatClient
+from ingestion.fetch_config import get_realistic_headers, get_random_delay
 
 # Configure logging for the webapp
 import logging
@@ -611,14 +612,11 @@ def normalize_international_url(url: str, brand_id: str) -> Optional[str]:
 
 def fetch_page_title(url: str, brand_id: str = '', timeout: float = 5.0) -> str:
     """Retrieve a human-readable title for a given URL, fallback to hostname, and handle hostname mismatches."""
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (compatible; TrustStackBot/1.0; +https://example.com/bot)'
-    }
-    browser_headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
+    # Use realistic browser headers from the start
+    headers = get_realistic_headers(url)
+
     try:
-        # Try with a polite bot UA first
+        # Use realistic headers with full browser simulation
         response = requests.get(url, timeout=timeout, headers=headers)
         status = getattr(response, 'status_code', None)
         if status and 200 <= status < 400:
@@ -628,18 +626,22 @@ def fetch_page_title(url: str, brand_id: str = '', timeout: float = 5.0) -> str:
                 title = title_tag.string.strip()
                 if title:
                     return title
-        # If we get a 403, retry with a browser UA which some sites accept
+        # If we get a 403, add a random delay and retry with fresh headers
         if status == 403:
-            logger.debug('Received 403 fetching title for %s; retrying with browser UA', url)
+            logger.debug('Received 403 fetching title for %s; retrying with delay and fresh headers', url)
             try:
-                resp2 = requests.get(url, timeout=max(timeout, 6.0), headers=browser_headers)
+                delay = get_random_delay(url)
+                time.sleep(delay)
+                # Get fresh headers with potentially different UA
+                fresh_headers = get_realistic_headers(url)
+                resp2 = requests.get(url, timeout=max(timeout, 6.0), headers=fresh_headers)
                 if getattr(resp2, 'status_code', None) and 200 <= resp2.status_code < 400:
                     soup = BeautifulSoup(resp2.text, 'html.parser')
                     title_tag = soup.title
                     if title_tag and title_tag.string:
                         return title_tag.string.strip()
             except Exception as e:
-                logger.debug('Browser-UA retry failed for %s: %s', url, e)
+                logger.debug('Retry with fresh headers failed for %s: %s', url, e)
     except requests.exceptions.SSLError as exc:
         logger.debug('SSL error fetching %s: %s', url, exc)
         normalized_url = normalize_international_url(url, brand_id)
@@ -663,7 +665,8 @@ def verify_url(url: str, brand_id: str = '', timeout: float = 5.0) -> bool:
 
     Retries with normalized host on SSL errors.
     """
-    headers = {'User-Agent': 'Mozilla/5.0 (compatible; TrustStackBot/1.0; +https://example.com/bot)'}
+    # Use realistic browser headers
+    headers = get_realistic_headers(url)
     try:
         # Prefer HEAD for lightweight check
         resp = requests.head(url, timeout=timeout, headers=headers, allow_redirects=True)
