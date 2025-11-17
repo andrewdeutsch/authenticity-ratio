@@ -1917,13 +1917,24 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                         pool_size=pool_size,
                         url_collection_config=url_collection_config
                     )
-                    # Convert to search result format
-                    for page in pages:
+                    # Convert to search result format and show URLs as we process them
+                    total_pages = len(pages)
+                    for idx, page in enumerate(pages):
+                        url = page.get('url', '')
+                        # Show each URL as it's being inspected
+                        progress_animator.show(
+                            f"Inspecting result {idx + 1}/{total_pages}",
+                            "🔍",
+                            url=url
+                        )
                         search_results.append({
-                            'url': page.get('url', ''),
+                            'url': url,
                             'title': page.get('title', 'No title'),
                             'snippet': page.get('body', '')[:200]
                         })
+                        # Update progress proportionally (50% -> 70%)
+                        progress_percent = 50 + int((idx + 1) / total_pages * 20)
+                        progress_bar.progress(min(progress_percent, 70))
                 else:  # serper
                     from ingestion.serper_search import collect_serper_pages
                     progress_animator.show(f"Executing Google Search API requests ({brand_owned_ratio}% brand-owned target)", "⚡")
@@ -1933,13 +1944,24 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                         pool_size=pool_size,
                         url_collection_config=url_collection_config
                     )
-                    # Convert to search result format
-                    for page in pages:
+                    # Convert to search result format and show URLs as we process them
+                    total_pages = len(pages)
+                    for idx, page in enumerate(pages):
+                        url = page.get('url', '')
+                        # Show each URL as it's being inspected
+                        progress_animator.show(
+                            f"Inspecting result {idx + 1}/{total_pages}",
+                            "🔍",
+                            url=url
+                        )
                         search_results.append({
-                            'url': page.get('url', ''),
+                            'url': url,
                             'title': page.get('title', 'No title'),
                             'snippet': page.get('body', '')[:200]
                         })
+                        # Update progress proportionally (50% -> 70%)
+                        progress_percent = 50 + int((idx + 1) / total_pages * 20)
+                        progress_bar.progress(min(progress_percent, 70))
 
                 progress_bar.progress(70)
 
@@ -2000,10 +2022,10 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                 for idx, result in enumerate(search_results):
                     url = result.get('url', '')
                     if url:
-                        # Show the current URL being reviewed (rotate through them)
+                        # Show the current URL being classified (rotate through them)
                         progress_animator.show(
-                            f"Reviewing URL {idx + 1}/{total_results}",
-                            "🔍",
+                            f"Classifying URL {idx + 1}/{total_results}",
+                            "🏷️",
                             url=url
                         )
 
@@ -2020,7 +2042,7 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                             'source': search_provider
                         })
 
-                        # Update progress bar proportionally
+                        # Update progress bar proportionally (70% -> 90%)
                         progress_percent = 70 + int((idx + 1) / total_results * 20)
                         progress_bar.progress(min(progress_percent, 90))
 
@@ -2030,7 +2052,6 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                 logger.info(f"Sorted {len(found_urls)} URLs with brand-owned URLs prioritized")
 
                 progress_bar.progress(90)
-                progress_animator.show(f"Finalizing URL classification results", "🏷️")
                 st.session_state['found_urls'] = found_urls
 
                 brand_owned_count = sum(1 for u in found_urls if u['is_brand_owned'])
