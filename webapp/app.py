@@ -1774,7 +1774,16 @@ def show_results_page():
         # Create DataFrame for display
         items_data = []
         for item in items:
+            # Parse meta if it's a JSON string
             meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except:
+                    meta = {}
+            elif meta is None:
+                meta = {}
+
             score = item.get('final_score', 0)
 
             # Determine rating band
@@ -1815,7 +1824,16 @@ def show_results_page():
         # Detailed view expander
         with st.expander("🔎 View Detailed Breakdown"):
             for idx, item_detail in enumerate(appendix[:20]):  # Limit to first 20 for performance
+                # Parse meta if it's a JSON string
                 meta = item_detail.get('meta', {})
+                if isinstance(meta, str):
+                    try:
+                        meta = json.loads(meta)
+                    except:
+                        meta = {}
+                elif meta is None:
+                    meta = {}
+
                 st.markdown(f"**Item {idx + 1}: {meta.get('title', 'Untitled')}**")
 
                 col_a, col_b = st.columns([1, 2])
