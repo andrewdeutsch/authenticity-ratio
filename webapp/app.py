@@ -858,7 +858,7 @@ def show_home_page():
         4. **Export** reports for stakeholders
         """)
 
-        if st.button("🚀 Start New Analysis", type="primary", use_container_width=True):
+        if st.button("🚀 Start New Analysis", type="primary", width='stretch'):
             st.session_state['page'] = 'analyze'
             st.rerun()
 
@@ -1204,11 +1204,11 @@ def show_analyze_page():
 
         col_search, col_submit, col_clear = st.columns([1, 1, 3])
         with col_search:
-            search_urls = st.form_submit_button("🔍 Search URLs", use_container_width=True)
+            search_urls = st.form_submit_button("🔍 Search URLs", width='stretch')
         with col_submit:
-            submit = st.form_submit_button("▶️ Run Analysis", type="primary", use_container_width=True)
+            submit = st.form_submit_button("▶️ Run Analysis", type="primary", width='stretch')
         with col_clear:
-            if st.form_submit_button("Clear Results", use_container_width=True):
+            if st.form_submit_button("Clear Results", width='stretch'):
                 st.session_state['last_run'] = None
                 st.session_state['found_urls'] = None
                 # clear any fallback indicator
@@ -1610,7 +1610,7 @@ def show_results_page():
             hole=0.3
         )
         fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-        st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
+        st.plotly_chart(fig_pie, width='stretch', config={'displayModeBar': False})
 
     with col2:
         # Rating Score Distribution Histogram
@@ -1636,7 +1636,7 @@ def show_results_page():
         fig_hist.add_vline(x=80, line_dash="dash", line_color="green", annotation_text="Excellent")
         fig_hist.add_vline(x=60, line_dash="dash", line_color="blue", annotation_text="Good")
         fig_hist.add_vline(x=40, line_dash="dash", line_color="orange", annotation_text="Fair")
-        st.plotly_chart(fig_hist, use_container_width=True, config={'displayModeBar': False})
+        st.plotly_chart(fig_hist, width='stretch', config={'displayModeBar': False})
 
     st.divider()
 
@@ -1740,7 +1740,7 @@ def show_results_page():
             height=400
         )
 
-        st.plotly_chart(fig_radar, use_container_width=True, config={'displayModeBar': False})
+        st.plotly_chart(fig_radar, width='stretch', config={'displayModeBar': False})
 
     with col2:
         st.markdown("#### Dimension Scores")
@@ -1818,8 +1818,8 @@ def show_results_page():
                 return 'background-color: #f8d7da; color: #721c24'
             return ''
 
-        styled_df = df.style.applymap(color_rating, subset=['Rating'])
-        st.dataframe(styled_df, use_container_width=True, height=400)
+        styled_df = df.style.map(color_rating, subset=['Rating'])
+        st.dataframe(styled_df, width='stretch', height=400)
 
         # Detailed view expander
         with st.expander("🔎 View Detailed Breakdown"):
@@ -1916,7 +1916,7 @@ def show_results_page():
                     data=f,
                     file_name=os.path.basename(pdf_path),
                     mime="application/pdf",
-                    use_container_width=True
+                    width='stretch'
                 )
 
     with col2:
@@ -1928,7 +1928,7 @@ def show_results_page():
                     data=f.read(),
                     file_name=os.path.basename(md_path),
                     mime="text/markdown",
-                    use_container_width=True
+                    width='stretch'
                 )
 
     with col3:
@@ -1938,7 +1938,7 @@ def show_results_page():
             data=json.dumps(report, indent=2, default=str),
             file_name=f"trust_stack_data_{run_data.get('brand_id')}_{run_data.get('run_id')}.json",
             mime="application/json",
-            use_container_width=True
+            width='stretch'
         )
 
 
@@ -2082,7 +2082,7 @@ def show_history_page():
 
             with header_col3:
                 st.write("")  # Spacing
-                if st.button("📊 View", key=f"view_{idx}", use_container_width=True):
+                if st.button("📊 View", key=f"view_{idx}", width='stretch'):
                     st.session_state['last_run'] = run
                     st.session_state['page'] = 'results'
                     st.rerun()
@@ -2132,7 +2132,7 @@ def show_history_page():
                             file_name=os.path.basename(pdf_path),
                             mime="application/pdf",
                             key=f"pdf_{idx}",
-                            use_container_width=True
+                            width='stretch'
                         )
 
             with download_col3:
@@ -2146,7 +2146,7 @@ def show_history_page():
                             file_name=os.path.basename(md_path),
                             mime="text/markdown",
                             key=f"md_{idx}",
-                            use_container_width=True
+                            width='stretch'
                         )
 
             st.divider()
@@ -2163,19 +2163,19 @@ def main():
     with st.sidebar:
         st.markdown("### Navigation")
 
-        if st.button("🏠 Home", use_container_width=True):
+        if st.button("🏠 Home", width='stretch'):
             st.session_state['page'] = 'home'
             st.rerun()
 
-        if st.button("🚀 Run Analysis", use_container_width=True):
+        if st.button("🚀 Run Analysis", width='stretch'):
             st.session_state['page'] = 'analyze'
             st.rerun()
 
-        if st.button("📊 View Results", use_container_width=True):
+        if st.button("📊 View Results", width='stretch'):
             st.session_state['page'] = 'results'
             st.rerun()
 
-        if st.button("📚 History", use_container_width=True):
+        if st.button("📚 History", width='stretch'):
             st.session_state['page'] = 'history'
             st.rerun()
 
