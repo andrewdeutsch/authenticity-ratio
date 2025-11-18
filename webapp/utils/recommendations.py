@@ -44,8 +44,8 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
             evidence = attr.get('evidence', '')
             label = attr.get('label', '')
 
-            # Only report low-scoring attributes (value <= 5 indicates problems)
-            if dimension in dimension_issues and value <= 5:
+            # Report any non-perfect attributes (value < 10 indicates room for improvement)
+            if dimension in dimension_issues and value < 10:
                 dimension_issues[dimension].append({
                     'title': title,
                     'url': url,
