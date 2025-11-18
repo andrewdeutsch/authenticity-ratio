@@ -252,26 +252,79 @@ def is_login_page(url: str) -> bool:
         parsed = urlparse(url)
         path = parsed.path.lower()
         query = parsed.query.lower()
+        fragment = parsed.fragment.lower()
+        hostname = (parsed.hostname or '').lower()
 
-        # Common login/auth patterns in URLs
+        # Check for login-related subdomains
+        login_subdomains = [
+            'login.',
+            'signin.',
+            'sign-in.',
+            'auth.',
+            'authenticate.',
+            'sso.',
+            'account.',
+            'accounts.',
+            'my.',
+            'secure.',
+            'id.',
+            'identity.',
+            'portal.',
+            'access.',
+        ]
+
+        for subdomain in login_subdomains:
+            if hostname.startswith(subdomain):
+                return True
+
+        # Common login/auth patterns in URLs (path patterns)
         login_patterns = [
             '/login',
             '/signin',
             '/sign-in',
             '/log-in',
+            '/logon',
+            '/log-on',
             '/auth',
             '/authenticate',
             '/authentication',
             '/account/login',
+            '/account/signin',
+            '/accounts/login',
+            '/accounts/signin',
             '/user/login',
+            '/user/signin',
+            '/users/login',
+            '/users/signin',
             '/customer/login',
+            '/customer/signin',
+            '/member/login',
+            '/member/signin',
             '/sso',
             '/oauth',
             '/saml',
             '/session/new',
             '/sessions/new',
             '/portal/login',
+            '/portal/signin',
             '/access/login',
+            '/access/signin',
+            '/secure/login',
+            '/secure/signin',
+            '/register',
+            '/signup',
+            '/sign-up',
+            '/registration',
+            '/password',
+            '/forgot-password',
+            '/reset-password',
+            '/forgotpassword',
+            '/resetpassword',
+            '/verify',
+            '/verification',
+            '/2fa',
+            '/mfa',
+            '/identity',
         ]
 
         # Check path for login patterns
@@ -279,18 +332,60 @@ def is_login_page(url: str) -> bool:
             if pattern in path:
                 return True
 
+        # Check for login-related file names
+        login_files = [
+            'login.html',
+            'login.htm',
+            'login.aspx',
+            'login.php',
+            'login.jsp',
+            'signin.html',
+            'signin.htm',
+            'signin.aspx',
+            'signin.php',
+            'signin.jsp',
+            'logon.html',
+            'logon.htm',
+            'logon.aspx',
+            'logon.php',
+            'auth.html',
+            'auth.aspx',
+            'auth.php',
+        ]
+
+        for filename in login_files:
+            if path.endswith(filename):
+                return True
+
         # Check query parameters for login indicators
         login_query_params = [
             'login',
             'signin',
+            'sign-in',
+            'logon',
             'auth',
             'authenticate',
+            'authentication',
             'redirect_to_login',
             'return_url',
+            'returnurl',
+            'redirect',
+            'next=',
+            'goto=',
+            'continue=',
+            'action=login',
+            'action=signin',
+            'mode=login',
+            'mode=signin',
         ]
 
         for param in login_query_params:
             if param in query:
+                return True
+
+        # Check fragment for login patterns (e.g., #/login, #login)
+        for pattern in ['/login', '/signin', '/sign-in', '/auth', '/register', '/signup']:
+            if pattern in fragment:
                 return True
 
         return False
