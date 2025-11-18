@@ -1092,19 +1092,65 @@ class TrustStackAttributeDetector:
     def _detect_privacy_policy(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect privacy policy link"""
         text = (content.body + " " + content.title).lower()
+        meta = content.meta or {}
 
-        has_privacy_link = "privacy policy" in text or "privacy" in text
+        # Check for privacy policy in multiple ways
 
-        if has_privacy_link:
+        # 1. Check metadata for privacy policy URL
+        has_privacy_url = any(key in meta for key in [
+            "privacy_policy_url", "privacy_url", "privacy_policy_link"
+        ])
+
+        # 2. Check for common privacy policy link text variations
+        privacy_link_patterns = [
+            "privacy policy",
+            "privacy notice",
+            "privacy statement",
+            "data protection",
+            "privacy & terms",
+            "privacy and terms",
+            "cookie policy",
+            "privacy center",
+            "your privacy"
+        ]
+
+        has_privacy_text = any(pattern in text for pattern in privacy_link_patterns)
+
+        # 3. Check for /privacy or similar URL patterns in the text
+        privacy_url_patterns = [
+            "/privacy",
+            "/privacy-policy",
+            "/legal/privacy",
+            "/privacy-notice"
+        ]
+
+        has_privacy_url_pattern = any(pattern in text for pattern in privacy_url_patterns)
+
+        # Determine if privacy policy is present
+        if has_privacy_url or has_privacy_text or has_privacy_url_pattern:
             return DetectedAttribute(
                 attribute_id="privacy_policy_link_availability_clarity",
                 dimension="transparency",
                 label="Privacy policy link availability & clarity",
                 value=10.0,
-                evidence="Privacy policy reference found",
+                evidence="Privacy policy link found",
+                confidence=0.9
+            )
+
+        # Only flag as missing for owned/corporate content where privacy policy is expected
+        # Don't flag social media posts, marketplace listings, etc.
+        content_type = self._determine_content_type(content)
+        if content_type in ['landing_page', 'other'] and content.platform_type.lower() == 'owned':
+            return DetectedAttribute(
+                attribute_id="privacy_policy_link_availability_clarity",
+                dimension="transparency",
+                label="Privacy policy link availability & clarity",
+                value=2.0,
+                evidence="No privacy policy link detected on owned content",
                 confidence=0.7
             )
-        return None
+
+        return None  # Not applicable for social/marketplace content
 
     # ===== VERIFICATION DETECTORS =====
 
