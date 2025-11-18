@@ -1684,8 +1684,8 @@ def show_results_page():
                 for issue_type, type_issues in issues_by_type.items():
                     st.markdown(f"**⚠️ {issue_type}** ({len(type_issues)} occurrence{'s' if len(type_issues) > 1 else ''})")
 
-                    # Show remedy recommendation based on issue type
-                    remedy = get_remedy_for_issue(issue_type, dimension_key)
+                    # Show remedy recommendation with specific examples from detected issues
+                    remedy = get_remedy_for_issue(issue_type, dimension_key, issue_items=type_issues)
                     if remedy:
                         st.info(f"**💡 Recommended Fix:** {remedy}")
 
