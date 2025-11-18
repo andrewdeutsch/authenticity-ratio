@@ -1047,6 +1047,20 @@ class TrustStackAttributeDetector:
 
     def _detect_engagement_authenticity(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect engagement authenticity ratio"""
+
+        # Determine content type to check if engagement is expected
+        content_type = self._determine_content_type(content)
+
+        # Skip engagement detection for landing pages and promotional pages
+        # where user engagement (upvotes, helpful counts) is not expected
+        if content_type == 'landing_page':
+            return None
+
+        # Only apply engagement scoring to content types where it's meaningful
+        # (blog, article, news, social_post)
+        if content_type not in ['blog', 'article', 'news', 'social_post']:
+            return None
+
         # Check for signs of authentic engagement
         upvotes = content.upvotes or 0
         helpful_count = content.helpful_count or 0
