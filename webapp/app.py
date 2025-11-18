@@ -138,58 +138,6 @@ def infer_brand_domains(brand_id: str) -> Dict[str, List[str]]:
     }
 
 
-def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    Extract specific issues from content items grouped by dimension.
-
-    Args:
-        items: List of analyzed content items with detected attributes
-
-    Returns:
-        Dictionary mapping dimension to list of specific issues found
-    """
-    dimension_issues = {
-        'provenance': [],
-        'verification': [],
-        'transparency': [],
-        'coherence': [],
-        'resonance': []
-    }
-
-    for item in items:
-        meta = item.get('meta', {})
-        if isinstance(meta, str):
-            try:
-                meta = json.loads(meta)
-            except:
-                meta = {}
-        elif meta is None:
-            meta = {}
-
-        # Extract detected attributes
-        detected_attrs = meta.get('detected_attributes', [])
-        title = meta.get('title', meta.get('name', 'Unknown content'))[:60]
-        url = meta.get('source_url', meta.get('url', ''))
-
-        for attr in detected_attrs:
-            dimension = attr.get('dimension', 'unknown')
-            value = attr.get('value', 5)
-            evidence = attr.get('evidence', '')
-            label = attr.get('label', '')
-
-            # Only report low-scoring attributes (value <= 5 indicates problems)
-            if dimension in dimension_issues and value <= 5:
-                dimension_issues[dimension].append({
-                    'title': title,
-                    'url': url,
-                    'issue': label,
-                    'evidence': evidence,
-                    'value': value
-                })
-
-    return dimension_issues
-
-
 def get_brand_domains_from_llm(brand_id: str, model: str = 'gpt-4o-mini') -> List[str]:
     """
     Use LLM to discover all official domains owned by a brand.
@@ -1645,17 +1593,36 @@ def show_results_page():
 
     dimension_issues = extract_issues_from_items(items)
 
+    # Also check dimension scores to ensure we show remedies for low-scoring dimensions
+    # even if no specific attributes were detected
+    dimension_breakdown = report.get('dimension_breakdown', {})
+
     # Count total issues per dimension
     issue_counts = {dim: len(issues) for dim, issues in dimension_issues.items()}
+
+    # Add dimensions with low scores but no detected attribute issues
+    for dim_key in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
+        dim_score = dimension_breakdown.get(dim_key, {}).get('average', 1.0) * 100
+        if dim_score < 80 and dim_key not in issue_counts:
+            issue_counts[dim_key] = 0
+
     total_issues = sum(issue_counts.values())
+    dimensions_needing_remedies = sum(1 for c in issue_counts.values() if c >= 0)
 
-    if total_issues > 0:
-        st.markdown(f"**Found {total_issues} specific issues across {sum(1 for c in issue_counts.values() if c > 0)} dimensions**")
+    if dimensions_needing_remedies > 0:
+        specific_issues_count = sum(1 for c in issue_counts.values() if c > 0)
+        if specific_issues_count > 0:
+            st.markdown(f"**Found {total_issues} specific issues across {specific_issues_count} dimensions**")
+        else:
+            st.markdown(f"**Analyzing {dimensions_needing_remedies} dimensions for improvement opportunities**")
 
-        # Display remedies for each dimension with issues
+        # Display remedies for each dimension with issues OR low scores
         for dimension_key in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
             issues = dimension_issues.get(dimension_key, [])
-            if not issues:
+            dim_score = dimension_breakdown.get(dimension_key, {}).get('average', 1.0) * 100
+
+            # Skip dimensions that score well and have no issues
+            if not issues and dim_score >= 80:
                 continue
 
             dimension_names = {
@@ -1668,7 +1635,13 @@ def show_results_page():
 
             dim_emoji_name, dim_subtitle = dimension_names[dimension_key]
 
-            with st.expander(f"{dim_emoji_name}: {len(issues)} issues found", expanded=(dimension_key == min(issue_counts, key=issue_counts.get) if issue_counts else False)):
+            # Show issue count or score-based label
+            if issues:
+                expander_label = f"{dim_emoji_name}: {len(issues)} issues found"
+            else:
+                expander_label = f"{dim_emoji_name}: Score {dim_score:.1f}/100 - Room for improvement"
+
+            with st.expander(expander_label, expanded=(dimension_key == min(issue_counts, key=lambda k: (issue_counts[k], -dimension_breakdown.get(k, {}).get('average', 1.0)*100)) if issue_counts else False)):
                 st.markdown(f"**{dim_subtitle}**")
                 st.markdown("---")
 
@@ -1699,6 +1672,26 @@ def show_results_page():
                                 st.caption(f"  🔗 {issue['url']}")
                         if len(type_issues) > 10:
                             st.caption(f"... and {len(type_issues) - 10} more items")
+
+                    st.markdown("")  # Spacing
+
+                # If no specific issues detected but dimension score is low, show generic remedy
+                if not issues and dim_score < 80:
+                    generic_remedies = {
+                        'provenance': "**General Provenance Improvements:**\n\nYour provenance score indicates room for improvement. Consider:\n- Add clear author attribution and bylines to all content\n- Implement schema.org structured data markup for better metadata\n- Include publication timestamps and last-modified dates\n- Add canonical URLs to prevent duplicate content issues\n- Ensure domain trust signals are strong (HTTPS, security certificates)",
+
+                        'verification': "**General Verification Improvements:**\n\nYour verification score suggests opportunities to enhance accuracy and trust. Consider:\n- Add citations and references for all factual claims\n- Link claims to authoritative, verifiable sources\n- Implement verification badges for legitimate sellers/partners\n- Monitor engagement metrics for bot activity and fake engagement\n- Clearly label all sponsored content and advertisements",
+
+                        'transparency': "**General Transparency Improvements:**\n\nYour transparency score indicates disclosure gaps. Consider:\n- Add clear Privacy Policy links in footer and navigation\n- Disclose AI-generated or AI-assisted content prominently\n- Ensure bots and chatbots self-identify in interactions\n- Add captions and subtitles to all video content\n- Include data source citations for statistics and claims",
+
+                        'coherence': "**General Coherence Improvements:**\n\nYour coherence score suggests consistency issues. Consider:\n- Audit all content for consistent brand voice and tone\n- Run link checkers to identify and fix broken links\n- Ensure claims are consistent across all pages and channels\n- Verify email templates match website branding\n- Maintain version history and change logs for content updates",
+
+                        'resonance': "**General Resonance Improvements:**\n\nYour resonance score indicates engagement opportunities. Consider:\n- Align content with community values and current trends\n- Adjust readability to match target audience level\n- Ensure tone and sentiment match context and platform\n- Verify language/locale matches target market\n- Improve content personalization and relevance"
+                    }
+
+                    generic_remedy = generic_remedies.get(dimension_key, '')
+                    if generic_remedy:
+                        st.warning(f"**Current Score: {dim_score:.1f}/100**\n\n{generic_remedy}")
 
                     st.markdown("")  # Spacing
     else:
