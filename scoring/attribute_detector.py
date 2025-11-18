@@ -584,24 +584,57 @@ class TrustStackAttributeDetector:
             "nytimes.com", "wsj.com", "bbc.com", "reuters.com"
         ]
 
+        # Check for red flags
+        red_flags = []
+        if meta.get("ssl_valid") == "false":
+            red_flags.append("No valid SSL certificate")
+        if meta.get("has_privacy_policy") == "false":
+            red_flags.append("No privacy policy found")
+        if meta.get("domain_age_days") and int(meta.get("domain_age_days", 999)) < 30:
+            red_flags.append("Very new domain (less than 30 days old)")
+        if meta.get("malware_detected") == "true":
+            red_flags.append("Malware detected")
+        if meta.get("spam_score") and float(meta.get("spam_score", 0)) > 7.0:
+            red_flags.append("High spam score")
+
+        # If there are red flags, report low trust
+        if red_flags:
+            return DetectedAttribute(
+                attribute_id="source_domain_trust_baseline",
+                dimension="provenance",
+                label="Source domain trust baseline",
+                value=2.0,
+                evidence=f"Domain trust issues: {'; '.join(red_flags)}",
+                confidence=0.9
+            )
+
+        # Report only trusted sources/domains positively
+        # Don't report neutral cases - they're not issues
         if source in trusted_sources:
             value = trusted_sources[source]
             evidence = f"Trusted platform: {source}"
+            return DetectedAttribute(
+                attribute_id="source_domain_trust_baseline",
+                dimension="provenance",
+                label="Source domain trust baseline",
+                value=value,
+                evidence=evidence,
+                confidence=0.8
+            )
         elif any(domain.endswith(td) for td in trusted_domains):
             value = 9.0
             evidence = f"High-trust domain: {domain}"
+            return DetectedAttribute(
+                attribute_id="source_domain_trust_baseline",
+                dimension="provenance",
+                label="Source domain trust baseline",
+                value=value,
+                evidence=evidence,
+                confidence=0.8
+            )
         else:
-            value = 5.0  # Neutral
-            evidence = f"Domain: {domain}"
-
-        return DetectedAttribute(
-            attribute_id="source_domain_trust_baseline",
-            dimension="provenance",
-            label="Source domain trust baseline",
-            value=value,
-            evidence=evidence,
-            confidence=0.8
-        )
+            # Neutral case - don't report as an issue
+            return None
 
     # ===== RESONANCE DETECTORS =====
 
@@ -760,6 +793,11 @@ class TrustStackAttributeDetector:
         upvotes = content.upvotes or 0
         rating = content.rating or 0.0
 
+        # Only flag if there's actually concerning engagement patterns
+        # Don't flag pages with zero engagement - that's normal for many pages
+        if upvotes == 0 and rating == 0.0:
+            return None  # No engagement data available, skip
+
         # High engagement + high rating = high trust
         if upvotes > 50 and rating > 4.0:
             value = 10.0
@@ -767,9 +805,16 @@ class TrustStackAttributeDetector:
         elif upvotes > 10 and rating > 3.0:
             value = 7.0
             evidence = f"Moderate engagement ({upvotes} upvotes, {rating:.1f} rating)"
+        elif upvotes > 5 or rating > 2.0:
+            value = 6.0
+            evidence = f"Moderate engagement ({upvotes} upvotes, {rating:.1f} rating)"
         else:
-            value = 5.0
-            evidence = f"Low engagement ({upvotes} upvotes, {rating:.1f} rating)"
+            # Only flag as concerning if there's negative engagement (low rating with votes)
+            if rating < 2.0 and (upvotes > 5 or rating > 0):
+                value = 3.0
+                evidence = f"Low trust with engagement present ({upvotes} upvotes, {rating:.1f} rating)"
+            else:
+                return None  # Skip neutral cases
 
         return DetectedAttribute(
             attribute_id="engagement_to_trust_correlation",
@@ -859,13 +904,37 @@ class TrustStackAttributeDetector:
     def _detect_ai_explainability(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect AI explainability disclosure"""
         text = (content.body + " " + content.title).lower()
+        meta = content.meta or {}
 
+        # First, check if the page actually uses AI features
+        ai_feature_indicators = [
+            "artificial intelligence", "machine learning", "ai-powered", "ai powered",
+            "personalized", "personalisation", "recommendation", "recommendations",
+            "smart", "intelligent", "automated", "chatbot", "virtual assistant",
+            "predicted", "prediction", "algorithm", "algorithmic"
+        ]
+
+        # Check if page uses AI
+        uses_ai = (
+            any(indicator in text for indicator in ai_feature_indicators) or
+            meta.get("uses_ai") == "true" or
+            meta.get("has_recommendations") == "true"
+        )
+
+        # Only check for explainability if AI is being used
+        if not uses_ai:
+            return None  # Page doesn't use AI, no disclosure needed
+
+        # If AI is used, check for explainability
         explainability_phrases = [
             "why you're seeing this",
-            "powered by",
             "how this works",
-            "algorithm",
-            "recommendation"
+            "how we recommend",
+            "how we personalize",
+            "learn more about our recommendations",
+            "about our algorithm",
+            "transparency",
+            "explain"
         ]
 
         has_explainability = any(phrase in text for phrase in explainability_phrases)
@@ -876,17 +945,17 @@ class TrustStackAttributeDetector:
                 dimension="transparency",
                 label="AI Explainability Disclosure",
                 value=10.0,
-                evidence="Explainability disclosure found",
-                confidence=1.0
+                evidence="Explainability disclosure found for AI features",
+                confidence=0.9
             )
         else:
             return DetectedAttribute(
                 attribute_id="ai_explainability_disclosure",
                 dimension="transparency",
                 label="AI Explainability Disclosure",
-                value=1.0,
-                evidence="No explainability disclosure",
-                confidence=1.0
+                value=2.0,
+                evidence="AI features detected but no explainability disclosure",
+                confidence=0.8
             )
 
     def _detect_ai_disclosure(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
@@ -963,13 +1032,40 @@ class TrustStackAttributeDetector:
         """Detect data source citations"""
         text = content.body
 
-        # Look for citation patterns
+        # First, check if the page actually has data-driven claims that need citations
+        data_claim_indicators = [
+            r'\d+%',  # Percentages: 50%
+            r'\$[\d,]+',  # Dollar amounts: $1,000
+            r'\d+\s*million',  # Large numbers: 5 million
+            r'\d+\s*billion',
+            r'\d+\s*thousand',
+            r'study\s+(?:found|shows|revealed)',
+            r'research\s+(?:found|shows|revealed)',
+            r'survey\s+(?:found|shows|revealed)',
+            r'statistics?\s+(?:show|indicate)',
+            r'data\s+(?:show|indicate)',
+            r'according\s+to\s+(?:a\s+)?(?:study|research|survey|report)',
+            r'findings?\s+(?:from|of)',
+            r'results?\s+(?:from|of)',
+        ]
+
+        # Check if content has data-driven claims
+        has_data_claims = any(re.search(pattern, text, re.IGNORECASE) for pattern in data_claim_indicators)
+
+        # Skip pages without data claims
+        if not has_data_claims:
+            return None
+
+        # Content has data claims, now check for citations
         citation_patterns = [
             r'\[\d+\]',  # [1], [2], etc.
             r'\(\w+,? \d{4}\)',  # (Author, 2024)
-            r'according to',
-            r'source:',
-            r'cited by'
+            r'according to\s+[\w\s]+(?:University|Institute|Organization|Agency|Department)',
+            r'source:\s*[\w\s]+',
+            r'cited by',
+            r'study by',
+            r'research by',
+            r'report by'
         ]
 
         has_citations = any(re.search(pattern, text, re.IGNORECASE) for pattern in citation_patterns)
@@ -980,16 +1076,16 @@ class TrustStackAttributeDetector:
                 dimension="transparency",
                 label="Data source citations for claims",
                 value=10.0,
-                evidence="Citations found in text",
-                confidence=0.8
+                evidence="Citations found for data claims",
+                confidence=0.85
             )
         else:
             return DetectedAttribute(
                 attribute_id="data_source_citations_for_claims",
                 dimension="transparency",
                 label="Data source citations for claims",
-                value=1.0,
-                evidence="No citations found",
+                value=2.0,
+                evidence="Data claims detected but no citations provided",
                 confidence=0.8
             )
 
