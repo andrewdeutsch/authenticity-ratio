@@ -17,6 +17,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
+from webapp.utils.recommendations import get_remedy_for_issue
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -1770,133 +1772,180 @@ Trust performance analysis across different platforms and channel types.
         return recommendations
 
     def _get_remediation_guidance(self, attr_id: str, attr_config: dict) -> dict:
-        """Get specific remediation guidance for an attribute"""
+        """Get specific remediation guidance for an attribute using comprehensive remedy database"""
 
-        # Remediation database
-        remediation_db = {
+        # Get the label from attr_config (this is the human-readable attribute name)
+        label = attr_config.get('label', attr_config.get('name', ''))
+        dimension = attr_config.get('dimension', 'unknown')
+
+        # Use comprehensive remedy database from webapp.utils.recommendations
+        # This has detailed remedies for ALL dimensions including coherence and verification
+        remedy_text = get_remedy_for_issue(label, dimension, issue_items=None)
+
+        # Enhanced remediation metadata based on dimension and attribute characteristics
+        # This provides structured metadata for timeline, difficulty, tools, etc.
+        remediation_metadata = {
             # Provenance
             'ai_vs_human_labeling_clarity': {
-                'action': 'Add clear AI disclosure labels to all AI-generated content',
                 'tools': ['Label templates', 'Content management system tags'],
                 'timeline': '1-2 weeks',
                 'difficulty': 'Easy',
                 'success_criteria': 'All AI content explicitly labeled'
             },
             'c2pa_cai_manifest_present': {
-                'action': 'Implement C2PA content credentials for images and videos',
                 'tools': ['C2PA tool (content-credentials.org)', 'Adobe Content Authenticity'],
                 'timeline': '4-8 weeks',
                 'difficulty': 'Hard',
                 'success_criteria': 'C2PA manifests on 80%+ of media'
             },
             'schema_compliance': {
-                'action': 'Add schema.org structured data markup to all pages',
                 'tools': ['Schema.org validator', 'JSON-LD generator', 'Google Rich Results Test'],
                 'timeline': '2-4 weeks',
                 'difficulty': 'Medium',
                 'success_criteria': 'Valid schema.org markup on all content'
             },
             'metadata_completeness': {
-                'action': 'Ensure all content has title, description, author, date, and keywords',
                 'tools': ['CMS metadata fields', 'Meta tag checkers'],
                 'timeline': '1-2 weeks',
                 'difficulty': 'Easy',
                 'success_criteria': '5/5 metadata fields present on all content'
             },
-            'llm_retrievability': {
-                'action': 'Remove noindex tags, add sitemap, ensure robots.txt allows crawling',
-                'tools': ['Robots.txt validator', 'XML sitemap generators'],
-                'timeline': '1 week',
-                'difficulty': 'Easy',
-                'success_criteria': 'All content indexable by search engines and LLMs'
+            # Verification (NOW COVERED!)
+            'claim_to_source_traceability': {
+                'tools': ['Citation management systems', 'Reference validators'],
+                'timeline': '2-3 weeks',
+                'difficulty': 'Medium',
+                'success_criteria': 'All factual claims have verifiable sources'
             },
-            'canonical_linking': {
-                'action': 'Add canonical URL tags to all pages',
-                'tools': ['HTML head tag editor', 'CMS plugins'],
-                'timeline': '1 week',
+            'ad_sponsored_label_consistency': {
+                'tools': ['Ad disclosure templates', 'FTC compliance checkers'],
+                'timeline': '1-2 weeks',
                 'difficulty': 'Easy',
-                'success_criteria': 'Canonical URL on every page'
+                'success_criteria': 'All ads clearly labeled'
             },
-            'indexing_visibility': {
-                'action': 'Create XML sitemap and submit to search engines',
-                'tools': ['Sitemap generators', 'Google Search Console'],
-                'timeline': '1 week',
-                'difficulty': 'Easy',
-                'success_criteria': 'Sitemap indexed by major search engines'
+            'engagement_authenticity_ratio': {
+                'tools': ['Bot detection tools', 'Engagement analytics'],
+                'timeline': '3-4 weeks',
+                'difficulty': 'Medium',
+                'success_criteria': 'Bot engagement reduced to <5%'
             },
+            # Transparency
             'ai_generated_assisted_disclosure_present': {
-                'action': 'Add "AI-generated" or "AI-assisted" disclosures to relevant content',
                 'tools': ['Disclosure templates', 'CMS disclosure fields'],
                 'timeline': '1-2 weeks',
                 'difficulty': 'Easy',
                 'success_criteria': 'All AI content properly disclosed'
             },
             'privacy_policy_link_availability_clarity': {
-                'action': 'Add visible privacy policy link to all pages',
                 'tools': ['Privacy policy generators', 'Footer templates'],
                 'timeline': '1 week',
                 'difficulty': 'Easy',
                 'success_criteria': 'Privacy policy link on every page'
             },
-            'ad_sponsored_label_consistency': {
-                'action': 'Label all sponsored content with "Ad" or "Sponsored" tags',
-                'tools': ['Ad disclosure templates', 'FTC compliance checkers'],
-                'timeline': '1-2 weeks',
+            # Coherence (NOW COVERED!)
+            'brand_voice_consistency_score': {
+                'tools': ['Brand style guides', 'Content review workflows', 'Tone analyzers'],
+                'timeline': '3-4 weeks',
+                'difficulty': 'Medium',
+                'success_criteria': 'Consistent brand voice across 95%+ of content'
+            },
+            'broken_link_rate': {
+                'tools': ['Broken Link Checker', 'Screaming Frog', 'Ahrefs'],
+                'timeline': '1 week',
                 'difficulty': 'Easy',
-                'success_criteria': 'All ads clearly labeled'
+                'success_criteria': 'Broken link rate < 1%'
+            },
+            'claim_consistency_across_pages': {
+                'tools': ['Content audit tools', 'Style guide database'],
+                'timeline': '2-3 weeks',
+                'difficulty': 'Medium',
+                'success_criteria': 'No contradictory claims detected'
+            },
+            'multimodal_consistency_score': {
+                'tools': ['Content QA checklist', 'Cross-media validators'],
+                'timeline': '2-4 weeks',
+                'difficulty': 'Medium',
+                'success_criteria': 'Text, image, video alignment score > 90%'
+            },
+            # Resonance (NOW COVERED!)
+            'community_alignment_index': {
+                'tools': ['Community management tools', 'Sentiment analysis', 'Social listening'],
+                'timeline': '4-6 weeks',
+                'difficulty': 'Hard',
+                'success_criteria': 'Positive community sentiment > 70%'
+            },
+            'cultural_context_alignment': {
+                'tools': ['Cultural consultants', 'Localization services'],
+                'timeline': '4-8 weeks',
+                'difficulty': 'Hard',
+                'success_criteria': 'No cultural misalignment issues in target markets'
+            },
+            'readability_grade_level_fit': {
+                'tools': ['Flesch-Kincaid tool', 'Hemingway Editor'],
+                'timeline': '2-3 weeks',
+                'difficulty': 'Medium',
+                'success_criteria': 'Content at appropriate reading level for audience'
+            },
+            'tone_sentiment_appropriateness': {
+                'tools': ['Sentiment analyzers', 'Tone checkers'],
+                'timeline': '2-3 weeks',
+                'difficulty': 'Medium',
+                'success_criteria': 'Tone matches context in 90%+ of content'
             },
         }
 
-        # Get specific guidance or use generic
-        if attr_id in remediation_db:
-            return remediation_db[attr_id]
+        # Get metadata for this attribute or use dimension-based defaults
+        if attr_id in remediation_metadata:
+            metadata = remediation_metadata[attr_id]
         else:
-            # Generic guidance based on dimension
-            dimension = attr_config.get('dimension', 'unknown')
-            generic = {
+            # Dimension-based defaults (for attributes not explicitly listed)
+            dimension_defaults = {
                 'provenance': {
-                    'action': 'Improve source attribution and metadata tracking',
                     'tools': ['Metadata management systems', 'Content tracking tools'],
                     'timeline': '2-4 weeks',
                     'difficulty': 'Medium',
                     'success_criteria': 'Attribute score above 7.0'
                 },
                 'verification': {
-                    'action': 'Strengthen fact-checking and source validation',
                     'tools': ['Fact-checking services', 'Citation validators'],
                     'timeline': '2-4 weeks',
                     'difficulty': 'Medium',
                     'success_criteria': 'Attribute score above 7.0'
                 },
                 'transparency': {
-                    'action': 'Enhance disclosure practices and authorship clarity',
                     'tools': ['Disclosure templates', 'Author attribution systems'],
                     'timeline': '1-3 weeks',
                     'difficulty': 'Easy',
                     'success_criteria': 'Attribute score above 7.0'
                 },
                 'coherence': {
-                    'action': 'Ensure consistent messaging across channels',
                     'tools': ['Brand style guides', 'Content review workflows'],
                     'timeline': '2-4 weeks',
                     'difficulty': 'Medium',
                     'success_criteria': 'Attribute score above 7.0'
                 },
                 'resonance': {
-                    'action': 'Foster authentic engagement and cultural alignment',
                     'tools': ['Community management tools', 'Sentiment analysis'],
                     'timeline': '4-8 weeks',
                     'difficulty': 'Hard',
                     'success_criteria': 'Attribute score above 7.0'
                 },
-                }
-            return generic.get(dimension, {
-                'action': 'Review and improve this attribute',
+            }
+            metadata = dimension_defaults.get(dimension, {
                 'tools': ['Manual review'],
                 'timeline': '2-4 weeks',
                 'difficulty': 'Medium',
                 'success_criteria': 'Attribute score above 7.0'
             })
+
+        # Return structured guidance combining comprehensive remedy text with metadata
+        return {
+            'action': remedy_text,  # Use comprehensive remedy from webapp.utils.recommendations
+            'tools': metadata.get('tools', ['Standard tools']),
+            'timeline': metadata.get('timeline', '2-4 weeks'),
+            'difficulty': metadata.get('difficulty', 'Medium'),
+            'success_criteria': metadata.get('success_criteria', 'Achieve target threshold')
+        }
 
     def _prepare_recommendation_context(self, report_data: Dict[str, Any]) -> Dict[str, Any]:
         """Prepare comprehensive context for LLM recommendation generation"""
