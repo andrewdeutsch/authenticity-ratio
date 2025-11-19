@@ -699,19 +699,24 @@ class TrustStackAttributeDetector:
         if len(sentence_list) == 0:
             return None
 
-        words = len(text.split())
-        words_per_sentence = words / len(sentence_list)
+        # Calculate average words per sentence by counting words IN each sentence
+        # (not total words / sentence count, which inflates count with non-sentence text)
+        word_counts = [len(sentence.split()) for sentence in sentence_list]
+        words_per_sentence = sum(word_counts) / len(word_counts)
+
+        # Also store sentence count for evidence
+        num_sentences = len(sentence_list)
 
         # Target: 15-20 words per sentence (grade 8-10)
         if 12 <= words_per_sentence <= 22:
             value = 10.0
-            evidence = f"Readable: {words_per_sentence:.1f} words/sentence"
+            evidence = f"Readable: {words_per_sentence:.1f} words/sentence ({num_sentences} sentence{'s' if num_sentences > 1 else ''})"
         elif 8 <= words_per_sentence <= 30:
             value = 7.0
-            evidence = f"Acceptable: {words_per_sentence:.1f} words/sentence"
+            evidence = f"Acceptable: {words_per_sentence:.1f} words/sentence ({num_sentences} sentence{'s' if num_sentences > 1 else ''})"
         else:
             value = 4.0
-            evidence = f"Difficult: {words_per_sentence:.1f} words/sentence"
+            evidence = f"Difficult: {words_per_sentence:.1f} words/sentence ({num_sentences} sentence{'s' if num_sentences > 1 else ''})"
 
         return DetectedAttribute(
             attribute_id="readability_grade_level_fit",
