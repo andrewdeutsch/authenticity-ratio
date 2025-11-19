@@ -17,7 +17,7 @@ from config.settings import SETTINGS
 logger = logging.getLogger(__name__)
 
 
-def _get_threshold(default: float = 0.6) -> float:
+def _get_threshold(default: float = 0.45) -> float:
     try:
         return float(SETTINGS.get('triage_promote_threshold', default))
     except Exception:

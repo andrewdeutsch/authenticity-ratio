@@ -353,8 +353,8 @@ class ScoringPipeline:
                         "effect": effect,
                         "value": val,
                         "reason": reason,
-                        # attempt to record which dimension this attribute targets
-                        "dimension": attr.get('dimension') or attr.get('applies_to') or None
+                        "dimension": attr.get('dimension'),
+                        "label": attr.get('label')  # Include label for UI display
                     })
                     if effect == 'bonus':
                         base += float(val)

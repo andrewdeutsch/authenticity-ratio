@@ -175,7 +175,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="author_brand_identity_verified",
                 dimension="provenance",
-                label="Author/brand identity verified",
+                label="Author/Brand Identity Verified",
                 value=10.0,
                 evidence=f"Verified author: {content.author}",
                 confidence=1.0
@@ -190,7 +190,7 @@ class TrustStackAttributeDetector:
                 return DetectedAttribute(
                     attribute_id="author_brand_identity_verified",
                     dimension="provenance",
-                    label="Author/brand identity verified",
+                    label="Author/Brand Identity Verified",
                     value=8.0,
                     evidence=f"Visible byline present: {content.author}",
                     confidence=0.9
@@ -208,7 +208,7 @@ class TrustStackAttributeDetector:
                     return DetectedAttribute(
                         attribute_id="author_brand_identity_verified",
                         dimension="provenance",
-                        label="Author/brand identity verified",
+                        label="Author/Brand Identity Verified",
                         value=attribution_result['score'],
                         evidence=attribution_result['evidence'],
                         confidence=attribution_result['confidence']
@@ -217,7 +217,7 @@ class TrustStackAttributeDetector:
                     return DetectedAttribute(
                         attribute_id="author_brand_identity_verified",
                         dimension="provenance",
-                        label="Author/brand identity verified",
+                        label="Author/Brand Identity Verified",
                         value=2.0,
                         evidence="Missing byline - expected for blog/article content",
                         confidence=1.0
@@ -231,7 +231,7 @@ class TrustStackAttributeDetector:
                 return DetectedAttribute(
                     attribute_id="author_brand_identity_verified",
                     dimension="provenance",
-                    label="Author/brand identity verified",
+                    label="Author/Brand Identity Verified",
                     value=attribution_result['score'],
                     evidence=attribution_result['evidence'],
                     confidence=attribution_result['confidence']
@@ -240,7 +240,7 @@ class TrustStackAttributeDetector:
                 return DetectedAttribute(
                     attribute_id="author_brand_identity_verified",
                     dimension="provenance",
-                    label="Author/brand identity verified",
+                    label="Author/Brand Identity Verified",
                     value=3.0,
                     evidence="No attribution found - consider adding structured data or footer credits",
                     confidence=0.8
@@ -252,7 +252,7 @@ class TrustStackAttributeDetector:
                 return DetectedAttribute(
                     attribute_id="author_brand_identity_verified",
                     dimension="provenance",
-                    label="Author/brand identity verified",
+                    label="Author/Brand Identity Verified",
                     value=7.0,
                     evidence=f"Author attribution present: {content.author}",
                     confidence=0.85
@@ -263,7 +263,7 @@ class TrustStackAttributeDetector:
                     return DetectedAttribute(
                         attribute_id="author_brand_identity_verified",
                         dimension="provenance",
-                        label="Author/brand identity verified",
+                        label="Author/Brand Identity Verified",
                         value=attribution_result['score'],
                         evidence=attribution_result['evidence'],
                         confidence=attribution_result['confidence']
@@ -272,7 +272,7 @@ class TrustStackAttributeDetector:
                     return DetectedAttribute(
                         attribute_id="author_brand_identity_verified",
                         dimension="provenance",
-                        label="Author/brand identity verified",
+                        label="Author/Brand Identity Verified",
                         value=3.0,
                         evidence="Author verification status unknown",
                         confidence=0.8
@@ -470,7 +470,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="c2pa_cai_manifest_present",
                 dimension="provenance",
-                label="C2PA/CAI manifest present",
+                label="C2PA/CAI Manifest Present",
                 value=value,
                 evidence=evidence,
                 confidence=1.0
@@ -479,7 +479,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="c2pa_cai_manifest_present",
                 dimension="provenance",
-                label="C2PA/CAI manifest present",
+                label="C2PA/CAI Manifest Present",
                 value=1.0,
                 evidence="No C2PA manifest found",
                 confidence=1.0
@@ -511,7 +511,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="canonical_url_matches_declared_source",
                 dimension="provenance",
-                label="Canonical URL matches declared source",
+                label="Canonical URL Matches Declared Source",
                 value=value,
                 evidence=evidence,
                 confidence=1.0
@@ -529,7 +529,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="digital_watermark_fingerprint_detected",
                 dimension="provenance",
-                label="Digital watermark/fingerprint detected",
+                label="Digital Watermark/Fingerprint Detected",
                 value=10.0,
                 evidence="Watermark detected in metadata",
                 confidence=1.0
@@ -556,7 +556,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="exif_metadata_integrity",
                 dimension="provenance",
-                label="EXIF/metadata integrity",
+                label="EXIF/Metadata Integrity",
                 value=value,
                 evidence=evidence,
                 confidence=1.0
@@ -602,7 +602,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="source_domain_trust_baseline",
                 dimension="provenance",
-                label="Source domain trust baseline",
+                label="Source Domain Trust Baseline",
                 value=2.0,
                 evidence=f"Domain trust issues: {'; '.join(red_flags)}",
                 confidence=0.9
@@ -616,7 +616,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="source_domain_trust_baseline",
                 dimension="provenance",
-                label="Source domain trust baseline",
+                label="Source Domain Trust Baseline",
                 value=value,
                 evidence=evidence,
                 confidence=0.8
@@ -627,7 +627,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="source_domain_trust_baseline",
                 dimension="provenance",
-                label="Source domain trust baseline",
+                label="Source Domain Trust Baseline",
                 value=value,
                 evidence=evidence,
                 confidence=0.8
@@ -671,7 +671,7 @@ class TrustStackAttributeDetector:
         return DetectedAttribute(
             attribute_id="language_locale_match",
             dimension="resonance",
-            label="Language/locale match",
+            label="Language/Locale Match",
             value=value,
             evidence=evidence,
             confidence=0.9
@@ -716,7 +716,7 @@ class TrustStackAttributeDetector:
         return DetectedAttribute(
             attribute_id="readability_grade_level_fit",
             dimension="resonance",
-            label="Readability grade level fit",
+            label="Readability Grade Level Fit",
             value=value,
             evidence=evidence,
             confidence=0.7
@@ -730,8 +730,23 @@ class TrustStackAttributeDetector:
     # ===== COHERENCE DETECTORS =====
 
     def _detect_brand_voice(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
-        """Detect brand voice consistency (placeholder)"""
-        # TODO: Implement embedding similarity to brand corpus
+        """Detect brand voice consistency"""
+        # Simple heuristic: Check for professional tone markers vs casual/slang
+        text = (content.body + " " + content.title).lower()
+        
+        # Slang/casual markers that might violate professional brand voice
+        casual_markers = ["gonna", "wanna", "lol", "lmao", "omg", "thx", "u", "ur", "cuz"]
+        found_markers = [m for m in casual_markers if f" {m} " in text]
+        
+        if found_markers:
+            return DetectedAttribute(
+                attribute_id="brand_voice_consistency_score",
+                dimension="coherence",
+                label="Brand Voice Consistency Score",
+                value=4.0,
+                evidence=f"Inconsistent brand voice detected (casual markers: {', '.join(found_markers[:3])})",
+                confidence=0.7
+            )
         return None
 
     def _detect_broken_links(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
@@ -767,20 +782,57 @@ class TrustStackAttributeDetector:
         return DetectedAttribute(
             attribute_id="broken_link_rate",
             dimension="coherence",
-            label="Broken link rate",
+            label="Broken Link Rate",
             value=value,
             evidence=evidence,
             confidence=0.8
         )
 
     def _detect_claim_consistency(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
-        """Detect claim consistency across pages (placeholder)"""
-        # TODO: Implement NLI/contradiction detection
+        """Detect claim consistency across pages"""
+        # Heuristic: Check for contradictory terms in close proximity
+        text = content.body.lower()
+        
+        contradictions = [
+            ("always", "never"),
+            ("100%", "some"),
+            ("free", "paid"),
+            ("guaranteed", "estimated")
+        ]
+        
+        for term1, term2 in contradictions:
+            if term1 in text and term2 in text:
+                # Check distance
+                idx1 = text.find(term1)
+                idx2 = text.find(term2)
+                if abs(idx1 - idx2) < 100:  # Close proximity
+                    return DetectedAttribute(
+                        attribute_id="claim_consistency_across_pages",
+                        dimension="coherence",
+                        label="Claim Consistency Across Pages",
+                        value=3.0,
+                        evidence=f"Potential contradiction detected: '{term1}' vs '{term2}'",
+                        confidence=0.6
+                    )
         return None
 
     def _detect_email_consistency(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
-        """Detect email-asset consistency (placeholder)"""
-        # TODO: Implement cross-channel comparison
+        """Detect email-asset consistency"""
+        # Only relevant for email content
+        if content.channel != 'email':
+            return None
+            
+        # Check if email content matches landing page (simulated via metadata)
+        meta = content.meta or {}
+        if meta.get('landing_page_match') == 'false':
+            return DetectedAttribute(
+                attribute_id="email_asset_consistency_check",
+                dimension="coherence",
+                label="Email-Asset Consistency Check",
+                value=2.0,
+                evidence="Email content contradicts landing page offer",
+                confidence=0.9
+            )
         return None
 
     def _detect_engagement_trust(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
@@ -979,7 +1031,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="ai_generated_assisted_disclosure_present",
                 dimension="transparency",
-                label="AI-generated/assisted disclosure present",
+                label="AI-Generated/Assisted Disclosure Present",
                 value=10.0,
                 evidence="AI disclosure present",
                 confidence=1.0
@@ -988,7 +1040,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="ai_generated_assisted_disclosure_present",
                 dimension="transparency",
-                label="AI-generated/assisted disclosure present",
+                label="AI-Generated/Assisted Disclosure Present",
                 value=1.0,
                 evidence="No AI disclosure",
                 confidence=1.0
@@ -1074,7 +1126,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="data_source_citations_for_claims",
                 dimension="transparency",
-                label="Data source citations for claims",
+                label="Data Source Citations for Claims",
                 value=10.0,
                 evidence="Citations found for data claims",
                 confidence=0.85
@@ -1083,7 +1135,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="data_source_citations_for_claims",
                 dimension="transparency",
-                label="Data source citations for claims",
+                label="Data Source Citations for Claims",
                 value=2.0,
                 evidence="Data claims detected but no citations provided",
                 confidence=0.8
@@ -1131,7 +1183,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="privacy_policy_link_availability_clarity",
                 dimension="transparency",
-                label="Privacy policy link availability & clarity",
+                label="Privacy Policy Link Availability & Clarity",
                 value=10.0,
                 evidence="Privacy policy link found",
                 confidence=0.9
@@ -1144,7 +1196,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="privacy_policy_link_availability_clarity",
                 dimension="transparency",
-                label="Privacy policy link availability & clarity",
+                label="Privacy Policy Link Availability & Clarity",
                 value=2.0,
                 evidence="No privacy policy link detected on owned content",
                 confidence=0.7
@@ -1241,7 +1293,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="influencer_partner_identity_verified",
                 dimension="verification",
-                label="Influencer/partner identity verified",
+                label="Influencer/Partner Identity Verified",
                 value=10.0,
                 evidence="Verified influencer/partner",
                 confidence=1.0
@@ -1296,7 +1348,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="verified_purchaser_review_rate",
                 dimension="verification",
-                label="Verified purchaser review rate",
+                label="Verified Purchaser Review Rate",
                 value=10.0,
                 evidence="Verified purchase badge present",
                 confidence=1.0
@@ -1305,7 +1357,7 @@ class TrustStackAttributeDetector:
             return DetectedAttribute(
                 attribute_id="verified_purchaser_review_rate",
                 dimension="verification",
-                label="Verified purchaser review rate",
+                label="Verified Purchaser Review Rate",
                 value=3.0,
                 evidence="No verified purchase badge",
                 confidence=1.0
@@ -1492,3 +1544,44 @@ class TrustStackAttributeDetector:
             evidence=evidence,
             confidence=0.7
         )
+
+    def _detect_ad_labels(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect ad/sponsored label consistency"""
+        text = (content.body + " " + content.title).lower()
+        
+        # Check for ad intent markers without proper labeling
+        ad_intent_markers = ["buy now", "limited time offer", "discount code", "affiliate link"]
+        has_ad_intent = any(m in text for m in ad_intent_markers)
+        
+        proper_labels = ["ad", "sponsored", "paid partnership", "promoted"]
+        has_proper_label = any(l in text for l in proper_labels)
+        
+        if has_ad_intent and not has_proper_label:
+            return DetectedAttribute(
+                attribute_id="ad_sponsored_label_consistency",
+                dimension="verification",
+                label="Ad/Sponsored Label Consistency",
+                value=1.0,
+                evidence="Commercial intent detected without visible ad disclosure",
+                confidence=0.8
+            )
+        return None
+
+    def _detect_safety_guardrails(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect agent safety guardrail presence"""
+        # Only relevant for agent/bot content
+        if content.modality != 'agent':
+            return None
+            
+        # Check metadata for guardrail config
+        meta = content.meta or {}
+        if meta.get('safety_guardrails') == 'false':
+             return DetectedAttribute(
+                attribute_id="agent_safety_guardrail_presence",
+                dimension="verification",
+                label="Agent Safety Guardrail Presence",
+                value=1.0,
+                evidence="No safety guardrails configuration found",
+                confidence=1.0
+            )
+        return None

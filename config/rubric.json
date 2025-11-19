@@ -87,7 +87,7 @@
     },
     {
       "id": "author_brand_identity_verified",
-      "label": "Author/brand identity verified",
+      "label": "Author/Brand Identity Verified",
       "match_meta": [
         "author",
         "brand",
@@ -121,7 +121,7 @@
     },
     {
       "id": "c2pa_cai_manifest_present",
-      "label": "C2PA/CAI manifest present",
+      "label": "C2PA/CAI Manifest Present",
       "match_meta": [
         "c2pa",
         "cai",
@@ -155,7 +155,7 @@
     },
     {
       "id": "canonical_url_matches_declared_source",
-      "label": "Canonical URL matches declared source",
+      "label": "Canonical URL Matches Declared Source",
       "match_meta": [
         "canonical",
         "url",
@@ -217,7 +217,7 @@
     },
     {
       "id": "digital_watermark_fingerprint_detected",
-      "label": "Digital watermark/fingerprint detected",
+      "label": "Digital Watermark/Fingerprint Detected",
       "match_meta": [
         "digital",
         "watermark",
@@ -279,7 +279,7 @@
     },
     {
       "id": "exif_metadata_integrity",
-      "label": "EXIF/metadata integrity",
+      "label": "EXIF/Metadata Integrity",
       "match_meta": [
         "exif",
         "metadata",
@@ -365,7 +365,7 @@
     },
     {
       "id": "source_domain_trust_baseline",
-      "label": "Source domain trust baseline",
+      "label": "Source Domain Trust Baseline",
       "match_meta": [
         "source",
         "domain",
@@ -577,7 +577,7 @@
     },
     {
       "id": "language_locale_match",
-      "label": "Language/locale match",
+      "label": "Language/Locale Match",
       "match_meta": [
         "language",
         "locale",
@@ -696,7 +696,7 @@
     },
     {
       "id": "readability_grade_level_fit",
-      "label": "Readability grade level fit",
+      "label": "Readability Grade Level Fit",
       "match_meta": [
         "readability",
         "grade",
@@ -789,7 +789,7 @@
     },
     {
       "id": "brand_voice_consistency_score",
-      "label": "Brand voice consistency score",
+      "label": "Brand Voice Consistency Score",
       "match_meta": [
         "brand",
         "voice",
@@ -823,7 +823,7 @@
     },
     {
       "id": "broken_link_rate",
-      "label": "Broken link rate",
+      "label": "Broken Link Rate",
       "match_meta": [
         "broken",
         "link",
@@ -883,7 +883,7 @@
     },
     {
       "id": "claim_consistency_across_pages",
-      "label": "Claim consistency across pages",
+      "label": "Claim Consistency Across Pages",
       "match_meta": [
         "claim",
         "consistency",
@@ -1349,7 +1349,7 @@
     },
     {
       "id": "ai_generated_assisted_disclosure_present",
-      "label": "AI-generated/assisted disclosure present",
+      "label": "AI-Generated/Assisted Disclosure Present",
       "match_meta": [
         "generated",
         "assisted",
@@ -1479,7 +1479,7 @@
     },
     {
       "id": "data_source_citations_for_claims",
-      "label": "Data source citations for claims",
+      "label": "Data Source Citations for Claims",
       "match_meta": [
         "data",
         "source",
@@ -1592,7 +1592,7 @@
     },
     {
       "id": "privacy_policy_link_availability_clarity",
-      "label": "Privacy policy link availability & clarity",
+      "label": "Privacy Policy Link Availability & Clarity",
       "match_meta": [
         "privacy",
         "policy",
@@ -1814,7 +1814,7 @@
     },
     {
       "id": "influencer_partner_identity_verified",
-      "label": "Influencer/partner identity verified",
+      "label": "Influencer/Partner Identity Verified",
       "match_meta": [
         "influencer",
         "partner",
@@ -2152,7 +2152,7 @@
     },
     {
       "id": "verified_purchaser_review_rate",
-      "label": "Verified purchaser review rate",
+      "label": "Verified Purchaser Review Rate",
       "match_meta": [
         "verified",
         "purchaser",

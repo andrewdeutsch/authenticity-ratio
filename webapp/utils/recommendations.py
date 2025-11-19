@@ -54,6 +54,29 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
                     'value': value
                 })
 
+        # 2. Check applied_rules (from rubric-based detection in pipeline)
+        # These are issues that might not be in detected_attributes but were applied during scoring
+        for rule in item.get('applied_rules', []):
+            # Only consider penalties or low scores as issues
+            # Assuming value < 10 indicates an issue for 1-10 scale attributes
+            if rule.get('value', 10) < 10:
+                dimension = rule.get('dimension', 'unknown').lower()
+                issue_label = rule.get('label') or rule.get('id')
+                
+                if dimension not in dimension_issues:
+                    dimension_issues[dimension] = []
+                
+                # Check if this issue is already added (avoid duplicates)
+                existing_issues = [i['issue'] for i in dimension_issues[dimension] if i['url'] == url]
+                if issue_label not in existing_issues:
+                    dimension_issues[dimension].append({
+                        'title': title,
+                        'url': url,
+                        'issue': issue_label,
+                        'evidence': rule.get('reason', 'Issue detected by scoring rule'),
+                        'value': rule.get('value')
+                    })
+
     return dimension_issues
 
 
@@ -73,12 +96,12 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
     remedies = {
         # Provenance
         'AI vs Human Labeling Clarity': 'Add clear labels indicating whether content is AI-generated or human-created. Use visible disclosure tags like "AI-generated" or "Created with AI assistance" on the content itself. Implement schema.org markup (CreativeWork with "author" and "isBasedOn" properties) to embed this metadata in machine-readable format for search engines and LLMs.',
-        'Author Brand Identity Verified': 'Add clear author attribution to all content. For blog posts and articles: include visible bylines with author names and optional author bio pages. For corporate pages and landing pages: add schema.org markup with author/publisher information using JSON-LD format, include <meta name="author"> tags, or add subtle footer attribution like "Content by [Team/Name]". Create an About page listing content contributors and link to it from main pages.',
-        'C2PA/CAI manifest present': 'Implement Content Authenticity Initiative (C2PA) manifests for media files to provide cryptographic provenance. C2PA embeds tamper-proof metadata in images and videos showing who created them, when, and with what tools. This is especially important for AI-generated media.',
-        'Canonical URL matches declared source': 'Ensure canonical URLs match the declared source to avoid duplicate content issues. Add proper <link rel="canonical"> tags to all pages pointing to the preferred version. Common issues: HTTP vs HTTPS mismatches, www vs non-www, trailing slashes, URL parameters. Choose one canonical version and stick to it.',
-        'Digital watermark/fingerprint detected': 'Add digital watermarks or fingerprints to images and videos for traceability. Watermarks help prove ownership and detect unauthorized use of your media assets.',
-        'EXIF/metadata integrity': 'Preserve EXIF metadata in images. Ensure metadata includes creator, date, location (if relevant), and copyright information. Avoid stripping metadata when processing images for web use.',
-        'Source domain trust baseline': 'Improve domain reputation. Ensure you have: valid SSL certificate (HTTPS), accessible privacy policy, clear contact information, professional domain age, and no association with spam or malware. Consider third-party verification badges.',
+        'Author/Brand Identity Verified': 'Add clear author attribution to all content. For blog posts and articles: include visible bylines with author names and optional author bio pages. For corporate pages and landing pages: add schema.org markup with author/publisher information using JSON-LD format, include <meta name="author"> tags, or add subtle footer attribution like "Content by [Team/Name]". Create an About page listing content contributors and link to it from main pages.',
+        'C2PA/CAI Manifest Present': 'Implement Content Authenticity Initiative (C2PA) manifests for media files to provide cryptographic provenance. C2PA embeds tamper-proof metadata in images and videos showing who created them, when, and with what tools. This is especially important for AI-generated media.',
+        'Canonical URL Matches Declared Source': 'Ensure canonical URLs match the declared source to avoid duplicate content issues. Add proper <link rel="canonical"> tags to all pages pointing to the preferred version. Common issues: HTTP vs HTTPS mismatches, www vs non-www, trailing slashes, URL parameters. Choose one canonical version and stick to it.',
+        'Digital Watermark/Fingerprint Detected': 'Add digital watermarks or fingerprints to images and videos for traceability. Watermarks help prove ownership and detect unauthorized use of your media assets.',
+        'EXIF/Metadata Integrity': 'Preserve EXIF metadata in images. Ensure metadata includes creator, date, location (if relevant), and copyright information. Avoid stripping metadata when processing images for web use.',
+        'Source Domain Trust Baseline': 'Improve domain reputation. Ensure you have: valid SSL certificate (HTTPS), accessible privacy policy, clear contact information, professional domain age, and no association with spam or malware. Consider third-party verification badges.',
         'Schema Compliance': 'Implement schema.org structured data markup (JSON-LD) for all content types. This helps search engines understand your content and can improve visibility and trust signals.',
         'Metadata Completeness': 'Add complete metadata to all pages. Required elements: title tag, meta description, author attribution, publication/modified date, Open Graph tags (og:title, og:description, og:image), and Twitter Card tags.',
 
@@ -87,23 +110,23 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
         'Agent Safety Guardrail Presence': 'Implement content safety guardrails and moderation policies for AI systems. Document publicly: what topics AI will/won\'t discuss, how harmful content is filtered, escalation procedures. Test guardrails regularly with adversarial inputs.',
         'Claim-to-source traceability': 'Add citations and inline references for all factual claims. Each claim should link to an authoritative, verifiable source (research papers, official statistics, primary sources). Avoid unsourced assertions.',
         'Engagement Authenticity Ratio': 'Monitor engagement metrics for bot activity and fake engagement. Look for: sudden spikes in followers/likes, accounts with no profile pictures, generic comments, engagement from inactive accounts. Remove fake engagement and report bot accounts. Focus on organic community building.',
-        'Influencer/partner identity verified': 'Verify all influencer and partner identities before collaboration. Check for: platform verification badges (blue checkmarks), consistent presence across platforms, genuine audience engagement, professional credentials. Display verification status on partnership content.',
+        'Influencer/Partner Identity Verified': 'Verify all influencer and partner identities before collaboration. Check for: platform verification badges (blue checkmarks), consistent presence across platforms, genuine audience engagement, professional credentials. Display verification status on partnership content.',
         'Review Authenticity Confidence': 'Implement verified review systems with purchase verification. Flag suspicious patterns: multiple reviews from same IP, identical phrasing, reviews posted in rapid succession, overly promotional language. Consider implementing CAPTCHA or email verification for reviewers.',
         'Seller & Product Verification Rate': 'Verify seller identities and product authenticity. Implement: business license verification, product authenticity certificates, GTIN/UPC matching, seller reputation scoring. Display verification badges prominently on product pages.',
-        'Verified purchaser review rate': 'Mark reviews from verified purchasers with a badge or label. Implement purchase verification by matching order numbers to review submissions. Prioritize verified purchase reviews in display rankings.',
+        'Verified Purchaser Review Rate': 'Mark reviews from verified purchasers with a badge or label. Implement purchase verification by matching order numbers to review submissions. Prioritize verified purchase reviews in display rankings.',
 
         # Transparency
         'AI Explainability Disclosure': 'When using AI, explain how it works and what data it uses. Create an AI transparency page covering: what AI systems you use, how they make decisions, what data they process, how users can opt out. Add "Powered by AI" disclosures on AI-generated content.',
-        'AI-generated/assisted disclosure present': 'Clearly disclose when content is AI-generated or AI-assisted. Add disclosure statements prominently: "This content was created with AI assistance" or "AI-generated summary". Use visual indicators (badges, labels) and schema.org markup (digital-document-permission property).',
+        'AI-Generated/Assisted Disclosure Present': 'Clearly disclose when content is AI-generated or AI-assisted. Add disclosure statements prominently: "This content was created with AI assistance" or "AI-generated summary". Use visual indicators (badges, labels) and schema.org markup (digital-document-permission property).',
         'Bot Disclosure + Response Audit': 'Clearly identify bot-generated responses with disclaimers like "This is an automated response" or "AI assistant". Ensure bots: self-identify in first interaction, explain their limitations, offer clear path to human support. Audit bot responses for accuracy and helpfulness.',
         'Caption/Subtitle Availability & Accuracy': 'Add accurate captions and subtitles to all video content. Use professional captioning services or human review to verify auto-generated captions. Ensure captions include: speaker identification, relevant sound effects, music descriptions for accessibility.',
-        'Data source citations for claims': 'Add inline citations for all data-driven claims. Each statistic, fact, or research finding should link to: primary source (research paper, official report), publication date, credible organization. Format citations consistently (footnotes, inline links, or reference section).',
-        'Privacy policy link availability & clarity': 'Add a clear Privacy Policy link to your footer and top navigation. Ensure the policy: is written in plain language (avoid legalese), clearly explains data collection practices, is updated regularly (review annually), is mobile-friendly. Consider adding a summary or FAQ section.',
+        'Data Source Citations for Claims': 'Add inline citations for all data-driven claims. Each statistic, fact, or research finding should link to: primary source (research paper, official report), publication date, credible organization. Format citations consistently (footnotes, inline links, or reference section).',
+        'Privacy Policy Link Availability & Clarity': 'Add a clear Privacy Policy link to your footer and top navigation. Ensure the policy: is written in plain language (avoid legalese), clearly explains data collection practices, is updated regularly (review annually), is mobile-friendly. Consider adding a summary or FAQ section.',
 
         # Coherence
-        'Brand voice consistency score': 'Audit all content for consistent brand voice and tone. Create written brand voice guidelines covering: vocabulary preferences, sentence structure, formality level, personality traits (e.g., professional vs. casual). Train all content creators on these guidelines and review content before publishing.',
-        'Broken link rate': 'Regularly audit and fix broken links using automated link checkers. Recommended tools: Broken Link Checker, Screaming Frog, or Ahrefs. Run checks weekly and fix broken links within 24-48 hours. Set up monitoring alerts for broken links.',
-        'Claim consistency across pages': 'Ensure factual claims are consistent across all pages and channels. Identify contradictions where different pages state different facts, figures, or positions. Create a content style guide with a single source of truth for key claims (pricing, product specs, company facts).',
+        'Brand Voice Consistency Score': 'Audit all content for consistent brand voice and tone. Create written brand voice guidelines covering: vocabulary preferences, sentence structure, formality level, personality traits (e.g., professional vs. casual). Train all content creators on these guidelines and review content before publishing.',
+        'Broken Link Rate': 'Regularly audit and fix broken links using automated link checkers. Recommended tools: Broken Link Checker, Screaming Frog, or Ahrefs. Run checks weekly and fix broken links within 24-48 hours. Set up monitoring alerts for broken links.',
+        'Claim Consistency Across Pages': 'Ensure factual claims are consistent across all pages and channels. Identify contradictions where different pages state different facts, figures, or positions. Create a content style guide with a single source of truth for key claims (pricing, product specs, company facts).',
         'Email-Asset Consistency Check': 'Standardize email templates to match website branding. Ensure consistency in: logo usage, color schemes, typography, button styles, promotional claims, pricing. Verify that email links point to landing pages with matching offers and messaging.',
         'Engagement-to-Trust Correlation': 'Monitor how engagement metrics (CTR, time on site, bounce rate) correlate with trust indicators. Investigate pages with high engagement but low trust scores, or vice versa. This may indicate misleading headlines, clickbait, or poor user experience.',
         'Multimodal Consistency Score': 'Ensure text, images, videos, and audio tell a consistent story. Check that: video transcripts match spoken content, image captions accurately describe visuals, infographic data matches text claims. Avoid contradictions between different media types on the same page.',
@@ -114,9 +137,9 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
         'Community Alignment Index': 'Engage with your community authentically and align content with community values. Monitor: social media sentiment, comment tone, shared values in discussions. Address misalignment by: listening to community feedback, adjusting messaging to reflect audience concerns, avoiding tone-deaf marketing during sensitive periods.',
         'Creative recency vs trend': 'Stay current with relevant trends while maintaining brand authenticity. Audit content freshness quarterly. Update outdated statistics, remove references to past events/trends, refresh visuals to current design standards. Balance trending topics with evergreen content.',
         'Cultural Context Alignment': 'Ensure content is culturally appropriate and relevant for target markets. Before launching in new regions: research local customs and sensitivities, verify color/symbol meanings, check for cultural references that may not translate. Work with cultural consultants and native speakers for diverse markets.',
-        'Language/locale match': 'Provide content in appropriate languages for target markets. Avoid auto-translation for critical content. Use professional translation services with native speakers. Ensure: correct date/time formats, appropriate currency symbols, culturally relevant examples, localized imagery.',
+        'Language/Locale Match': 'Provide content in appropriate languages for target markets. Avoid auto-translation for critical content. Use professional translation services with native speakers. Ensure: correct date/time formats, appropriate currency symbols, culturally relevant examples, localized imagery.',
         'Personalization relevance (embedding similarity)': 'Improve content personalization to better match user interests while respecting privacy. Analyze: user behavior patterns, content topic clusters, recommendation accuracy. Improve relevance by: better user preference models, contextual content suggestions, A/B testing personalization algorithms.',
-        'Readability grade level fit': 'Adjust content readability to match your target audience. Test with tools like Flesch-Kincaid or Hemingway Editor. For general audiences: aim for 8th-10th grade reading level, use short sentences (15-20 words), choose simple words over jargon. For technical audiences: adjust accordingly but maintain clarity.',
+        'Readability Grade Level Fit': 'Adjust content readability to match your target audience. Test with tools like Flesch-Kincaid or Hemingway Editor. For general audiences: aim for 8th-10th grade reading level, use short sentences (15-20 words), choose simple words over jargon. For technical audiences: adjust accordingly but maintain clarity.',
         'Tone & sentiment appropriateness': 'Ensure content tone matches context and audience expectations. Avoid overly promotional language in educational content. Match tone to platform: professional on LinkedIn, casual on TikTok. Review content for: appropriate emotion level, avoiding manipulation tactics, balancing enthusiasm with authenticity.'
     }
 
