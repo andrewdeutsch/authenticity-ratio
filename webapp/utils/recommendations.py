@@ -72,35 +72,8 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
     # Map specific issues to remedies
     remedies = {
         # Provenance
-        'AI vs Human Labeling Clarity': 'Add clear labels indicating whether content is AI-generated or human-created. Use schema.org markup to embed this metadata.',
-        'Author Brand Identity Verified': '''Implement appropriate author attribution based on content type:
-
-**For Blog Posts & Articles:** Add visible bylines with author names and optional author bio pages.
-
-**For Corporate Landing Pages:** Consider these options:
-• **Structured Data (Recommended):** Add schema.org markup with author/publisher info using JSON-LD format (invisible to users, visible to search engines)
-• **Meta Tags:** Add <meta name="author" content="Team/Organization"> tags
-• **Subtle Footer Attribution:** Include "Content by [Team]" or "Maintained by [Name/Team]" in page footer
-• **About/Credits Pages:** Create dedicated /about or /team page and link discretely from main pages
-• **Expandable Page Info:** Add a small "ⓘ" icon or "About this page" link showing contributors
-
-Example Schema.org markup for landing pages:
-```html
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "author": {
-    "@type": "Organization",
-    "name": "Acme Corp Marketing Team"
-  },
-  "publisher": {
-    "@type": "Organization",
-    "name": "Acme Corporation"
-  }
-}
-</script>
-```''',
+        'AI vs Human Labeling Clarity': 'Add clear labels indicating whether content is AI-generated or human-created. Use visible disclosure tags like "AI-generated" or "Created with AI assistance" on the content itself. Implement schema.org markup (CreativeWork with "author" and "isBasedOn" properties) to embed this metadata in machine-readable format for search engines and LLMs.',
+        'Author Brand Identity Verified': 'Add clear author attribution to all content. For blog posts and articles: include visible bylines with author names and optional author bio pages. For corporate pages and landing pages: add schema.org markup with author/publisher information using JSON-LD format, include <meta name="author"> tags, or add subtle footer attribution like "Content by [Team/Name]". Create an About page listing content contributors and link to it from main pages.',
         'C2PA/CAI manifest present': 'Implement Content Authenticity Initiative (C2PA) manifests for media files to provide cryptographic provenance. C2PA embeds tamper-proof metadata in images and videos showing who created them, when, and with what tools. This is especially important for AI-generated media.',
         'Canonical URL matches declared source': 'Ensure canonical URLs match the declared source to avoid duplicate content issues. Add proper <link rel="canonical"> tags to all pages pointing to the preferred version. Common issues: HTTP vs HTTPS mismatches, www vs non-www, trailing slashes, URL parameters. Choose one canonical version and stick to it.',
         'Digital watermark/fingerprint detected': 'Add digital watermarks or fingerprints to images and videos for traceability. Watermarks help prove ownership and detect unauthorized use of your media assets.',
