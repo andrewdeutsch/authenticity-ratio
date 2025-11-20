@@ -120,7 +120,7 @@ class ContentScorer:
         """Score Verification dimension: factual accuracy vs trusted DBs"""
         
         prompt = f"""
-        Score the VERIFICATION of this content on a scale of 0.0 to 1.0.
+        Score the VERIFICATION of this content and identify specific issues.
         
         Verification evaluates: factual accuracy, consistency with known facts
         
@@ -130,6 +130,19 @@ class ContentScorer:
         
         Brand Context: {brand_context.get('keywords', [])}
         
+        Respond with JSON in this exact format:
+        {{
+            "score": 0.5,
+            "issues": [
+                {{
+                    "type": "unverified_claims",
+                    "severity": "high",
+                    "evidence": "Claims made without supporting evidence",
+                    "suggestion": "Add citations to authoritative sources"
+                }}
+            ]
+        }}
+        
         Scoring criteria:
         - 0.8-1.0: Highly verifiable facts, consistent with known information
         - 0.6-0.8: Mostly accurate, minor inconsistencies
@@ -137,16 +150,29 @@ class ContentScorer:
         - 0.2-0.4: Several inaccuracies or unverifiable claims
         - 0.0-0.2: Major inaccuracies or completely unverifiable
         
-        Return only a number between 0.0 and 1.0:
+        Common verification issues to check for:
+        - Unverified claims without sources
+        - Fake or suspicious engagement patterns
+        - Unlabeled sponsored content
+        - Missing fact-check references
+        
+        Return valid JSON with score (0.0-1.0) and issues array.
         """
         
-        return self._get_llm_score(prompt)
+        result = self._get_llm_score_with_reasoning(prompt)
+        
+        # Store LLM-identified issues in content metadata for later merging
+        if not hasattr(content, '_llm_issues'):
+            content._llm_issues = {}
+        content._llm_issues['verification'] = result.get('issues', [])
+        
+        return result.get('score', 0.5)
     
     def _score_transparency(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
         """Score Transparency dimension: disclosures, clarity"""
         
         prompt = f"""
-        Score the TRANSPARENCY of this content on a scale of 0.0 to 1.0.
+        Score the TRANSPARENCY of this content and identify specific issues.
         
         Transparency evaluates: clear disclosures, honest communication, no hidden agendas
         
@@ -155,6 +181,19 @@ class ContentScorer:
         Body: {content.body}
         Author: {content.author}
         
+        Respond with JSON in this exact format:
+        {{
+            "score": 0.6,
+            "issues": [
+                {{
+                    "type": "missing_privacy_policy",
+                    "severity": "medium",
+                    "evidence": "No privacy policy link found",
+                    "suggestion": "Add privacy policy link to footer"
+                }}
+            ]
+        }}
+        
         Scoring criteria:
         - 0.8-1.0: Clear disclosures, honest communication, transparent intent
         - 0.6-0.8: Mostly transparent, minor omissions
@@ -162,16 +201,29 @@ class ContentScorer:
         - 0.2-0.4: Limited transparency, hidden elements
         - 0.0-0.2: No transparency, deceptive or manipulative
         
-        Return only a number between 0.0 and 1.0:
+        Common transparency issues to check for:
+        - Missing privacy policy links
+        - Unclear AI-generated content disclosure
+        - Missing data source citations
+        - Hidden sponsored content
+        
+        Return valid JSON with score (0.0-1.0) and issues array.
         """
         
-        return self._get_llm_score(prompt)
+        result = self._get_llm_score_with_reasoning(prompt)
+        
+        # Store LLM-identified issues in content metadata for later merging
+        if not hasattr(content, '_llm_issues'):
+            content._llm_issues = {}
+        content._llm_issues['transparency'] = result.get('issues', [])
+        
+        return result.get('score', 0.5)
     
     def _score_coherence(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
         """Score Coherence dimension: consistency across channels"""
         
         prompt = f"""
-        Score the COHERENCE of this content on a scale of 0.0 to 1.0.
+        Score the COHERENCE of this content and identify specific issues.
         
         Coherence evaluates: consistency with brand messaging, logical flow, professional quality
         
@@ -182,6 +234,19 @@ class ContentScorer:
         
         Brand Context: {brand_context.get('keywords', [])}
         
+        Respond with JSON in this exact format:
+        {{
+            "score": 0.6,
+            "issues": [
+                {{
+                    "type": "inconsistent_voice",
+                    "severity": "medium",
+                    "evidence": "Tone shifts from formal to casual",
+                    "suggestion": "Maintain consistent brand voice throughout"
+                }}
+            ]
+        }}
+        
         Scoring criteria:
         - 0.8-1.0: Highly coherent, consistent with brand, professional quality
         - 0.6-0.8: Mostly coherent, good consistency
@@ -189,10 +254,23 @@ class ContentScorer:
         - 0.2-0.4: Limited coherence, noticeable inconsistencies
         - 0.0-0.2: Incoherent, inconsistent, unprofessional
         
-        Return only a number between 0.0 and 1.0:
+        Common coherence issues to check for:
+        - Inconsistent brand voice or tone
+        - Broken or outdated links
+        - Contradictory claims within content
+        - Poor logical flow or organization
+        
+        Return valid JSON with score (0.0-1.0) and issues array.
         """
         
-        return self._get_llm_score(prompt)
+        result = self._get_llm_score_with_reasoning(prompt)
+        
+        # Store LLM-identified issues in content metadata for later merging
+        if not hasattr(content, '_llm_issues'):
+            content._llm_issues = {}
+        content._llm_issues['coherence'] = result.get('issues', [])
+        
+        return result.get('score', 0.5)
     
     def _score_resonance(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
         """Score Resonance dimension: cultural fit, organic engagement"""
@@ -363,6 +441,127 @@ class ContentScorer:
             logger.error(f"LLM scoring error: {e}")
             return 0.5  # Return neutral score on error
     
+    def _get_llm_score_with_reasoning(self, prompt: str) -> Dict[str, Any]:
+        """
+        Get score AND reasoning from LLM API with structured JSON output
+        
+        Returns:
+            Dictionary with 'score' (float) and 'issues' (list of dicts)
+        """
+        try:
+            # Request structured JSON output from LLM
+            response = self.client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are an expert content authenticity evaluator. Always respond with valid JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500,
+                temperature=0.1,
+                response_format={"type": "json_object"}  # Force JSON output
+            )
+
+            # Parse JSON response
+            try:
+                response_text = response.choices[0].message.content.strip()
+                result = json.loads(response_text)
+            except Exception:
+                # Fallback to dict-like access if needed
+                response_text = str(response.choices[0].message.get('content', '{}')).strip()
+                result = json.loads(response_text)
+
+            # Validate and normalize the response
+            score = float(result.get('score', 0.5))
+            score = min(1.0, max(0.0, score))  # Clamp to valid range
+            
+            issues = result.get('issues', [])
+            if not isinstance(issues, list):
+                issues = []
+            
+            return {
+                'score': score,
+                'issues': issues
+            }
+            
+        except Exception as e:
+            logger.error(f"LLM structured scoring error: {e}")
+            return {
+                'score': 0.5,
+                'issues': []
+            }
+    
+    def _merge_llm_and_detector_issues(self, content: NormalizedContent, 
+                                      detected_attrs: List[DetectedAttribute]) -> List[DetectedAttribute]:
+        """
+        Merge LLM-identified issues with detector-found attributes
+        
+        Args:
+            content: Content object (may have _llm_issues attribute)
+            detected_attrs: List of attributes detected by attribute detector
+        
+        Returns:
+            Merged list of DetectedAttribute objects with source tracking
+        """
+        from scoring.issue_mapper import map_llm_issue_to_attribute
+        
+        merged_attrs = []
+        
+        # Track which attributes we've seen from the detector
+        detector_attr_ids = {attr.attribute_id for attr in detected_attrs}
+        
+        # Add all detector-found attributes (mark as detector-only or both)
+        for attr in detected_attrs:
+            merged_attrs.append(attr)
+        
+        # Process LLM issues if they exist
+        if hasattr(content, '_llm_issues'):
+            for dimension, llm_issues in content._llm_issues.items():
+                for llm_issue in llm_issues:
+                    issue_type = llm_issue.get('type', '')
+                    
+                    # Map LLM issue type to attribute ID
+                    attr_id = map_llm_issue_to_attribute(issue_type)
+                    
+                    if attr_id:
+                        # Check if detector also found this issue
+                        if attr_id in detector_attr_ids:
+                            # Both found it - increase confidence of existing attribute
+                            for attr in merged_attrs:
+                                if attr.attribute_id == attr_id:
+                                    # Boost confidence when both LLM and detector agree
+                                    attr.confidence = min(1.0, attr.confidence * 1.2)
+                                    # Enhance evidence with LLM reasoning
+                                    llm_evidence = llm_issue.get('evidence', '')
+                                    if llm_evidence and llm_evidence not in attr.evidence:
+                                        attr.evidence = f"{attr.evidence} | LLM: {llm_evidence}"
+                                    break
+                        else:
+                            # Only LLM found it - create new attribute
+                            # Get label from rubric or use issue type
+                            label = llm_issue.get('type', '').replace('_', ' ').title()
+                            
+                            # Determine value based on severity
+                            severity = llm_issue.get('severity', 'medium')
+                            if severity == 'high':
+                                value = 2.0
+                            elif severity == 'medium':
+                                value = 5.0
+                            else:  # low
+                                value = 7.0
+                            
+                            new_attr = DetectedAttribute(
+                                attribute_id=attr_id,
+                                dimension=dimension,
+                                label=label,
+                                value=value,
+                                evidence=f"LLM: {llm_issue.get('evidence', 'Issue detected')}",
+                                confidence=0.7  # Lower confidence for LLM-only
+                            )
+                            merged_attrs.append(new_attr)
+                            detector_attr_ids.add(attr_id)
+        
+        return merged_attrs
+    
     def batch_score_content(self, content_list: List[NormalizedContent],
                           brand_context: Dict[str, Any]) -> List[ContentScores]:
         """
@@ -393,6 +592,10 @@ class ContentScorer:
                 try:
                     detected_attrs = self.attribute_detector.detect_attributes(content)
                     logger.debug(f"Detected {len(detected_attrs)} attributes for {content.content_id}")
+
+                    # Step 2.5: Merge LLM issues with detector attributes
+                    detected_attrs = self._merge_llm_and_detector_issues(content, detected_attrs)
+                    logger.debug(f"After merging: {len(detected_attrs)} total attributes")
 
                     # Adjust LLM scores with attribute signals
                     dimension_scores = self._adjust_scores_with_attributes(dimension_scores, detected_attrs)

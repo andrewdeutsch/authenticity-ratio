@@ -2,7 +2,7 @@
 Social Media Search Service
 
 This module handles the discovery and validation of brand social media channels
-across Instagram, LinkedIn, Twitter/X.
+across Instagram, LinkedIn, and X.
 """
 import logging
 from typing import List, Dict, Any
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 def search_social_media_channels(brand_id: str, search_provider: str, progress_animator, logger) -> List[Dict[str, Any]]:
     """
-    Search for official brand social media channels on Instagram, LinkedIn, and Twitter.
+    Search for official brand social media channels on Instagram, LinkedIn, and X.
 
     Args:
         brand_id: The brand identifier (e.g., "Mastercard")
@@ -38,12 +38,6 @@ def search_social_media_channels(brand_id: str, search_provider: str, progress_a
             'name': 'LinkedIn',
             'site': 'linkedin.com',
             'emoji': '💼',
-            'tier': 'brand_social'
-        },
-        {
-            'name': 'Twitter',
-            'site': 'twitter.com',
-            'emoji': '🐦',
             'tier': 'brand_social'
         },
         {

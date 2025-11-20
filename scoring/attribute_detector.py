@@ -747,7 +747,7 @@ class TrustStackAttributeDetector:
                 evidence=f"Inconsistent brand voice detected (casual markers: {', '.join(found_markers[:3])})",
                 confidence=0.7
             )
-        return None
+        return None  # No issue detected
 
     def _detect_broken_links(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect broken link rate"""
@@ -814,7 +814,7 @@ class TrustStackAttributeDetector:
                         evidence=f"Potential contradiction detected: '{term1}' vs '{term2}'",
                         confidence=0.6
                     )
-        return None
+        return None  # No contradictions detected
 
     def _detect_email_consistency(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect email-asset consistency"""
@@ -1218,16 +1218,21 @@ class TrustStackAttributeDetector:
             meta.get("is_sponsored") == "true"
         )
 
-        if has_ad_label:
+        # Check for ad intent without proper labeling
+        ad_intent_markers = ["buy now", "limited time offer", "discount code", "affiliate link"]
+        has_ad_intent = any(m in text for m in ad_intent_markers)
+        
+        if has_ad_intent and not has_ad_label:
             return DetectedAttribute(
                 attribute_id="ad_sponsored_label_consistency",
                 dimension="verification",
                 label="Ad/Sponsored Label Consistency",
-                value=10.0,
-                evidence="Ad/sponsored label present",
-                confidence=1.0
+                value=1.0,
+                evidence="Commercial intent detected without visible ad disclosure",
+                confidence=0.8
             )
-        return None  # Only report if present
+        
+        return None  # No issue detected
 
     def _detect_safety_guardrails(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect agent safety guardrails (placeholder)"""

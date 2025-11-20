@@ -1600,30 +1600,21 @@ def show_results_page():
     # Count total issues per dimension
     issue_counts = {dim: len(issues) for dim, issues in dimension_issues.items()}
 
-    # Add dimensions with low scores but no detected attribute issues
-    for dim_key in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
-        dim_score = dimension_breakdown.get(dim_key, {}).get('average', 1.0) * 100
-        if dim_score < 80 and dim_key not in issue_counts:
-            issue_counts[dim_key] = 0
-
     total_issues = sum(issue_counts.values())
-    dimensions_needing_remedies = sum(1 for c in issue_counts.values() if c >= 0)
+    dimensions_with_issues = len([c for c in issue_counts.values() if c > 0])
 
-    if dimensions_needing_remedies > 0:
-        specific_issues_count = sum(1 for c in issue_counts.values() if c > 0)
-        if specific_issues_count > 0:
-            st.markdown(f"**Found {total_issues} specific issues across {specific_issues_count} dimensions**")
-        else:
-            st.markdown(f"**Analyzing {dimensions_needing_remedies} dimensions for improvement opportunities**")
+    if dimensions_with_issues > 0:
+        st.markdown(f"**Found {total_issues} specific issues across {dimensions_with_issues} dimensions**")
 
-        # Display remedies for each dimension with issues OR low scores
+        # Display remedies for each dimension with detected issues
         for dimension_key in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
             issues = dimension_issues.get(dimension_key, [])
-            dim_score = dimension_breakdown.get(dimension_key, {}).get('average', 1.0) * 100
-
-            # Skip dimensions that score well and have no issues
-            if not issues and dim_score >= 80:
+            
+            # Only show dimensions that have detected issues
+            if not issues:
                 continue
+
+            dim_score = dimension_breakdown.get(dimension_key, {}).get('average', 1.0) * 100
 
             dimension_names = {
                 'provenance': ('🔗 Provenance', 'Origin & Metadata Issues'),
@@ -1635,11 +1626,8 @@ def show_results_page():
 
             dim_emoji_name, dim_subtitle = dimension_names[dimension_key]
 
-            # Show issue count or score-based label with consistent formatting
-            if issues:
-                expander_label = f"{dim_emoji_name}: {len(issues)} issues found (Score {dim_score:.1f}/100)"
-            else:
-                expander_label = f"{dim_emoji_name}: Room for improvement (Score {dim_score:.1f}/100)"
+            # Show issue count with score
+            expander_label = f"{dim_emoji_name}: {len(issues)} issues found (Score {dim_score:.1f}/100)"
 
             with st.expander(expander_label, expanded=(dimension_key == min(issue_counts, key=lambda k: (issue_counts[k], -dimension_breakdown.get(k, {}).get('average', 1.0)*100)) if issue_counts else False)):
                 st.markdown(f"**{dim_subtitle}**")
@@ -1672,63 +1660,6 @@ def show_results_page():
                                 st.caption(f"  🔗 {issue['url']}")
                         if len(type_issues) > 10:
                             st.caption(f"... and {len(type_issues) - 10} more items")
-
-                    st.markdown("")  # Spacing
-
-                # If no specific issues detected but dimension score is low, show dimension-level remedies
-                # in consistent detailed format (matching the specific attribute format above)
-                if not issues and dim_score < 80:
-                    # Use comprehensive dimension-level remedies with consistent formatting
-                    dimension_remedies = {
-                        'provenance': {
-                            'title': 'Origin & Source Attribution',
-                            'recommendations': [
-                                ('Author/Brand Identity Verified', 'Add clear author attribution to all content. For blog posts and articles: include visible bylines with author names and optional author bio pages. For corporate pages and landing pages: add schema.org markup with author/publisher information using JSON-LD format, include <meta name="author"> tags, or add subtle footer attribution like "Content by [Team/Name]". Create an About page listing content contributors and link to it from main pages.'),
-                                ('Schema Compliance', 'Implement schema.org structured data markup (JSON-LD) for all content types. This helps search engines understand your content and can improve visibility and trust signals.'),
-                                ('Metadata Completeness', 'Add complete metadata to all pages. Required elements: title tag, meta description, author attribution, publication/modified date, Open Graph tags (og:title, og:description, og:image), and Twitter Card tags.'),
-                            ]
-                        },
-                        'verification': {
-                            'title': 'Accuracy & Fact-Checking',
-                            'recommendations': [
-                                ('Claim-to-Source Traceability', 'Add citations and inline references for all factual claims. Each claim should link to an authoritative, verifiable source (research papers, official statistics, primary sources). Avoid unsourced assertions.'),
-                                ('Ad & Sponsored Label Consistency', 'Clearly label all sponsored content and advertisements. Use consistent, prominent labels: "Sponsored", "Ad", "Paid Partnership", or "Promoted". Ensure labels appear: on social media posts, in email campaigns, on website promotional content. Labels must be visible before user interaction.'),
-                                ('Engagement Authenticity Ratio', 'Monitor engagement metrics for bot activity and fake engagement. Look for: sudden spikes in followers/likes, accounts with no profile pictures, generic comments, engagement from inactive accounts. Remove fake engagement and report bot accounts. Focus on organic community building.'),
-                            ]
-                        },
-                        'transparency': {
-                            'title': 'Disclosure & Clarity',
-                            'recommendations': [
-                                ('Privacy Policy Link Availability & Clarity', 'Add a clear Privacy Policy link to your footer and top navigation. Ensure the policy: is written in plain language (avoid legalese), clearly explains data collection practices, is updated regularly (review annually), is mobile-friendly. Consider adding a summary or FAQ section.'),
-                                ('AI-Generated/Assisted Disclosure Present', 'Clearly disclose when content is AI-generated or AI-assisted. Add disclosure statements prominently: "This content was created with AI assistance" or "AI-generated summary". Use visual indicators (badges, labels) and schema.org markup (digital-document-permission property).'),
-                                ('Data Source Citations for Claims', 'Add inline citations for all data-driven claims. Each statistic, fact, or research finding should link to: primary source (research paper, official report), publication date, credible organization. Format citations consistently (footnotes, inline links, or reference section).'),
-                            ]
-                        },
-                        'coherence': {
-                            'title': 'Cross-Channel Consistency',
-                            'recommendations': [
-                                ('Brand Voice Consistency Score', 'Audit all content for consistent brand voice and tone. Create written brand voice guidelines covering: vocabulary preferences, sentence structure, formality level, personality traits (e.g., professional vs. casual). Train all content creators on these guidelines and review content before publishing.'),
-                                ('Broken Link Rate', 'Regularly audit and fix broken links using automated link checkers. Recommended tools: Broken Link Checker, Screaming Frog, or Ahrefs. Run checks weekly and fix broken links within 24-48 hours. Set up monitoring alerts for broken links.'),
-                                ('Claim Consistency Across Pages', 'Ensure factual claims are consistent across all pages and channels. Identify contradictions where different pages state different facts, figures, or positions. Create a content style guide with a single source of truth for key claims (pricing, product specs, company facts).'),
-                            ]
-                        },
-                        'resonance': {
-                            'title': 'Audience Engagement & Relevance',
-                            'recommendations': [
-                                ('Community Alignment Index', 'Engage with your community authentically and align content with community values. Monitor: social media sentiment, comment tone, shared values in discussions. Address misalignment by: listening to community feedback, adjusting messaging to reflect audience concerns, avoiding tone-deaf marketing during sensitive periods.'),
-                                ('Readability Grade Level Fit', 'Adjust content readability to match your target audience. Test with tools like Flesch-Kincaid or Hemingway Editor. For general audiences: aim for 8th-10th grade reading level, use short sentences (15-20 words), choose simple words over jargon. For technical audiences: adjust accordingly but maintain clarity.'),
-                                ('Tone & sentiment appropriateness', 'Ensure content tone matches context and audience expectations. Avoid overly promotional language in educational content. Match tone to platform: professional on LinkedIn, casual on TikTok. Review content for: appropriate emotion level, avoiding manipulation tactics, balancing enthusiasm with authenticity.'),
-                            ]
-                        }
-                    }
-
-                    dim_remedy_data = dimension_remedies.get(dimension_key)
-                    if dim_remedy_data:
-                        st.warning(f"**{dim_remedy_data['title']}**\n\nNo specific issues detected, but score ({dim_score:.1f}/100) indicates room for improvement. Consider these enhancements:")
-
-                        for rec_name, rec_text in dim_remedy_data['recommendations']:
-                            st.markdown(f"**⚠️ {rec_name}**")
-                            st.info(f"**💡 Recommended Fix:** {rec_text}")
 
                     st.markdown("")  # Spacing
     else:
