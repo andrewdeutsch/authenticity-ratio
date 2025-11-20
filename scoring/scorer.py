@@ -119,14 +119,53 @@ class ContentScorer:
     def _score_verification(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
         """Score Verification dimension: factual accuracy vs trusted DBs"""
         
+        # Detect if content is from brand's own domain
+        content_url = getattr(content, 'url', '').lower()
+        brand_keywords = [kw.lower() for kw in brand_context.get('keywords', [])]
+        is_brand_owned = any(keyword in content_url for keyword in brand_keywords if keyword)
+        
+        # Adjust verification criteria based on content ownership
+        if is_brand_owned:
+            ownership_guidance = """
+            CONTENT OWNERSHIP: Brand-Owned Content (Official Brand Domain)
+            
+            ADJUSTED VERIFICATION CRITERIA:
+            - Brand statements about their OWN products/services are AUTHORITATIVE (not unverified)
+            - DO NOT flag self-descriptive claims like "Our platform offers X feature"
+            - ONLY flag these types of unverified claims:
+              1. Statistical claims without sources ("99% customer satisfaction", "10x faster")
+              2. Comparative claims without proof ("#1 in industry", "better than competitors")
+              3. External facts needing citations ("According to studies...", "Research shows...")
+              4. Extraordinary claims that seem suspicious
+            
+            EXAMPLES FOR BRAND-OWNED CONTENT:
+            - NOT unverified: "Mastercard Engage offers a directory of approved specialists"
+            - NOT unverified: "Our API enables secure payment processing"
+            - UNVERIFIED: "We have 99% customer satisfaction" (needs source)
+            - UNVERIFIED: "We're the #1 payment company globally" (needs proof)
+            """
+        else:
+            ownership_guidance = """
+            CONTENT OWNERSHIP: Third-Party Content
+            
+            STANDARD VERIFICATION CRITERIA:
+            - Apply strict verification standards
+            - Flag all factual claims about the brand without sources
+            - Flag statistics, rankings, and comparative claims
+            - Require citations for all substantive claims
+            """
+        
         prompt = f"""
         Score the VERIFICATION of this content and identify specific issues.
+        
+        {ownership_guidance}
         
         Verification evaluates: factual accuracy, consistency with known facts
         
         Content:
         Title: {content.title}
         Body: {content.body[:2000]}
+        URL: {content_url}
         
         Brand Context: {brand_context.get('keywords', [])}
         
