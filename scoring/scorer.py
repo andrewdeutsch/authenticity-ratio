@@ -6,6 +6,7 @@ Integrates with TrustStackAttributeDetector for comprehensive ratings
 
 from typing import Dict, Any, List, Optional
 import logging
+import json
 from dataclasses import dataclass
 
 from config.settings import SETTINGS
