@@ -404,9 +404,19 @@ class ContentScorer:
             total_weight = 0.0
 
             for attr in attrs:
+                # Skip negative adjustments for LLM-identified issues
+                # The LLM score already accounts for these issues, so applying
+                # negative adjustments would double-penalize
+                is_llm_only = attr.evidence and attr.evidence.startswith("LLM:")
+                
                 # Map 1-10 scale to adjustment (-50 to +50)
                 # 1 = -45, 5.5 = 0, 10 = +45
                 attr_adjustment = (attr.value - 5.5) * 9
+
+                # Skip negative adjustments for LLM-only attributes
+                if is_llm_only and attr_adjustment < 0:
+                    logger.debug(f"Skipping negative adjustment for LLM-only attribute {attr.label} in {dimension}")
+                    continue
 
                 # Weight by confidence
                 weight = attr.confidence
