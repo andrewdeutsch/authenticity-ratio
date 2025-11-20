@@ -87,9 +87,14 @@ def is_login_wall(title: str, body: str) -> bool:
     title_lower = title.lower().strip() if title else ""
     body_lower = body.lower() if body else ""
     
-    # Check title
+    # AGGRESSIVE: Check title alone first
     if title_lower in LOGIN_INDICATORS:
-        logger.info(f"Detected login wall by title: '{title}'")
+        logger.info(f"Detected login wall by title alone: '{title}'")
+        return True
+    
+    # Check if title contains login keywords
+    if any(keyword in title_lower for keyword in ['login', 'sign in', 'sign up', 'register', 'auth']):
+        logger.info(f"Detected login wall by keyword in title: '{title}'")
         return True
     
     # Check for login form patterns in body (first 1000 chars)
@@ -102,12 +107,15 @@ def is_login_wall(title: str, body: str) -> bool:
         'please log in',
         'authentication required',
         'otp code',
-        'captcha'
+        'captcha',
+        'send otp',
+        'create account',
+        'forgot password'
     ]
     
-    # If multiple login patterns found, it's likely a login page
+    # AGGRESSIVE: If ANY login pattern found, it's likely a login page (lowered from 2)
     pattern_count = sum(1 for pattern in login_patterns if pattern in body_sample)
-    if pattern_count >= 2:
+    if pattern_count >= 1:
         logger.info(f"Detected login wall by form patterns: '{title}' ({pattern_count} patterns)")
         return True
     

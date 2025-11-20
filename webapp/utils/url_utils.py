@@ -284,6 +284,9 @@ def is_login_page(url: str) -> bool:
             'customer.',
             'customers.',
             'dashboard.',
+            'redemption.',  # ADDED: redemption.mastercard.com is a login page
+            'redeem.',
+            'rewards.',
         ]
 
         for subdomain in login_subdomains:

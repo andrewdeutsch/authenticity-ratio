@@ -699,8 +699,8 @@ class ContentScorer:
         logger.debug(f"{dimension} base score: {score:.2f}")
         
         # Step 2: Get feedback based on score
-        if score < 0.8:
-            # Low score: Ask for specific issues
+        if score < 0.9:
+            # Low/medium score: Ask for specific issues
             feedback_prompt = f"""
             You scored this content's {dimension} as {score:.1f} out of 1.0.
             
@@ -734,11 +734,19 @@ class ContentScorer:
             
             {context_guidance}
             
-            While this content performs well, what could make it even better? Provide specific improvement suggestions.
+            The client wants to know: "Why didn't I get 100%? What specific thing could make this even better?"
+            
+            Provide ONE specific, actionable improvement that would move the score closer to 100%.
             
             Content:
             Title: {content.title}
             Body: {content.body[:2000]}
+            
+            CRITICAL REQUIREMENTS:
+            1. Identify ONE specific area for improvement (not multiple)
+            2. Provide a SINGLE exact quote showing what could be improved
+            3. Explain WHY this prevents a perfect score
+            4. Give a SPECIFIC, actionable suggestion on how to improve it
             
             Respond with JSON in this exact format:
             {{
@@ -747,16 +755,23 @@ class ContentScorer:
                         "type": "improvement_opportunity",
                         "confidence": 0.75,
                         "severity": "low",
-                        "evidence": "EXACT QUOTE: 'specific text that could be improved'",
-                        "suggestion": "How to go from good to great"
+                        "evidence": "EXACT QUOTE: 'single specific text that could be improved'",
+                        "suggestion": "Specific action: [Explain WHY this matters and HOW to improve it]"
                     }}
                 ]
             }}
             
-            Focus on optimization, not problems. Examples:
-            - "Consider adding more specific CTAs"
-            - "Could strengthen brand voice consistency in the closing paragraph"
-            - "Adding data sources would increase credibility"
+            EXAMPLES OF GOOD IMPROVEMENT SUGGESTIONS:
+            - "Add a clear call-to-action in the closing paragraph to guide user next steps"
+            - "Include the publication date to improve content freshness signals"
+            - "Add internal links to related content to improve navigation"
+            
+            EXAMPLES OF BAD SUGGESTIONS (DO NOT DO THIS):
+            - Quoting multiple random text snippets without explanation
+            - Generic advice like "improve quality" without specifics
+            - Listing multiple improvements instead of focusing on ONE
+            
+            If the content is truly excellent and you cannot identify a meaningful improvement, return an empty issues array.
             """
         
         # Get feedback from LLM
