@@ -874,6 +874,82 @@ def show_analyze_page():
                 placeholder="e.g., nike or mastercard",
                 help="Unique identifier for the brand (e.g., 'nike', 'coca-cola'). Enter the desired brand before running analysis."
             )
+            
+            # Brand Guidelines Check (inline)
+            if brand_id:
+                from utils.document_processor import BrandGuidelinesProcessor
+                import tempfile
+                
+                processor = BrandGuidelinesProcessor()
+                brand_id_normalized = brand_id.lower().strip().replace(' ', '_')
+                guidelines = processor.load_guidelines(brand_id_normalized)
+                metadata = processor.load_metadata(brand_id_normalized)
+                
+                if guidelines:
+                    # Guidelines found - show checkbox
+                    word_count = metadata.get('word_count', 0) if metadata else 0
+                    st.success(f"✅ Guidelines found ({word_count:,} words)")
+                    
+                    use_guidelines = st.checkbox(
+                        "Use brand guidelines for coherence analysis",
+                        value=True,
+                        key=f"use_guidelines_{brand_id_normalized}",
+                        help="Uncheck to analyze without brand-specific guidelines"
+                    )
+                    
+                    # Preview option
+                    with st.expander("📋 View guidelines preview", expanded=False):
+                        preview_text = guidelines[:500] + "..." if len(guidelines) > 500 else guidelines
+                        st.text_area("", preview_text, height=150, disabled=True, label_visibility="collapsed")
+                    
+                    # Store in session state
+                    st.session_state['use_guidelines'] = use_guidelines
+                    st.session_state['brand_id_for_guidelines'] = brand_id_normalized
+                else:
+                    # No guidelines - show upload option
+                    st.warning("⚠️ No brand guidelines found")
+                    st.caption("Upload guidelines for brand-specific coherence analysis")
+                    
+                    with st.expander("📤 Upload Guidelines", expanded=False):
+                        uploaded_file = st.file_uploader(
+                            "Choose file (PDF, DOCX, or TXT)",
+                            type=['pdf', 'docx', 'txt'],
+                            key=f"inline_guidelines_upload_{brand_id_normalized}",
+                            help="Upload your brand voice and style guidelines"
+                        )
+                        
+                        if uploaded_file:
+                            if st.button("Upload", key=f"inline_upload_btn_{brand_id_normalized}"):
+                                with st.spinner("Processing document..."):
+                                    try:
+                                        # Save to temp file
+                                        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
+                                            tmp_file.write(uploaded_file.getvalue())
+                                            tmp_path = tmp_file.name
+                                        
+                                        # Extract text
+                                        text = processor.extract_text(tmp_path)
+                                        
+                                        # Clean up temp file
+                                        os.unlink(tmp_path)
+                                        
+                                        # Save guidelines
+                                        metadata = processor.save_guidelines(
+                                            brand_id=brand_id_normalized,
+                                            text=text,
+                                            original_filename=uploaded_file.name,
+                                            file_size=uploaded_file.size
+                                        )
+                                        
+                                        st.success(f"✅ Guidelines uploaded! ({metadata['word_count']:,} words)")
+                                        st.info("Please refresh the page or re-enter the brand ID to use the guidelines.")
+                                        
+                                    except Exception as e:
+                                        st.error(f"❌ Error processing document: {str(e)}")
+                    
+                    # No guidelines available
+                    st.session_state['use_guidelines'] = False
+                    st.session_state['brand_id_for_guidelines'] = brand_id_normalized
 
             keywords = st.text_input(
                 "Search Keywords*",
@@ -2163,7 +2239,7 @@ def main():
 
         st.divider()
         st.caption("Trust Stack Rating v2.0")
-        st.caption("6D Trust Framework")
+        st.caption("5D Trust Framework")
 
     # Route to appropriate page
     page = st.session_state.get('page', 'home')

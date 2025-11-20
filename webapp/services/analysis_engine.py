@@ -195,15 +195,20 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
         normalized_content = normalizer.normalize_content(all_content)
 
         # Step 4: Scoring
-        status_text.text("Scoring content on 6D Trust dimensions...")
+        status_text.text("Scoring content on 5D Trust dimensions...")
         progress_bar.progress(60)
 
         scoring_pipeline = ScoringPipeline()
+        
+        # Get use_guidelines preference from session state
+        use_guidelines = st.session_state.get('use_guidelines', True)
+        
         brand_config = {
             'brand_id': brand_id,
             'brand_name': brand_id,
             'keywords': keywords,
-            'sources': sources
+            'sources': sources,
+            'use_guidelines': use_guidelines  # Pass guidelines preference to scorer
         }
 
         pipeline_run = scoring_pipeline.run_scoring_pipeline(normalized_content, brand_config)

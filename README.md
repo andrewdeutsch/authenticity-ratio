@@ -1,6 +1,6 @@
 # Trust Stack Rating Tool
 
-A comprehensive content quality assessment system that analyzes brand-linked content across digital channels using the **6D Trust Framework**. The tool provides a Trust Stack Rating (0-100 scale) and detailed insights into content authenticity, transparency, and trustworthiness.
+A comprehensive content quality assessment system that analyzes brand-linked content across digital channels using the **5D Trust Framework**. The tool provides a Trust Stack Rating (0-100 scale) and detailed insights into content authenticity, transparency, and trustworthiness.
 
 ## 🎯 What It Does
 
@@ -61,7 +61,7 @@ Available data sources: `brave`, `reddit`, `youtube`
 1. **Ingestion**: Collect content from configured data sources (Brave Search, Reddit, YouTube)
 2. **Normalization**: Standardize content format across sources
 3. **Enrichment**: Extract metadata, detect attributes (SSL, schema markup, author info, etc.)
-4. **Scoring**: Apply 6D rubric using LLM-based analysis for each dimension
+4. **Scoring**: Apply 5D rubric using LLM-based analysis for each dimension
 5. **Classification**: Categorize content as Excellent/Good/Fair/Poor based on overall score
 6. **Reporting**: Generate comprehensive reports (PDF, Markdown, JSON)
 7. **Export**: Save results for analysis and comparison
@@ -78,7 +78,7 @@ authenticity-ratio/
 │   └── metadata_extractor.py  # Metadata and attribute detection
 ├── scoring/                # Trust Stack Rating computation
 │   ├── pipeline.py         # Main scoring pipeline
-│   ├── scorer.py           # 6D dimension scoring
+│   ├── scorer.py           # 5D dimension scoring
 │   ├── attribute_detector.py  # Trust attribute detection
 │   ├── classifier.py       # Content classification
 │   └── rubric.py           # Scoring rubric definitions
@@ -260,7 +260,7 @@ output/webapp_runs/{brand_id}_{run_id}/
 ### Report Contents
 - **Dashboard**: Overall rating, distribution, dimension breakdown
 - **Content Analysis**: Table of all analyzed items with individual scores
-- **6D Breakdown**: Detailed scores for each dimension
+- **5D Breakdown**: Detailed scores for each dimension
 - **Recommendations**: LLM-generated actionable insights
 - **Authenticity Ratio**: Legacy AR metrics (Authentic/Suspect/Inauthentic counts)
 
@@ -323,7 +323,7 @@ Contributions are welcome! Please:
 
 **Key Evolution**:
 - v1.0: Original Authenticity Ratio (AR) KPI with 5D framework
-- v2.0: Trust Stack Rating with 6D dimensions + interactive web app
+- v2.0: Trust Stack Rating with 5D dimensions + interactive web app
 
 See git history for detailed changelog.
 

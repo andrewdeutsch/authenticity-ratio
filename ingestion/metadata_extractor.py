@@ -1,5 +1,5 @@
 """
-Enhanced metadata extractor for Trust Stack 6D analysis
+Enhanced metadata extractor for Trust Stack 5D analysis
 Handles modality detection, channel extraction, schema.org parsing, and more
 """
 

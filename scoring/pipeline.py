@@ -274,7 +274,7 @@ class ScoringPipeline:
 
         per_item_breakdowns = []
         for s in scores_list:
-            # Defensive defaults for missing scores (6D)
+            # Defensive defaults for missing scores (5D)
             p = getattr(s, 'score_provenance', 0.0) or 0.0
             r = getattr(s, 'score_resonance', 0.0) or 0.0
             c = getattr(s, 'score_coherence', 0.0) or 0.0
@@ -818,7 +818,7 @@ class ScoringPipeline:
                     'verification': getattr(s, 'score_verification', None),
                 }
 
-                # Compute a simple mean-based final score when rubric weights are not available here (6D)
+                # Compute a simple mean-based final score when rubric weights are not available here (5D)
                 try:
                     vals = [
                         float(getattr(s, 'score_provenance', 0.0) or 0.0),

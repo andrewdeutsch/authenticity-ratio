@@ -1,12 +1,12 @@
 # Trust Stack Rating Web Application
 
-A comprehensive web interface for analyzing and rating brand content quality across digital channels using the 6D Trust Framework.
+A comprehensive web interface for analyzing and rating brand content quality across digital channels using the 5D Trust Framework.
 
 ## Features
 
 ### 🏠 Home Page
 - **Overview** of Trust Stack Rating system and scoring methodology
-- **6D Trust Dimensions** explanation with rating scale (0-100)
+- **5D Trust Dimensions** explanation with rating scale (0-100)
 - **Rating bands** (Excellent/Good/Fair/Poor)
 - **Pipeline visualization** showing the 7-step analysis workflow
 - Quick start guide
@@ -27,7 +27,7 @@ A comprehensive web interface for analyzing and rating brand content quality acr
 - **Rich Visualizations**:
   - Pie chart showing rating distribution
   - Histogram showing score distribution with threshold lines
-  - Radar chart displaying 6D Trust Dimensions scores
+  - Radar chart displaying 5D Trust Dimensions scores
   - Progress bars for individual dimension performance
 - **Detailed Content Analysis**:
   - Sortable table of all analyzed content items
@@ -99,7 +99,7 @@ Each piece of content receives a comprehensive rating:
 - **40-59** (🟠 Fair): Moderate quality requiring attention
 - **0-39** (🔴 Poor): Low-quality content needing immediate review
 
-#### 6D Trust Dimensions
+#### 5D Trust Dimensions
 Each content item is scored 0-100 on six dimensions:
 - **Provenance** (🔗): Origin, traceability, metadata integrity
 - **Verification** (✓): Factual accuracy vs. trusted databases
@@ -178,7 +178,7 @@ The web app integrates with the following pipeline components:
 
 1. **Ingestion** (`ingestion/`): Collects content from various sources
 2. **Normalization** (`ingestion/normalizer.py`): Standardizes content format
-3. **Scoring** (`scoring/pipeline.py`): Applies 6D rubric and classifies content
+3. **Scoring** (`scoring/pipeline.py`): Applies 5D rubric and classifies content
 4. **Reporting** (`reporting/`): Generates PDF and Markdown reports
 
 ## Performance Tips
@@ -215,4 +215,4 @@ For issues, questions, or feature requests, refer to the main project README or 
 
 ---
 
-**Trust Stack Rating v2.0** | 6D Trust Framework
+**Trust Stack Rating v2.0** | 5D Trust Framework

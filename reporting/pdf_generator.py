@@ -474,13 +474,13 @@ class PDFReportGenerator:
         story.append(scale_table)
         story.append(Spacer(1, 15))
 
-        # 6D Trust Framework overview
-        story.append(Paragraph("<b>6D Trust Framework Overview</b>", self.styles['Heading3']))
+        # 5D Trust Framework overview
+        story.append(Paragraph("<b>5D Trust Framework Overview</b>", self.styles['Heading3']))
         framework_text = (
-            "Each content item is evaluated across six trust dimensions using a comprehensive 0-100 scoring rubric. "
+            "Each content item is evaluated across five trust dimensions using a comprehensive 0-100 scoring rubric. "
             "The dimensions measure: <b>Provenance</b> (origin and traceability), <b>Verification</b> (factual accuracy), "
             "<b>Transparency</b> (disclosure and clarity), <b>Coherence</b> (cross-channel consistency), "
-            "<b>Resonance</b> (audience engagement), and <b></b> (machine discoverability). "
+            "<b>Resonance</b> (audience engagement). "
             "The comprehensive rating is calculated as a weighted average across all five dimensions."
         )
         story.append(Paragraph(framework_text, self.styles['Normal']))
@@ -1072,7 +1072,7 @@ class PDFReportGenerator:
             interp = (
                 f"Out of {total_items} items analyzed, the average Trust Stack Rating is {avg_rating:.1f}/100, "
                 f"indicating excellent content quality. {excellent} items ({excellent/max(total_items, 1)*100:.1f}%) "
-                f"achieved excellent ratings (80+), demonstrating strong trust signals across the 6D Trust Framework. "
+                f"achieved excellent ratings (80+), demonstrating strong trust signals across the 5D Trust Framework. "
                 f"{recommendation}"
             )
         elif avg_rating >= 60:

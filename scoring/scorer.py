@@ -310,9 +310,21 @@ class ContentScorer:
     def _score_coherence(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
         """Score Coherence dimension: consistency across channels with brand guidelines"""
         
-        # Load brand guidelines if available
-        brand_id = brand_context.get('brand_name', '').lower().strip().replace(' ', '_')
-        brand_guidelines = self._load_brand_guidelines(brand_id)
+        # Check if user wants to use guidelines (from session state/brand context)
+        use_guidelines = brand_context.get('use_guidelines', True)  # Default True for backward compatibility
+        
+        brand_guidelines = None
+        if use_guidelines:
+            # Load brand guidelines if available
+            brand_id = brand_context.get('brand_name', '').lower().strip().replace(' ', '_')
+            brand_guidelines = self._load_brand_guidelines(brand_id)
+            
+            if brand_guidelines:
+                logger.info(f"Using brand guidelines for {brand_id} in coherence scoring ({len(brand_guidelines)} chars)")
+            else:
+                logger.info(f"No guidelines found for {brand_id}, using generic coherence standards")
+        else:
+            logger.info("Brand guidelines disabled by user preference")
         
         # Detect content type to adjust scoring criteria
         content_type = self._determine_content_type(content)

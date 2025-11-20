@@ -44,7 +44,7 @@ class NormalizedContent:
     run_id: str = ""
     meta: Dict[str, str] = None
 
-    # Enhanced Trust Stack fields for 6D analysis
+    # Enhanced Trust Stack fields for 5D analysis
     url: str = ""  # Full URL of the content
     published_at: Optional[str] = None  # ISO datetime string
     modality: str = "text"  # text, image, video, audio
@@ -81,7 +81,7 @@ class ContentScores:
     run_id: str = ""
     meta: str = ""
 
-    # Enhanced Trust Stack fields for 6D analysis
+    # Enhanced Trust Stack fields for 5D analysis
     modality: str = "text"  # text, image, video, audio
     channel: str = "unknown"  # youtube, reddit, amazon, instagram, etc.
     platform_type: str = "unknown"  # owned, social, marketplace, email
