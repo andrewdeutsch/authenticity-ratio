@@ -793,6 +793,8 @@ class ContentScorer:
         Returns:
             List of ContentScores with dimension ratings
         """
+        from scoring.content_filter import should_skip_content
+        
         scores_list = []
 
         logger.info(f"Batch scoring {len(content_list)} content items (attribute detection: {self.use_attribute_detection})")
@@ -800,6 +802,18 @@ class ContentScorer:
         for i, content in enumerate(content_list):
             if i % 10 == 0:
                 logger.info(f"Scoring progress: {i}/{len(content_list)}")
+
+            # Pre-filter: Skip error pages, login walls, and insufficient content
+            skip_reason = should_skip_content(
+                title=getattr(content, 'title', ''),
+                body=getattr(content, 'body', ''),
+                url=getattr(content, 'url', '')
+            )
+            
+            if skip_reason:
+                logger.warning(f"Skipping content '{content.title}' ({content.content_id}): {skip_reason}")
+                # Don't add to scores_list - effectively filters it out
+                continue
 
             # Step 1: Get base LLM scores
             dimension_scores = self.score_content(content, brand_context)

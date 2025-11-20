@@ -53,6 +53,27 @@ class ScoringPipeline:
         logger.info(f"Processing {len(content_list)} content items")
         
         try:
+            # Step 0: Filter out error pages, login walls, and insufficient content
+            from scoring.content_filter import should_skip_content
+            
+            filtered_content = []
+            skipped_count = 0
+            for content in content_list:
+                skip_reason = should_skip_content(
+                    title=getattr(content, 'title', ''),
+                    body=getattr(content, 'body', ''),
+                    url=getattr(content, 'url', '')
+                )
+                
+                if skip_reason:
+                    logger.info(f"Pre-filtering: Skipped '{content.title}' ({skip_reason})")
+                    skipped_count += 1
+                else:
+                    filtered_content.append(content)
+            
+            logger.info(f"Pre-filter: Kept {len(filtered_content)}/{len(content_list)} items (skipped {skipped_count} error/login pages)")
+            content_list = filtered_content  # Use filtered list for rest of pipeline
+            
             triage_enabled = SETTINGS.get('triage_enabled', True)
             exclude_demoted = SETTINGS.get('exclude_demoted_from_upload', False)
 
