@@ -864,7 +864,7 @@ def show_analyze_page():
     st.divider()
 
     # Configuration form
-    with st.form("analysis_config"):
+    with st.container(): # Form removed to allow interactive Brand ID inputs (e.g. Enter key)
         col1, col2 = st.columns(2)
 
         with col1:
@@ -872,7 +872,7 @@ def show_analyze_page():
                 "Brand ID*",
                 value="",
                 placeholder="e.g., nike or mastercard",
-                help="Unique identifier for the brand (e.g., 'nike', 'coca-cola'). Enter the desired brand before running analysis."
+                help="Unique identifier for the brand (e.g., 'nike', 'coca-cola'). Press enter to add guidelines."
             )
             
             # Brand Guidelines Check (inline)
@@ -1230,11 +1230,11 @@ def show_analyze_page():
 
         col_search, col_submit, col_clear = st.columns([1, 1, 3])
         with col_search:
-            search_urls = st.form_submit_button("🔍 Search URLs", width='stretch')
+            search_urls = st.button("🔍 Search URLs", width='stretch')
         with col_submit:
-            submit = st.form_submit_button("▶️ Run Analysis", type="primary", width='stretch')
+            submit = st.button("▶️ Run Analysis", type="primary", width='stretch')
         with col_clear:
-            if st.form_submit_button("Clear Results", width='stretch'):
+            if st.button("Clear Results", width='stretch'):
                 st.session_state['last_run'] = None
                 st.session_state['found_urls'] = None
                 # clear any fallback indicator
