@@ -386,7 +386,34 @@ class ContentScorer:
         Common coherence issues (only report if you can quote specific text):
         
         1. **Brand Voice Issues**:
-           - "inconsistent_voice": Tone/style shifts (quote the inconsistent text)
+           - "inconsistent_voice": EXTREME tone/style shifts that harm brand perception
+           
+           CRITICAL REQUIREMENTS:
+           a) Only compare quotes from the SAME content type:
+              - Body paragraph vs body paragraph (OK)
+              - Headline vs headline (OK)
+              - CTA vs body text (NOT OK - different content types)
+              - Legal notice vs marketing copy (NOT OK - naturally different)
+              - Headline vs CTA (NOT OK - different purposes)
+           
+           b) Only flag EXTREME inconsistencies:
+              - Professional → Unprofessional (e.g., "enterprise solutions" → "lol buy now!!!")
+              - Formal → Slang (e.g., "pursuant to regulations" → "gonna", "wanna")
+              - Third person → First person casual (e.g., "The company provides" → "We're totally awesome!")
+              - Consistent brand voice → Off-brand language
+           
+           c) DO NOT flag normal marketing variation:
+              - Headlines being concise vs body being detailed
+              - CTAs being conversational vs body being informative
+              - Legal text being formal vs contact CTAs being friendly
+              - Professional formal vs professional conversational
+           
+           d) Format: "CONTRAST: [Content Type]: Quote 1 (professional): '...' vs [Same Content Type]: Quote 2 (unprofessional): '...'"
+           
+           EXAMPLES:
+           - VALID: "CONTRAST: Body paragraph 1 (professional): 'We provide enterprise-grade security' vs Body paragraph 2 (unprofessional): 'OMG our stuff is sooo secure lol!!!'"
+           - INVALID: "Headline (concise): 'Search Jobs' vs CTA (conversational): 'Join our community today'" (different content types)
+           - INVALID: "Legal notice (formal): 'Pursuant to regulations' vs CTA (friendly): 'Questions? Reach out!'" (naturally different)
         
         2. **Link Quality**:
            - "broken_links": ONLY if you see actual URLs in content (quote the URL)
@@ -408,6 +435,37 @@ class ContentScorer:
         for issue in issues:
             confidence = issue.get('confidence', 0.0)
             if confidence >= 0.7:
+                # Special validation for inconsistent_voice
+                if issue.get('type') == 'inconsistent_voice':
+                    evidence = issue.get('evidence', '').lower()
+                    
+                    # Reject if evidence is footer/boilerplate text
+                    footer_indicators = [
+                        '©', 'copyright', 'all rights reserved',
+                        'privacy policy', 'terms of use', 'contact us',
+                        'grievance redressal', 'global privacy'
+                    ]
+                    
+                    # Reject if evidence doesn't show CONTRAST
+                    if 'contrast:' not in evidence and 'vs' not in evidence:
+                        logger.debug(f"Filtered inconsistent_voice: no contrast shown in evidence")
+                        continue
+                    
+                    # Reject if evidence contains footer indicators
+                    if any(indicator in evidence for indicator in footer_indicators):
+                        logger.debug(f"Filtered inconsistent_voice: footer text detected")
+                        continue
+                    
+                    # Reject if evidence is just repeated text (same phrase appears twice)
+                    # Extract quotes from evidence
+                    import re
+                    quotes = re.findall(r"'([^']+)'", evidence)
+                    if len(quotes) >= 2:
+                        # Check if quotes are very similar (repeated CTA)
+                        if quotes[0].lower().strip() == quotes[1].lower().strip():
+                            logger.debug(f"Filtered inconsistent_voice: repeated text detected")
+                            continue
+                
                 filtered_issues.append(issue)
             else:
                 logger.debug(f"Filtered low-confidence Coherence issue: {issue.get('type')} (confidence={confidence})")
