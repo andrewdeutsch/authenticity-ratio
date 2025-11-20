@@ -244,16 +244,20 @@ class ContentScorer:
         
         base_score = result.get('score', 0.5)
         
-        # Apply content-type multiplier for landing pages
-        # Marketing content doesn't need inline citations like editorial content
+        # Apply content-type multiplier from rubric configuration
         content_type = self._determine_content_type(content)
-        if content_type in ['landing_page', 'product_page', 'other']:
-            # Boost by 30% for verification (more lenient than coherence)
-            # Marketing claims are expected and don't need citations
-            adjusted_score = min(1.0, base_score * 1.30)
-            logger.debug(f"Verification score adjusted for {content_type}: {base_score:.2f} → {adjusted_score:.2f}")
+        multiplier = self._get_score_multiplier('verification', content_type)
+        
+        if multiplier != 1.0:
+            adjusted_score = min(1.0, base_score * multiplier)
+            logger.info(f"Verification scoring for {content.content_id[:20]}...")
+            logger.info(f"  Content type: {content_type}")
+            logger.info(f"  Base LLM score: {base_score:.3f} ({base_score*100:.1f}%)")
+            logger.info(f"  Multiplier applied: {multiplier:.2f}x")
+            logger.info(f"  Adjusted score: {adjusted_score:.3f} ({adjusted_score*100:.1f}%)")
             return adjusted_score
         
+        logger.debug(f"Verification score for {content_type}: {base_score:.3f} (no multiplier)")
         return base_score
     
     def _score_transparency(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
@@ -454,12 +458,19 @@ class ContentScorer:
         
         base_score = result.get('score', 0.5)
         
-        # Apply content-type multiplier to adjust for overly strict LLM scoring
-        if content_type in ['landing_page', 'product_page', 'other']:
-            adjusted_score = min(1.0, base_score * 1.25)
-            logger.debug(f"Coherence score adjusted for {content_type}: {base_score:.2f} → {adjusted_score:.2f}")
+        # Apply content-type multiplier from rubric configuration
+        multiplier = self._get_score_multiplier('coherence', content_type)
+        
+        if multiplier != 1.0:
+            adjusted_score = min(1.0, base_score * multiplier)
+            logger.info(f"Coherence scoring for {content.content_id[:20]}...")
+            logger.info(f"  Content type: {content_type}")
+            logger.info(f"  Base LLM score: {base_score:.3f} ({base_score*100:.1f}%)")
+            logger.info(f"  Multiplier applied: {multiplier:.2f}x")
+            logger.info(f"  Adjusted score: {adjusted_score:.3f} ({adjusted_score*100:.1f}%)")
             return adjusted_score
         
+        logger.debug(f"Coherence score for {content_type}: {base_score:.3f} (no multiplier)")
         return base_score
     
     def _determine_content_type(self, content: NormalizedContent) -> str:
@@ -489,6 +500,38 @@ class ContentScorer:
                 return 'social_post'
         
         return 'other'
+    
+    def _get_score_multiplier(self, dimension: str, content_type: str) -> float:
+        """
+        Get score multiplier for a dimension and content type from rubric configuration
+        
+        Args:
+            dimension: Dimension name (coherence, verification, etc.)
+            content_type: Content type (landing_page, blog, etc.)
+        
+        Returns:
+            Multiplier value (default 1.0 if not configured)
+        """
+        try:
+            from scoring.rubric import load_rubric
+            rubric = load_rubric()
+            
+            multipliers = rubric.get('score_multipliers', {})
+            dimension_multipliers = multipliers.get(dimension, {})
+            
+            # Try to get content-type-specific multiplier
+            multiplier = dimension_multipliers.get(content_type)
+            
+            # Fall back to _default if not found
+            if multiplier is None:
+                multiplier = dimension_multipliers.get('_default', 1.0)
+            
+            # Ensure it's a valid number
+            return float(multiplier) if multiplier is not None else 1.0
+            
+        except Exception as e:
+            logger.warning(f"Failed to load score multiplier for {dimension}/{content_type}: {e}")
+            return 1.0
     
     def _load_brand_guidelines(self, brand_id: str) -> Optional[str]:
         """
@@ -801,6 +844,7 @@ class ContentScorer:
             """
         else:
             # High score: Ask for improvement suggestions with concrete rewrites
+            # MANDATE at least one suggestion - users need to understand "why not 100%?"
             feedback_prompt = f"""
             You scored this content's {dimension} as {score:.1f} out of 1.0 - this is good!
             
@@ -808,17 +852,20 @@ class ContentScorer:
             
             The client wants to know: "Why didn't I get 100%? What specific thing could make this even better?"
             
-            Provide ONE specific, actionable improvement with a CONCRETE REWRITE that would move the score closer to 100%.
+            You MUST provide at least ONE specific, actionable improvement with a CONCRETE REWRITE that would move the score closer to 100%.
+            
+            Even excellent content can be refined through micro-optimizations, A/B testing opportunities, or advanced best practices.
             
             Content:
             Title: {content.title}
             Body: {content.body[:2000]}
             
             CRITICAL REQUIREMENTS:
-            1. Identify ONE specific area for improvement (not multiple)
-            2. Provide a SINGLE exact quote showing what could be improved
-            3. Show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
-            4. Explain WHY this change would improve the score
+            1. You MUST provide at least ONE improvement (empty array is NOT acceptable)
+            2. Identify ONE specific area for improvement (not multiple)
+            3. Provide a SINGLE exact quote showing what could be improved
+            4. Show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
+            5. Explain WHY this change would improve the score
             
             Respond with JSON in this exact format:
             {{
@@ -842,8 +889,9 @@ class ContentScorer:
             - "Add a call-to-action" (no concrete rewrite shown)
             - "Improve the wording" (too vague)
             - Listing multiple improvements instead of ONE concrete rewrite
+            - Returning an empty issues array (NOT ALLOWED - you MUST provide at least one suggestion)
             
-            If the content is truly excellent and you cannot identify a meaningful improvement, return an empty issues array.
+            REMEMBER: You MUST provide at least ONE improvement opportunity. Empty arrays are not acceptable for high scores.
             """
         
         # Get feedback from LLM

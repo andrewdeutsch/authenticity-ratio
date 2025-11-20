@@ -24,6 +24,41 @@
     "marketplace",
     "email"
   ],
+  "score_multipliers": {
+    "_description": "Content-type-specific score adjustments to compensate for LLM applying overly strict editorial standards to marketing content. Set multiplier to 1.0 to disable adjustment.",
+    "coherence": {
+      "landing_page": 1.25,
+      "product_page": 1.25,
+      "other": 1.25,
+      "blog": 1.0,
+      "article": 1.0,
+      "news": 1.0,
+      "social_post": 1.0,
+      "_rationale": "Marketing content gets 25% boost because LLM applies editorial voice consistency standards that aren't appropriate for landing pages with varied CTAs and headlines"
+    },
+    "verification": {
+      "landing_page": 1.30,
+      "product_page": 1.30,
+      "other": 1.30,
+      "blog": 1.0,
+      "article": 1.0,
+      "news": 1.0,
+      "social_post": 1.0,
+      "_rationale": "Marketing content gets 30% boost because self-descriptive claims on brand-owned pages don't need citations like editorial content does"
+    },
+    "provenance": {
+      "_default": 1.0,
+      "_rationale": "No adjustments for provenance - metadata completeness standards apply equally to all content types"
+    },
+    "transparency": {
+      "_default": 1.0,
+      "_rationale": "No adjustments for transparency - disclosure standards apply equally to all content types"
+    },
+    "resonance": {
+      "_default": 1.0,
+      "_rationale": "No adjustments for resonance - engagement and cultural fit standards apply equally to all content types"
+    }
+  },
   "attributes": [
     {
       "id": "ai_vs_human_labeling_clarity",
