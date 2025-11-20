@@ -9,6 +9,7 @@ LLM_TO_ATTRIBUTE_MAP = {
     "missing_privacy_policy": "privacy_policy_link_availability_clarity",
     "no_ai_disclosure": "ai_generated_assisted_disclosure_present",
     "missing_data_citations": "data_source_citations_for_claims",
+    "missing_data_source_citations": "data_source_citations_for_claims",  # LLM variant
     "hidden_sponsored_content": "ad_sponsored_label_consistency",
     
     # Provenance issues
@@ -24,6 +25,8 @@ LLM_TO_ATTRIBUTE_MAP = {
     # Coherence issues (ALL 8 enabled attributes)
     "inconsistent_voice": "brand_voice_consistency_score",
     "brand_voice_inconsistency": "brand_voice_consistency_score",
+    "vocabulary": "brand_voice_consistency_score",  # LLM uses this for word choice issues
+    "tone_shift": "brand_voice_consistency_score",
     "broken_links": "broken_link_rate",
     "outdated_links": "broken_link_rate",
     "contradictory_claims": "claim_consistency_across_pages",

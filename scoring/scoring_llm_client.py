@@ -137,6 +137,9 @@ class LLMScoringClient:
         # Step 2: Get feedback based on score
         if score < 0.9:
             # Low/medium score: Ask for specific issues with concrete rewrites
+            # Provide valid issue types based on dimension
+            valid_types = self._get_valid_issue_types(dimension)
+            
             feedback_prompt = f"""
             You scored this content's {dimension} as {score:.1f} out of 1.0.
             
@@ -156,16 +159,20 @@ class LLMScoringClient:
                         "confidence": 0.85,
                         "severity": "high",
                         "evidence": "EXACT QUOTE: 'specific problematic text from content'",
-                        "suggestion": "Change '[exact problematic text]' → '[improved version]'. This improves [dimension] because [brief explanation]."
+                        "suggestion": "Change '[exact problematic text]' → '[improved version]'. This improves {dimension} because [brief explanation]."
                     }}
                 ]
             }}
             
+            VALID ISSUE TYPES FOR {dimension.upper()}:
+            {valid_types}
+            
             CRITICAL REQUIREMENTS:
-            1. Provide EXACT QUOTES in evidence field
-            2. In suggestion field, show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
-            3. Include brief explanation of WHY the change improves {dimension}
-            4. Only report issues you can support with specific text
+            1. Use ONLY the issue types listed above
+            2. Provide EXACT QUOTES in evidence field
+            3. In suggestion field, show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
+            4. Include brief explanation of WHY the change improves {dimension}
+            5. Only report issues you can support with specific text
             
             EXAMPLE GOOD SUGGESTION:
             "Change 'Find the right type of Mastercard payment card for you' → 'Discover the perfect Mastercard for your needs'. This improves coherence by using more consistent, engaging brand voice."
@@ -249,3 +256,48 @@ class LLMScoringClient:
         except Exception as e:
             logger.error(f"LLM feedback error for {dimension}: {e}")
             return {'score': score, 'issues': []}
+    
+    def _get_valid_issue_types(self, dimension: str) -> str:
+        """
+        Get valid issue types for a dimension
+        
+        Args:
+            dimension: Dimension name (Coherence, Verification, etc.)
+        
+        Returns:
+            Formatted string of valid issue types
+        """
+        dimension_lower = dimension.lower()
+        
+        issue_types = {
+            'coherence': [
+                'inconsistent_voice - voice/tone varies across content',
+                'vocabulary - word choice issues or jargon inconsistency',
+                'tone_shift - abrupt changes in formality or style',
+                'contradictory_claims - conflicting statements',
+                'broken_links - non-functional links'
+            ],
+            'verification': [
+                'unverified_claims - statements without sources',
+                'fake_engagement - suspicious metrics',
+                'unlabeled_ads - undisclosed sponsored content'
+            ],
+            'transparency': [
+                'missing_privacy_policy - no privacy policy link',
+                'no_ai_disclosure - AI usage not disclosed',
+                'missing_data_source_citations - claims lack sources',
+                'hidden_sponsored_content - ads not clearly labeled'
+            ],
+            'provenance': [
+                'unclear_authorship - author not identified',
+                'missing_metadata - incomplete metadata',
+                'no_schema_markup - missing structured data'
+            ],
+            'resonance': [
+                'poor_readability - difficult to read',
+                'inappropriate_tone - tone does not match audience'
+            ]
+        }
+        
+        types = issue_types.get(dimension_lower, ['improvement_opportunity'])
+        return '\n'.join(f'  - {t}' for t in types)
