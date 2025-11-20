@@ -21,10 +21,23 @@ LLM_TO_ATTRIBUTE_MAP = {
     "fake_engagement": "engagement_authenticity_ratio",
     "unlabeled_ads": "ad_sponsored_label_consistency",
     
-    # Coherence issues
+    # Coherence issues (ALL 8 enabled attributes)
     "inconsistent_voice": "brand_voice_consistency_score",
+    "brand_voice_inconsistency": "brand_voice_consistency_score",
     "broken_links": "broken_link_rate",
+    "outdated_links": "broken_link_rate",
     "contradictory_claims": "claim_consistency_across_pages",
+    "inconsistent_claims": "claim_consistency_across_pages",
+    "email_inconsistency": "email_asset_consistency_check",
+    "cross_channel_mismatch": "email_asset_consistency_check",
+    "engagement_trust_mismatch": "engagement_to_trust_correlation",
+    "low_engagement_high_trust": "engagement_to_trust_correlation",
+    "multimodal_inconsistency": "multimodal_consistency_score",
+    "text_image_mismatch": "multimodal_consistency_score",
+    "version_inconsistency": "temporal_continuity_versions",
+    "outdated_content": "temporal_continuity_versions",
+    "trust_fluctuation": "trust_fluctuation_index",
+    "inconsistent_trust_signals": "trust_fluctuation_index",
     
     # Resonance issues
     "poor_readability": "readability_grade_level_fit",

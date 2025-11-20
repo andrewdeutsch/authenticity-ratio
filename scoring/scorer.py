@@ -223,7 +223,7 @@ class ContentScorer:
         """Score Coherence dimension: consistency across channels"""
         
         prompt = f"""
-        Score the COHERENCE of this content and identify specific issues.
+        Score the COHERENCE of this content and identify ALL specific issues.
         
         Coherence evaluates: consistency with brand messaging, logical flow, professional quality
         
@@ -243,6 +243,12 @@ class ContentScorer:
                     "severity": "medium",
                     "evidence": "Tone shifts from formal to casual",
                     "suggestion": "Maintain consistent brand voice throughout"
+                }},
+                {{
+                    "type": "broken_links",
+                    "severity": "high",
+                    "evidence": "Found 3 broken links in content",
+                    "suggestion": "Update or remove broken links"
                 }}
             ]
         }}
@@ -254,13 +260,33 @@ class ContentScorer:
         - 0.2-0.4: Limited coherence, noticeable inconsistencies
         - 0.0-0.2: Incoherent, inconsistent, unprofessional
         
-        Common coherence issues to check for:
-        - Inconsistent brand voice or tone
-        - Broken or outdated links
-        - Contradictory claims within content
-        - Poor logical flow or organization
+        IMPORTANT: Check for ALL of these specific coherence issues and report each one found:
         
-        Return valid JSON with score (0.0-1.0) and issues array.
+        1. **Brand Voice Issues**:
+           - "inconsistent_voice" or "brand_voice_inconsistency": Tone/style inconsistencies
+        
+        2. **Link Quality**:
+           - "broken_links" or "outdated_links": Non-functional or outdated URLs
+        
+        3. **Claim Consistency**:
+           - "contradictory_claims" or "inconsistent_claims": Conflicting information
+        
+        4. **Cross-Channel Issues**:
+           - "email_inconsistency" or "cross_channel_mismatch": Email vs web inconsistencies
+        
+        5. **Engagement-Trust Alignment**:
+           - "engagement_trust_mismatch" or "low_engagement_high_trust": Suspicious engagement patterns
+        
+        6. **Multimodal Consistency**:
+           - "multimodal_inconsistency" or "text_image_mismatch": Text doesn't match images/media
+        
+        7. **Version/Update Issues**:
+           - "version_inconsistency" or "outdated_content": Old or conflicting versions
+        
+        8. **Trust Signal Fluctuation**:
+           - "trust_fluctuation" or "inconsistent_trust_signals": Varying trust indicators
+        
+        Return valid JSON with score (0.0-1.0) and issues array. Report EVERY issue you find, even if minor.
         """
         
         result = self._get_llm_score_with_reasoning(prompt)
@@ -522,43 +548,48 @@ class ContentScorer:
                     # Map LLM issue type to attribute ID
                     attr_id = map_llm_issue_to_attribute(issue_type)
                     
-                    if attr_id:
-                        # Check if detector also found this issue
-                        if attr_id in detector_attr_ids:
-                            # Both found it - increase confidence of existing attribute
-                            for attr in merged_attrs:
-                                if attr.attribute_id == attr_id:
-                                    # Boost confidence when both LLM and detector agree
-                                    attr.confidence = min(1.0, attr.confidence * 1.2)
-                                    # Enhance evidence with LLM reasoning
-                                    llm_evidence = llm_issue.get('evidence', '')
-                                    if llm_evidence and llm_evidence not in attr.evidence:
-                                        attr.evidence = f"{attr.evidence} | LLM: {llm_evidence}"
-                                    break
-                        else:
-                            # Only LLM found it - create new attribute
-                            # Get label from rubric or use issue type
-                            label = llm_issue.get('type', '').replace('_', ' ').title()
-                            
-                            # Determine value based on severity
-                            severity = llm_issue.get('severity', 'medium')
-                            if severity == 'high':
-                                value = 2.0
-                            elif severity == 'medium':
-                                value = 5.0
-                            else:  # low
-                                value = 7.0
-                            
-                            new_attr = DetectedAttribute(
-                                attribute_id=attr_id,
-                                dimension=dimension,
-                                label=label,
-                                value=value,
-                                evidence=f"LLM: {llm_issue.get('evidence', 'Issue detected')}",
-                                confidence=0.7  # Lower confidence for LLM-only
-                            )
-                            merged_attrs.append(new_attr)
-                            detector_attr_ids.add(attr_id)
+                    if not attr_id:
+                        # Log unmapped issues for debugging
+                        logger.warning(f"Unmapped LLM issue type '{issue_type}' in {dimension} dimension for content {content.content_id}")
+                        continue
+                    
+                    # Check if detector also found this issue
+                    if attr_id in detector_attr_ids:
+                        # Both found it - increase confidence of existing attribute
+                        for attr in merged_attrs:
+                            if attr.attribute_id == attr_id:
+                                # Boost confidence when both LLM and detector agree
+                                attr.confidence = min(1.0, attr.confidence * 1.2)
+                                # Enhance evidence with LLM reasoning
+                                llm_evidence = llm_issue.get('evidence', '')
+                                if llm_evidence and llm_evidence not in attr.evidence:
+                                    attr.evidence = f"{attr.evidence} | LLM: {llm_evidence}"
+                                break
+                    else:
+                        # Only LLM found it - create new attribute
+                        # Get label from rubric or use issue type
+                        label = llm_issue.get('type', '').replace('_', ' ').title()
+                        
+                        # Determine value based on severity
+                        severity = llm_issue.get('severity', 'medium')
+                        if severity == 'high':
+                            value = 2.0
+                        elif severity == 'medium':
+                            value = 5.0
+                        else:  # low
+                            value = 7.0
+                        
+                        new_attr = DetectedAttribute(
+                            attribute_id=attr_id,
+                            dimension=dimension,
+                            label=label,
+                            value=value,
+                            evidence=f"LLM: {llm_issue.get('evidence', 'Issue detected')}",
+                            confidence=0.6  # Lowered from 0.7 for more LLM-only attributes
+                        )
+                        merged_attrs.append(new_attr)
+                        detector_attr_ids.add(attr_id)
+                        logger.info(f"Added LLM-only attribute '{label}' (value={value}) for {dimension} dimension")
         
         return merged_attrs
     
