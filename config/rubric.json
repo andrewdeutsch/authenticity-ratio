@@ -29,22 +29,24 @@
     "coherence": {
       "landing_page": 1.25,
       "product_page": 1.25,
+      "legal_policy": 1.35,
       "other": 1.25,
       "blog": 1.0,
       "article": 1.0,
       "news": 1.0,
       "social_post": 1.0,
-      "_rationale": "Marketing content gets 25% boost because LLM applies editorial voice consistency standards that aren't appropriate for landing pages with varied CTAs and headlines"
+      "_rationale": "Marketing content gets 25% boost; legal/policy pages get 35% boost because they legitimately mix formal legal language with consumer-friendly explanations, which LLM incorrectly flags as inconsistent voice"
     },
     "verification": {
       "landing_page": 1.30,
       "product_page": 1.30,
+      "legal_policy": 1.40,
       "other": 1.30,
       "blog": 1.0,
       "article": 1.0,
       "news": 1.0,
       "social_post": 1.0,
-      "_rationale": "Marketing content gets 30% boost because self-descriptive claims on brand-owned pages don't need citations like editorial content does"
+      "_rationale": "Marketing content gets 30% boost; legal/policy pages get 40% boost because they contain regulatory statements and legal definitions that don't need external citations"
     },
     "provenance": {
       "_default": 1.0,
