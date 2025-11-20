@@ -39,6 +39,10 @@ LLM_TO_ATTRIBUTE_MAP = {
     "trust_fluctuation": "trust_fluctuation_index",
     "inconsistent_trust_signals": "trust_fluctuation_index",
     
+    # General improvement opportunities (for high scores)
+    # Map to brand_voice_consistency since that's the most common coherence attribute
+    "improvement_opportunity": "brand_voice_consistency_score",
+    
     # Resonance issues
     "poor_readability": "readability_grade_level_fit",
     "inappropriate_tone": "tone_sentiment_appropriateness",
