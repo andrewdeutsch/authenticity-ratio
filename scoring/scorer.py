@@ -313,55 +313,35 @@ class ContentScorer:
         # Detect content type to adjust scoring criteria
         content_type = self._determine_content_type(content)
         
-        # Adjust scoring criteria based on content type
+        # Build context guidance for the feedback step
         if content_type in ['landing_page', 'product_page', 'other']:
-            # More lenient for marketing/landing pages
-            type_guidance = """
+            context_guidance = """
             CONTENT TYPE: Marketing/Landing Page
             
-            ADJUSTED CRITERIA for marketing content:
-            - Brand voice: Expect professional, polished marketing tone (not casual)
-            - Broken links: Still critical - check for any non-functional links
-            - Contradictions: Marketing claims should be consistent
-            - Cross-channel: Less applicable for landing pages
-            - Multimodal: Images should match messaging
-            - Version/updates: Less critical for evergreen marketing content
-            
-            SCORING GUIDANCE:
-            - Be LENIENT on minor tone variations (marketing often uses varied language for emphasis)
-            - Focus on MAJOR issues: broken links, contradictory claims, unprofessional content
-            - Don't penalize for lack of citations (marketing doesn't need inline sources)
-            - Score 0.6-0.8 for typical professional marketing content
+            When providing feedback, focus on:
+            - MAJOR issues: broken links, contradictory claims, unprofessional content
+            - Do NOT flag normal marketing variation (headlines vs CTAs, legal vs marketing copy)
+            - Only flag EXTREME voice inconsistencies (professional → unprofessional)
             """
         elif content_type in ['blog', 'article', 'news']:
-            # Strict for editorial content
-            type_guidance = """
+            context_guidance = """
             CONTENT TYPE: Editorial/Blog/News
             
-            STANDARD CRITERIA for editorial content:
-            - Brand voice: Should be consistent throughout
-            - Broken links: Critical - affects credibility
-            - Contradictions: Very important for editorial integrity
-            - Cross-channel: Should match other published content
-            - Logical flow: Must be coherent and well-organized
-            
-            SCORING GUIDANCE:
-            - Be STRICT on consistency and professionalism
-            - Penalize contradictions and broken links heavily
-            - Expect high editorial standards
+            When providing feedback, apply strict editorial standards:
+            - Brand voice consistency throughout
+            - No broken links or contradictions
+            - High professional quality expected
             """
         else:
-            # Default criteria
-            type_guidance = """
+            context_guidance = """
             CONTENT TYPE: General/Social
             
-            STANDARD CRITERIA - apply normal coherence standards
+            Apply standard coherence criteria when providing feedback.
             """
         
-        prompt = f"""
-        Score the COHERENCE of this content and identify ALL specific issues.
-        
-        {type_guidance}
+        # Step 1: Simple scoring prompt
+        score_prompt = f"""
+        Score the COHERENCE of this content on a scale of 0.0 to 1.0.
         
         Coherence evaluates: consistency with brand messaging, logical flow, professional quality
         
@@ -369,51 +349,8 @@ class ContentScorer:
         Title: {content.title}
         Body: {content.body[:2000]}
         Source: {content.src}
-        URL: {content.url}
         
         Brand Context: {brand_context.get('keywords', [])}
-        
-        CRITICAL REQUIREMENTS:
-        1. For EACH issue, provide an EXACT QUOTE from the content as evidence
-        2. Do NOT report issues you cannot support with specific text from the content
-        3. Include a confidence score (0.0-1.0) for each issue
-        4. Only report issues with confidence >= 0.7
-        5. Do NOT report "broken_links" unless you can see actual URLs in the content
-        
-        EXAMPLES:
-        
-        Example 1 - High Coherence (0.9):
-        Content: "Mastercard provides secure payment solutions globally. Our technology enables seamless transactions."
-        Response: {{"score": 0.9, "issues": []}}
-        
-        Example 2 - Low Coherence (0.4):
-        Content: "Buy now!!! We're #1 lol. Click here for AMAZING deals omg..."
-        Response: {{
-            "score": 0.4,
-            "issues": [
-                {{
-                    "type": "inconsistent_voice",
-                    "confidence": 0.95,
-                    "severity": "high",
-                    "evidence": "EXACT QUOTE: 'Buy now!!! We're #1 lol. Click here for AMAZING deals omg'",
-                    "suggestion": "Maintain professional brand voice throughout"
-                }}
-            ]
-        }}
-        
-        Respond with JSON in this exact format:
-        {{
-            "score": 0.6,
-            "issues": [
-                {{
-                    "type": "inconsistent_voice",
-                    "confidence": 0.85,
-                    "severity": "medium",
-                    "evidence": "EXACT QUOTE: 'specific text showing tone shift'",
-                    "suggestion": "Maintain consistent brand voice throughout"
-                }}
-            ]
-        }}
         
         Scoring criteria:
         - 0.8-1.0: Highly coherent, consistent with brand, professional quality
@@ -422,53 +359,18 @@ class ContentScorer:
         - 0.2-0.4: Limited coherence, noticeable inconsistencies
         - 0.0-0.2: Incoherent, inconsistent, unprofessional
         
-        Common coherence issues (only report if you can quote specific text):
-        
-        1. **Brand Voice Issues**:
-           - "inconsistent_voice": EXTREME tone/style shifts that harm brand perception
-           
-           CRITICAL REQUIREMENTS:
-           a) Only compare quotes from the SAME content type:
-              - Body paragraph vs body paragraph (OK)
-              - Headline vs headline (OK)
-              - CTA vs body text (NOT OK - different content types)
-              - Legal notice vs marketing copy (NOT OK - naturally different)
-              - Headline vs CTA (NOT OK - different purposes)
-           
-           b) Only flag EXTREME inconsistencies:
-              - Professional → Unprofessional (e.g., "enterprise solutions" → "lol buy now!!!")
-              - Formal → Slang (e.g., "pursuant to regulations" → "gonna", "wanna")
-              - Third person → First person casual (e.g., "The company provides" → "We're totally awesome!")
-              - Consistent brand voice → Off-brand language
-           
-           c) DO NOT flag normal marketing variation:
-              - Headlines being concise vs body being detailed
-              - CTAs being conversational vs body being informative
-              - Legal text being formal vs contact CTAs being friendly
-              - Professional formal vs professional conversational
-           
-           d) Format: "CONTRAST: [Content Type]: Quote 1 (professional): '...' vs [Same Content Type]: Quote 2 (unprofessional): '...'"
-           
-           EXAMPLES:
-           - VALID: "CONTRAST: Body paragraph 1 (professional): 'We provide enterprise-grade security' vs Body paragraph 2 (unprofessional): 'OMG our stuff is sooo secure lol!!!'"
-           - INVALID: "Headline (concise): 'Search Jobs' vs CTA (conversational): 'Join our community today'" (different content types)
-           - INVALID: "Legal notice (formal): 'Pursuant to regulations' vs CTA (friendly): 'Questions? Reach out!'" (naturally different)
-        
-        2. **Link Quality**:
-           - "broken_links": ONLY if you see actual URLs in content (quote the URL)
-        
-        3. **Claim Consistency**:
-           - "contradictory_claims": Conflicting information (quote both contradictions)
-        
-        4. **Trust Signal Fluctuation**:
-           - "inconsistent_trust_signals": Varying trust indicators (quote examples)
-        
-        Return valid JSON with score (0.0-1.0) and issues array. ONLY include issues with exact quotes and confidence >= 0.7.
+        Return only a number between 0.0 and 1.0:
         """
         
-        result = self._get_llm_score_with_reasoning(prompt)
+        # Use two-step scoring with feedback
+        result = self._get_llm_score_with_feedback(
+            score_prompt=score_prompt,
+            content=content,
+            dimension="Coherence",
+            context_guidance=context_guidance
+        )
         
-        # Filter out low-confidence issues
+        # Filter issues based on our strict criteria
         issues = result.get('issues', [])
         filtered_issues = []
         for issue in issues:
@@ -496,11 +398,9 @@ class ContentScorer:
                         continue
                     
                     # Reject if evidence is just repeated text (same phrase appears twice)
-                    # Extract quotes from evidence
                     import re
                     quotes = re.findall(r"'([^']+)'", evidence)
                     if len(quotes) >= 2:
-                        # Check if quotes are very similar (repeated CTA)
                         if quotes[0].lower().strip() == quotes[1].lower().strip():
                             logger.debug(f"Filtered inconsistent_voice: repeated text detected")
                             continue
@@ -517,10 +417,7 @@ class ContentScorer:
         base_score = result.get('score', 0.5)
         
         # Apply content-type multiplier to adjust for overly strict LLM scoring
-        # Landing pages and marketing content get a boost since LLM applies
-        # editorial standards that aren't appropriate for marketing content
         if content_type in ['landing_page', 'product_page', 'other']:
-            # Boost by 25% (multiply by 1.25), capped at 1.0
             adjusted_score = min(1.0, base_score * 1.25)
             logger.debug(f"Coherence score adjusted for {content_type}: {base_score:.2f} → {adjusted_score:.2f}")
             return adjusted_score
@@ -782,6 +679,110 @@ class ContentScorer:
                 'score': 0.5,
                 'issues': []
             }
+    
+    def _get_llm_score_with_feedback(self, score_prompt: str, content: NormalizedContent, 
+                                     dimension: str, context_guidance: str = "") -> Dict[str, Any]:
+        """
+        Two-step LLM scoring: Get score first, then get feedback based on score
+        
+        Args:
+            score_prompt: Prompt to get the score (0.0-1.0)
+            content: Content being scored
+            dimension: Dimension name (for logging)
+            context_guidance: Optional context about content type
+        
+        Returns:
+            Dictionary with 'score' (float) and 'issues' (list of dicts)
+        """
+        # Step 1: Get the score
+        score = self._get_llm_score(score_prompt)
+        logger.debug(f"{dimension} base score: {score:.2f}")
+        
+        # Step 2: Get feedback based on score
+        if score < 0.8:
+            # Low score: Ask for specific issues
+            feedback_prompt = f"""
+            You scored this content's {dimension} as {score:.1f} out of 1.0.
+            
+            {context_guidance}
+            
+            What specific issues caused this lower score? Provide actionable feedback.
+            
+            Content:
+            Title: {content.title}
+            Body: {content.body[:2000]}
+            
+            Respond with JSON in this exact format:
+            {{
+                "issues": [
+                    {{
+                        "type": "issue_type",
+                        "confidence": 0.85,
+                        "severity": "high",
+                        "evidence": "EXACT QUOTE: 'specific text from content'",
+                        "suggestion": "Specific action to fix this"
+                    }}
+                ]
+            }}
+            
+            CRITICAL: Provide EXACT QUOTES as evidence. Only report issues you can support with specific text.
+            """
+        else:
+            # High score: Ask for improvement suggestions
+            feedback_prompt = f"""
+            You scored this content's {dimension} as {score:.1f} out of 1.0 - this is good!
+            
+            {context_guidance}
+            
+            While this content performs well, what could make it even better? Provide specific improvement suggestions.
+            
+            Content:
+            Title: {content.title}
+            Body: {content.body[:2000]}
+            
+            Respond with JSON in this exact format:
+            {{
+                "issues": [
+                    {{
+                        "type": "improvement_opportunity",
+                        "confidence": 0.75,
+                        "severity": "low",
+                        "evidence": "EXACT QUOTE: 'specific text that could be improved'",
+                        "suggestion": "How to go from good to great"
+                    }}
+                ]
+            }}
+            
+            Focus on optimization, not problems. Examples:
+            - "Consider adding more specific CTAs"
+            - "Could strengthen brand voice consistency in the closing paragraph"
+            - "Adding data sources would increase credibility"
+            """
+        
+        # Get feedback from LLM
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are an expert content evaluator. Always respond with valid JSON."},
+                    {"role": "user", "content": feedback_prompt}
+                ],
+                max_tokens=500,
+                temperature=0.3,
+                response_format={"type": "json_object"}
+            )
+            
+            feedback_text = response.choices[0].message.content.strip()
+            feedback_data = json.loads(feedback_text)
+            
+            return {
+                'score': score,
+                'issues': feedback_data.get('issues', [])
+            }
+            
+        except Exception as e:
+            logger.error(f"LLM feedback error for {dimension}: {e}")
+            return {'score': score, 'issues': []}
     
     def _merge_llm_and_detector_issues(self, content: NormalizedContent, 
                                       detected_attrs: List[DetectedAttribute]) -> List[DetectedAttribute]:
