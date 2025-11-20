@@ -126,9 +126,36 @@ class ContentScorer:
         
         Content:
         Title: {content.title}
-        Body: {content.body}
+        Body: {content.body[:2000]}
         
         Brand Context: {brand_context.get('keywords', [])}
+        
+        CRITICAL REQUIREMENTS:
+        1. For EACH issue, provide an EXACT QUOTE from the content as evidence
+        2. Do NOT report issues you cannot support with specific text from the content
+        3. Include a confidence score (0.0-1.0) for each issue
+        4. Only report issues with confidence >= 0.7
+        
+        EXAMPLES:
+        
+        Example 1 - High Verification (0.9):
+        Content: "According to the Federal Reserve's 2023 report, inflation decreased to 3.2%."
+        Response: {{"score": 0.9, "issues": []}}
+        
+        Example 2 - Low Verification (0.3):
+        Content: "We are the world's #1 payment company with 99% customer satisfaction."
+        Response: {{
+            "score": 0.3,
+            "issues": [
+                {{
+                    "type": "unverified_claims",
+                    "confidence": 0.9,
+                    "severity": "high",
+                    "evidence": "EXACT QUOTE: 'world's #1 payment company with 99% customer satisfaction'",
+                    "suggestion": "Add citations for ranking and satisfaction claims"
+                }}
+            ]
+        }}
         
         Respond with JSON in this exact format:
         {{
@@ -136,8 +163,9 @@ class ContentScorer:
             "issues": [
                 {{
                     "type": "unverified_claims",
+                    "confidence": 0.85,
                     "severity": "high",
-                    "evidence": "Claims made without supporting evidence",
+                    "evidence": "EXACT QUOTE: 'specific text from content'",
                     "suggestion": "Add citations to authoritative sources"
                 }}
             ]
@@ -150,23 +178,44 @@ class ContentScorer:
         - 0.2-0.4: Several inaccuracies or unverifiable claims
         - 0.0-0.2: Major inaccuracies or completely unverifiable
         
-        Common verification issues to check for:
-        - Unverified claims without sources
-        - Fake or suspicious engagement patterns
-        - Unlabeled sponsored content
-        - Missing fact-check references
+        Common verification issues (only report if you can quote specific text):
+        - "unverified_claims": Claims without sources (quote the claim)
+        - "fake_engagement": Suspicious engagement patterns (quote suspicious metrics)
+        - "unlabeled_ads": Sponsored content without disclosure (quote promotional language)
         
-        Return valid JSON with score (0.0-1.0) and issues array.
+        Return valid JSON with score (0.0-1.0) and issues array. ONLY include issues with exact quotes and confidence >= 0.7.
         """
         
         result = self._get_llm_score_with_reasoning(prompt)
         
+        # Filter out low-confidence issues
+        issues = result.get('issues', [])
+        filtered_issues = []
+        for issue in issues:
+            confidence = issue.get('confidence', 0.0)
+            if confidence >= 0.7:
+                filtered_issues.append(issue)
+            else:
+                logger.debug(f"Filtered low-confidence Verification issue: {issue.get('type')} (confidence={confidence})")
+        
         # Store LLM-identified issues in content metadata for later merging
         if not hasattr(content, '_llm_issues'):
             content._llm_issues = {}
-        content._llm_issues['verification'] = result.get('issues', [])
+        content._llm_issues['verification'] = filtered_issues
         
-        return result.get('score', 0.5)
+        base_score = result.get('score', 0.5)
+        
+        # Apply content-type multiplier for landing pages
+        # Marketing content doesn't need inline citations like editorial content
+        content_type = self._determine_content_type(content)
+        if content_type in ['landing_page', 'product_page', 'other']:
+            # Boost by 30% for verification (more lenient than coherence)
+            # Marketing claims are expected and don't need citations
+            adjusted_score = min(1.0, base_score * 1.30)
+            logger.debug(f"Verification score adjusted for {content_type}: {base_score:.2f} → {adjusted_score:.2f}")
+            return adjusted_score
+        
+        return base_score
     
     def _score_transparency(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
         """Score Transparency dimension: disclosures, clarity"""
@@ -279,11 +328,39 @@ class ContentScorer:
         
         Content:
         Title: {content.title}
-        Body: {content.body}
+        Body: {content.body[:2000]}
         Source: {content.src}
         URL: {content.url}
         
         Brand Context: {brand_context.get('keywords', [])}
+        
+        CRITICAL REQUIREMENTS:
+        1. For EACH issue, provide an EXACT QUOTE from the content as evidence
+        2. Do NOT report issues you cannot support with specific text from the content
+        3. Include a confidence score (0.0-1.0) for each issue
+        4. Only report issues with confidence >= 0.7
+        5. Do NOT report "broken_links" unless you can see actual URLs in the content
+        
+        EXAMPLES:
+        
+        Example 1 - High Coherence (0.9):
+        Content: "Mastercard provides secure payment solutions globally. Our technology enables seamless transactions."
+        Response: {{"score": 0.9, "issues": []}}
+        
+        Example 2 - Low Coherence (0.4):
+        Content: "Buy now!!! We're #1 lol. Click here for AMAZING deals omg..."
+        Response: {{
+            "score": 0.4,
+            "issues": [
+                {{
+                    "type": "inconsistent_voice",
+                    "confidence": 0.95,
+                    "severity": "high",
+                    "evidence": "EXACT QUOTE: 'Buy now!!! We're #1 lol. Click here for AMAZING deals omg'",
+                    "suggestion": "Maintain professional brand voice throughout"
+                }}
+            ]
+        }}
         
         Respond with JSON in this exact format:
         {{
@@ -291,15 +368,10 @@ class ContentScorer:
             "issues": [
                 {{
                     "type": "inconsistent_voice",
+                    "confidence": 0.85,
                     "severity": "medium",
-                    "evidence": "Tone shifts from formal to casual",
+                    "evidence": "EXACT QUOTE: 'specific text showing tone shift'",
                     "suggestion": "Maintain consistent brand voice throughout"
-                }},
-                {{
-                    "type": "broken_links",
-                    "severity": "high",
-                    "evidence": "Found 3 broken links in content",
-                    "suggestion": "Update or remove broken links"
                 }}
             ]
         }}
@@ -311,43 +383,52 @@ class ContentScorer:
         - 0.2-0.4: Limited coherence, noticeable inconsistencies
         - 0.0-0.2: Incoherent, inconsistent, unprofessional
         
-        IMPORTANT: Check for ALL of these specific coherence issues and report each one found:
+        Common coherence issues (only report if you can quote specific text):
         
         1. **Brand Voice Issues**:
-           - "inconsistent_voice" or "brand_voice_inconsistency": Tone/style inconsistencies
+           - "inconsistent_voice": Tone/style shifts (quote the inconsistent text)
         
         2. **Link Quality**:
-           - "broken_links" or "outdated_links": Non-functional or outdated URLs
+           - "broken_links": ONLY if you see actual URLs in content (quote the URL)
         
         3. **Claim Consistency**:
-           - "contradictory_claims" or "inconsistent_claims": Conflicting information
+           - "contradictory_claims": Conflicting information (quote both contradictions)
         
-        4. **Cross-Channel Issues**:
-           - "email_inconsistency" or "cross_channel_mismatch": Email vs web inconsistencies
+        4. **Trust Signal Fluctuation**:
+           - "inconsistent_trust_signals": Varying trust indicators (quote examples)
         
-        5. **Engagement-Trust Alignment**:
-           - "engagement_trust_mismatch" or "low_engagement_high_trust": Suspicious engagement patterns
-        
-        6. **Multimodal Consistency**:
-           - "multimodal_inconsistency" or "text_image_mismatch": Text doesn't match images/media
-        
-        7. **Version/Update Issues**:
-           - "version_inconsistency" or "outdated_content": Old or conflicting versions
-        
-        8. **Trust Signal Fluctuation**:
-           - "trust_fluctuation" or "inconsistent_trust_signals": Varying trust indicators
-        
-        Return valid JSON with score (0.0-1.0) and issues array. Report EVERY issue you find, even if minor.
+        Return valid JSON with score (0.0-1.0) and issues array. ONLY include issues with exact quotes and confidence >= 0.7.
         """
         
         result = self._get_llm_score_with_reasoning(prompt)
         
+        # Filter out low-confidence issues
+        issues = result.get('issues', [])
+        filtered_issues = []
+        for issue in issues:
+            confidence = issue.get('confidence', 0.0)
+            if confidence >= 0.7:
+                filtered_issues.append(issue)
+            else:
+                logger.debug(f"Filtered low-confidence Coherence issue: {issue.get('type')} (confidence={confidence})")
+        
         # Store LLM-identified issues in content metadata for later merging
         if not hasattr(content, '_llm_issues'):
             content._llm_issues = {}
-        content._llm_issues['coherence'] = result.get('issues', [])
+        content._llm_issues['coherence'] = filtered_issues
         
-        return result.get('score', 0.5)
+        base_score = result.get('score', 0.5)
+        
+        # Apply content-type multiplier to adjust for overly strict LLM scoring
+        # Landing pages and marketing content get a boost since LLM applies
+        # editorial standards that aren't appropriate for marketing content
+        if content_type in ['landing_page', 'product_page', 'other']:
+            # Boost by 25% (multiply by 1.25), capped at 1.0
+            adjusted_score = min(1.0, base_score * 1.25)
+            logger.debug(f"Coherence score adjusted for {content_type}: {base_score:.2f} → {adjusted_score:.2f}")
+            return adjusted_score
+        
+        return base_score
     
     def _determine_content_type(self, content: NormalizedContent) -> str:
         """
@@ -618,6 +699,7 @@ class ContentScorer:
             Merged list of DetectedAttribute objects with source tracking
         """
         from scoring.issue_mapper import map_llm_issue_to_attribute
+        from scoring.link_verifier import verify_broken_links
         
         merged_attrs = []
         
@@ -633,6 +715,22 @@ class ContentScorer:
             for dimension, llm_issues in content._llm_issues.items():
                 for llm_issue in llm_issues:
                     issue_type = llm_issue.get('type', '')
+                    
+                    # Special handling for broken_links: verify with actual HTTP checks
+                    if issue_type in ['broken_links', 'outdated_links']:
+                        content_text = f"{content.title} {content.body}"
+                        content_url = getattr(content, 'url', None)
+                        actual_broken_links = verify_broken_links(content_text, content_url)
+                        
+                        if not actual_broken_links:
+                            # LLM hallucinated broken links - reject this issue
+                            logger.warning(f"LLM hallucinated broken_links for content {content.content_id} - no actual broken links found")
+                            continue
+                        else:
+                            # Update evidence with actual broken link URLs
+                            broken_urls = [link['url'] for link in actual_broken_links[:3]]  # Max 3 examples
+                            llm_issue['evidence'] = f"Verified broken links: {', '.join(broken_urls)}"
+                            logger.info(f"Verified {len(actual_broken_links)} broken links for content {content.content_id}")
                     
                     # Map LLM issue type to attribute ID
                     attr_id = map_llm_issue_to_attribute(issue_type)
