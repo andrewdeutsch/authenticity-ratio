@@ -54,6 +54,9 @@ class NormalizedContent:
     # URL source classification for ratio enforcement
     source_type: str = "unknown"  # brand_owned, third_party, unknown
     source_tier: str = "unknown"  # specific tier within brand_owned or third_party
+    
+    # Language detection
+    language: str = "en"  # Detected language code (e.g., 'en', 'fr', 'es')
 
     def __post_init__(self):
         if self.meta is None:

@@ -74,6 +74,14 @@ class ScoringPipeline:
             logger.info(f"Pre-filter: Kept {len(filtered_content)}/{len(content_list)} items (skipped {skipped_count} error/login pages)")
             content_list = filtered_content  # Use filtered list for rest of pipeline
             
+            # Step 0.5: Detect language for all content
+            from utils.language_utils import detect_language
+            for content in content_list:
+                content.language = detect_language(content.body)
+                # Log non-English content for visibility
+                if content.language != 'en':
+                    logger.info(f"Detected non-English content: {content.title} ({content.language})")
+            
             triage_enabled = SETTINGS.get('triage_enabled', True)
             exclude_demoted = SETTINGS.get('exclude_demoted_from_upload', False)
 

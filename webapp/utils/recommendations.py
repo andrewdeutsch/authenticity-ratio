@@ -37,6 +37,7 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
         detected_attrs = meta.get('detected_attributes', [])
         title = meta.get('title', meta.get('name', 'Unknown content'))[:60]
         url = meta.get('source_url', meta.get('url', ''))
+        language = meta.get('language', 'en')
 
 
         for attr in detected_attrs:
@@ -53,7 +54,8 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
                     'url': url,
                     'issue': label,
                     'evidence': evidence,
-                    'value': value
+                    'value': value,
+                    'language': language
                 }
                 # Add suggestion if available
                 if suggestion:
@@ -81,7 +83,8 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
                         'url': url,
                         'issue': issue_label,
                         'evidence': rule.get('reason', 'Issue detected by scoring rule'),
-                        'value': rule.get('value')
+                        'value': rule.get('value'),
+                        'language': language
                     })
 
     return dimension_issues
@@ -176,7 +179,8 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                     'suggestion': suggestion,
                     'title': item.get('title', ''),
                     'url': item.get('url', ''),
-                    'evidence': item.get('evidence', '')
+                    'evidence': item.get('evidence', ''),
+                    'language': item.get('language', 'en')
                 })
 
     # Build the response
@@ -189,7 +193,12 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             suggestion_text = llm_sug['suggestion']
             
             # Format the suggestion nicely
-            response_parts.append(f"{idx}. {suggestion_text}")
+            lang_indicator = ""
+            if llm_sug.get('language', 'en') != 'en':
+                lang_code = llm_sug.get('language', '').upper()
+                lang_indicator = f" (🌐 Translated from {lang_code})"
+                
+            response_parts.append(f"{idx}. {suggestion_text}{lang_indicator}")
             
             # Add context if available
             if llm_sug['title']:
@@ -229,6 +238,11 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                     example_parts.append(f"({display_url})")
 
                 examples.append(" - ".join(example_parts))
+                
+                # Add translation indicator if needed
+                if item.get('language', 'en') != 'en':
+                    lang_code = item.get('language', '').upper()
+                    examples[-1] += f" (🌐 Translated from {lang_code})"
             elif title or url:
                 # If no evidence but have title/url, still show it
                 if title and url:
@@ -313,7 +327,13 @@ def generate_rating_recommendation(avg_rating: float, dimension_breakdown: Dict[
         if issues_for_dim:
             # Get first unique issue as example
             example = issues_for_dim[0]
-            example_text = f" For example, on \"{example['title']}\", there was an issue with {example['issue'].lower()}: {example['evidence']}."
+            
+            lang_indicator = ""
+            if example.get('language', 'en') != 'en':
+                lang_code = example.get('language', '').upper()
+                lang_indicator = f" (🌐 Translated from {lang_code})"
+                
+            example_text = f" For example, on \"{example['title']}\", there was an issue with {example['issue'].lower()}: {example['evidence']}{lang_indicator}."
 
         # Generate comprehensive summary based on rating band
         if avg_rating >= 80:

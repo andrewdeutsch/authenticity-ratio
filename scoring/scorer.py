@@ -927,6 +927,7 @@ class ContentScorer:
                         "channel": getattr(content, 'channel', 'unknown'),
                         "platform_type": getattr(content, 'platform_type', 'unknown'),
                         "url": getattr(content, 'url', ''),
+                        "language": getattr(content, 'language', 'en'),
                         # Include detected attributes for downstream analysis
                         "detected_attributes": [
                             {

@@ -44,7 +44,7 @@ class LLMScoringClient:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert content authenticity evaluator. Always respond with only a number between 0.0 and 1.0."},
+                    {"role": "system", "content": "You are an expert content authenticity evaluator. Always respond in English, regardless of the language of the content being analyzed. Respond with only a number between 0.0 and 1.0."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=10,
@@ -80,7 +80,7 @@ class LLMScoringClient:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert content authenticity evaluator. Always respond with valid JSON."},
+                    {"role": "system", "content": "You are an expert content authenticity evaluator. Always respond in English with valid JSON, regardless of the language of the content being analyzed."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=500,
@@ -237,7 +237,7 @@ class LLMScoringClient:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert content evaluator. Always respond with valid JSON."},
+                    {"role": "system", "content": "You are an expert content evaluator. Always respond in English with valid JSON, regardless of the language of the content being analyzed."},
                     {"role": "user", "content": feedback_prompt}
                 ],
                 max_tokens=500,
