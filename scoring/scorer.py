@@ -352,6 +352,14 @@ class ContentScorer:
             - MAJOR issues: broken links, contradictory claims, unprofessional content
             - Do NOT flag normal marketing variation (headlines vs CTAs, legal vs marketing copy)
             - Only flag EXTREME voice inconsistencies (professional → unprofessional)
+            
+            IMPORTANT - Product Listings:
+            If the content appears to be a product listing or grid (repeated product names, 
+            prices, "Shop now" buttons, or similar structured e-commerce content), this is 
+            intentional formatting, NOT incoherent text. The text extraction may have lost 
+            the visual layout, making it appear jumbled. Do NOT flag product grids as 
+            coherence issues unless there are actual contradictions or errors in the product 
+            information itself.
             """
         elif content_type in ['blog', 'article', 'news']:
             context_guidance = """

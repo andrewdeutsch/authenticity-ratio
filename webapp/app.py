@@ -899,8 +899,7 @@ def show_analyze_page():
                     
                     # Preview option
                     with st.expander("📋 View guidelines preview", expanded=False):
-                        preview_text = guidelines[:500] + "..." if len(guidelines) > 500 else guidelines
-                        st.text_area("", preview_text, height=150, disabled=True, label_visibility="collapsed")
+                        st.text_area("", guidelines, height=400, disabled=True, label_visibility="collapsed")
                     
                     # Store in session state
                     st.session_state['use_guidelines'] = use_guidelines

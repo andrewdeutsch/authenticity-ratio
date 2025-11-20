@@ -593,10 +593,127 @@ def _extract_internal_links(url: str, html_content: str, max_links: int = 15) ->
         return []
 
 
+def _detect_product_grid(soup: BeautifulSoup) -> Optional[list]:
+    """
+    Detect if page contains a product grid/listing.
+    
+    Returns list of product card elements if found, None otherwise.
+    """
+    # Look for repeated card/item patterns
+    card_selectors = [
+        '.product-card', '.product-item', '.item-card', '.card',
+        '[class*="product"]', '[class*="card"]', '[class*="item"]'
+    ]
+    
+    for selector in card_selectors:
+        try:
+            cards = soup.select(selector)
+            # Need at least 3 similar items to consider it a grid
+            if len(cards) >= 3:
+                # Verify they have similar structure (name/title + price/button)
+                valid_cards = []
+                for card in cards:
+                    # Check if card has typical product elements
+                    has_title = card.select_one('h1, h2, h3, h4, h5, strong, .title, .name, [class*="title"], [class*="name"]')
+                    has_price_or_button = card.select_one('[class*="price"], button, a[class*="shop"], a[class*="buy"]')
+                    if has_title or has_price_or_button:
+                        valid_cards.append(card)
+                
+                if len(valid_cards) >= 3:
+                    logger.debug(f"Detected product grid with {len(valid_cards)} items using selector: {selector}")
+                    return valid_cards
+        except Exception:
+            continue
+    
+    return None
+
+
+def _format_product_grid(cards: list) -> str:
+    """Format product cards as bulleted list."""
+    items = []
+    
+    for card in cards:
+        try:
+            # Extract product name (h2, h3, h4, strong, or class with "name"/"title")
+            name = card.select_one('h1, h2, h3, h4, h5, strong, .product-name, .title, [class*="name"], [class*="title"]')
+            name_text = name.get_text(strip=True) if name else ""
+            
+            # Extract price
+            price = card.select_one('[class*="price"], .price, [class*="cost"]')
+            price_text = price.get_text(strip=True) if price else ""
+            
+            # Build item text
+            if name_text:
+                item = f"- {name_text}"
+                if price_text:
+                    item += f" ({price_text})"
+                items.append(item)
+        except Exception:
+            continue
+    
+    if items:
+        result = "\n".join(items)
+        logger.debug(f"Formatted product grid: {len(items)} items")
+        return result
+    return ""
+
+
+def _format_html_lists(soup: BeautifulSoup) -> str:
+    """Convert HTML lists to formatted text."""
+    text_parts = []
+    
+    try:
+        for ul in soup.find_all(['ul', 'ol']):
+            items = []
+            for li in ul.find_all('li', recursive=False):
+                item_text = li.get_text(strip=True)
+                if item_text and len(item_text) > 5:  # Skip very short items
+                    items.append(f"- {item_text}")
+            
+            if items and len(items) >= 2:  # At least 2 items to be meaningful
+                text_parts.append("\n".join(items))
+        
+        if text_parts:
+            result = "\n\n".join(text_parts)
+            logger.debug(f"Formatted HTML lists: {len(text_parts)} lists")
+            return result
+    except Exception:
+        pass
+    
+    return ""
+
+
+def _format_tables(soup: BeautifulSoup) -> str:
+    """Convert HTML tables to formatted text."""
+    text_parts = []
+    
+    try:
+        for table in soup.find_all('table'):
+            rows = []
+            for tr in table.find_all('tr'):
+                cells = [td.get_text(strip=True) for td in tr.find_all(['td', 'th'])]
+                cells = [c for c in cells if c]  # Remove empty cells
+                if cells:
+                    rows.append(" | ".join(cells))
+            
+            if rows and len(rows) >= 2:  # At least header + 1 row
+                text_parts.append("\n".join(rows))
+        
+        if text_parts:
+            result = "\n\n".join(text_parts)
+            logger.debug(f"Formatted tables: {len(text_parts)} tables")
+            return result
+    except Exception:
+        pass
+    
+    return ""
+
+
 def _extract_body_text(soup: BeautifulSoup) -> str:
     """Extract body text using multiple strategies in order of preference.
-
+    
     Tries extraction from:
+    0. Structured content (product grids, lists, tables) - NEW
     1. <article> tag
     2. <main> tag or [role="main"]
     3. <div> with content-related class names
@@ -606,7 +723,31 @@ def _extract_body_text(soup: BeautifulSoup) -> str:
 
     Returns the extracted text using the first strategy that yields content.
     """
-    # Strategy 1: Try <article> tag
+    # NEW: Strategy 0 - Try structured content extraction first
+    try:
+        # Check for product grids
+        product_cards = _detect_product_grid(soup)
+        if product_cards:
+            grid_text = _format_product_grid(product_cards)
+            if grid_text and len(grid_text) >= 100:
+                logger.debug("Extracted product grid with %d items", len(product_cards))
+                return grid_text
+        
+        # Check for HTML lists (if no product grid found)
+        list_text = _format_html_lists(soup)
+        if list_text and len(list_text) >= 150:
+            logger.debug("Extracted formatted HTML lists")
+            return list_text
+        
+        # Check for tables (if no lists found)
+        table_text = _format_tables(soup)
+        if table_text and len(table_text) >= 150:
+            logger.debug("Extracted formatted tables")
+            return table_text
+    except Exception as e:
+        logger.debug("Structured extraction failed, falling back to generic: %s", e)
+    
+    # EXISTING: Strategy 1: Try <article> tag
     article = soup.find("article")
     if article:
         body = article.get_text(separator=" \n ", strip=True)
