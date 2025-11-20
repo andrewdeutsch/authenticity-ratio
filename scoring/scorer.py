@@ -222,8 +222,58 @@ class ContentScorer:
     def _score_coherence(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
         """Score Coherence dimension: consistency across channels"""
         
+        # Detect content type to adjust scoring criteria
+        content_type = self._determine_content_type(content)
+        
+        # Adjust scoring criteria based on content type
+        if content_type in ['landing_page', 'product_page', 'other']:
+            # More lenient for marketing/landing pages
+            type_guidance = """
+            CONTENT TYPE: Marketing/Landing Page
+            
+            ADJUSTED CRITERIA for marketing content:
+            - Brand voice: Expect professional, polished marketing tone (not casual)
+            - Broken links: Still critical - check for any non-functional links
+            - Contradictions: Marketing claims should be consistent
+            - Cross-channel: Less applicable for landing pages
+            - Multimodal: Images should match messaging
+            - Version/updates: Less critical for evergreen marketing content
+            
+            SCORING GUIDANCE:
+            - Be LENIENT on minor tone variations (marketing often uses varied language for emphasis)
+            - Focus on MAJOR issues: broken links, contradictory claims, unprofessional content
+            - Don't penalize for lack of citations (marketing doesn't need inline sources)
+            - Score 0.6-0.8 for typical professional marketing content
+            """
+        elif content_type in ['blog', 'article', 'news']:
+            # Strict for editorial content
+            type_guidance = """
+            CONTENT TYPE: Editorial/Blog/News
+            
+            STANDARD CRITERIA for editorial content:
+            - Brand voice: Should be consistent throughout
+            - Broken links: Critical - affects credibility
+            - Contradictions: Very important for editorial integrity
+            - Cross-channel: Should match other published content
+            - Logical flow: Must be coherent and well-organized
+            
+            SCORING GUIDANCE:
+            - Be STRICT on consistency and professionalism
+            - Penalize contradictions and broken links heavily
+            - Expect high editorial standards
+            """
+        else:
+            # Default criteria
+            type_guidance = """
+            CONTENT TYPE: General/Social
+            
+            STANDARD CRITERIA - apply normal coherence standards
+            """
+        
         prompt = f"""
         Score the COHERENCE of this content and identify ALL specific issues.
+        
+        {type_guidance}
         
         Coherence evaluates: consistency with brand messaging, logical flow, professional quality
         
@@ -231,6 +281,7 @@ class ContentScorer:
         Title: {content.title}
         Body: {content.body}
         Source: {content.src}
+        URL: {content.url}
         
         Brand Context: {brand_context.get('keywords', [])}
         
@@ -297,6 +348,34 @@ class ContentScorer:
         content._llm_issues['coherence'] = result.get('issues', [])
         
         return result.get('score', 0.5)
+    
+    def _determine_content_type(self, content: NormalizedContent) -> str:
+        """
+        Determine content type based on URL patterns and metadata.
+        Simplified version for scorer (full version is in attribute_detector)
+        """
+        url_lower = content.url.lower() if hasattr(content, 'url') and content.url else ""
+        
+        # Check for blog/article/news patterns
+        if any(p in url_lower for p in ['/blog/', '/article/', '/news/', '/story/']):
+            if '/blog/' in url_lower:
+                return 'blog'
+            elif '/news/' in url_lower or '/story/' in url_lower:
+                return 'news'
+            else:
+                return 'article'
+        
+        # Check for landing page patterns
+        if (url_lower.endswith('/') or '/product/' in url_lower or 
+            '/solution/' in url_lower or '/about' in url_lower or '/home' in url_lower):
+            return 'landing_page'
+        
+        # Check channel
+        if hasattr(content, 'channel'):
+            if content.channel in ['reddit', 'twitter', 'facebook', 'instagram']:
+                return 'social_post'
+        
+        return 'other'
     
     def _score_resonance(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
         """Score Resonance dimension: cultural fit, organic engagement"""
