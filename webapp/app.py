@@ -50,6 +50,9 @@ from webapp.services.social_search import search_social_media_channels
 from webapp.services.search_orchestration import search_for_urls
 from webapp.services.analysis_engine import run_analysis
 
+# Import page modules
+from webapp.pages.brand_guidelines import show_brand_guidelines_page
+
 # Configure logging for the webapp
 import logging
 logging.basicConfig(
@@ -2139,6 +2142,10 @@ def main():
         if st.button("📚 History", width='stretch'):
             st.session_state['page'] = 'history'
             st.rerun()
+        
+        if st.button("📋 Brand Guidelines", width='stretch'):
+            st.session_state['page'] = 'guidelines'
+            st.rerun()
 
         st.divider()
 
@@ -2169,6 +2176,8 @@ def main():
         show_results_page()
     elif page == 'history':
         show_history_page()
+    elif page == 'guidelines':
+        show_brand_guidelines_page()
 
 
 if __name__ == '__main__':

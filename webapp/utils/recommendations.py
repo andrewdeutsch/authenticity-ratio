@@ -38,21 +38,28 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
         title = meta.get('title', meta.get('name', 'Unknown content'))[:60]
         url = meta.get('source_url', meta.get('url', ''))
 
+
         for attr in detected_attrs:
             dimension = attr.get('dimension', 'unknown')
             value = attr.get('value', 5)
             evidence = attr.get('evidence', '')
             label = attr.get('label', '')
+            suggestion = attr.get('suggestion')  # Extract LLM suggestion
 
             # Report any non-perfect attributes (value < 10 indicates room for improvement)
             if dimension in dimension_issues and value < 10:
-                dimension_issues[dimension].append({
+                issue_dict = {
                     'title': title,
                     'url': url,
                     'issue': label,
                     'evidence': evidence,
                     'value': value
-                })
+                }
+                # Add suggestion if available
+                if suggestion:
+                    issue_dict['suggestion'] = suggestion
+                
+                dimension_issues[dimension].append(issue_dict)
 
         # 2. Check applied_rules (from rubric-based detection in pipeline)
         # These are issues that might not be in detected_attributes but were applied during scoring
@@ -90,7 +97,7 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
         issue_items: Optional list of specific issue instances with evidence
 
     Returns:
-        Specific actionable remedy recommendation with concrete examples
+        Specific actionable remedy recommendation with concrete examples and LLM suggestions
     """
     # Map specific issues to remedies
     remedies = {
@@ -145,17 +152,72 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
 
     base_remedy = remedies.get(issue_type, f'Address this {dimension} issue by improving content quality and adding relevant metadata.')
 
-    # Add specific examples from evidence if provided
+    # Extract LLM suggestions from issue_items
+    llm_suggestions = []
+    if issue_items:
+        for item in issue_items:
+            # Check if this item has a suggestion field (from LLM)
+            # The suggestion might be in the item dict directly or we need to extract from meta
+            suggestion = item.get('suggestion')
+            
+            # If not directly available, try to extract from evidence
+            # (in case it was embedded in the evidence string)
+            if not suggestion:
+                evidence = item.get('evidence', '')
+                # Check if evidence contains LLM suggestion
+                if 'LLM:' in evidence and 'suggestion:' in evidence.lower():
+                    # Try to extract suggestion from evidence
+                    parts = evidence.split('suggestion:', 1)
+                    if len(parts) > 1:
+                        suggestion = parts[1].strip()
+            
+            if suggestion:
+                llm_suggestions.append({
+                    'suggestion': suggestion,
+                    'title': item.get('title', ''),
+                    'url': item.get('url', ''),
+                    'evidence': item.get('evidence', '')
+                })
+
+    # Build the response
+    response_parts = []
+    
+    # If we have LLM suggestions, show them first
+    if llm_suggestions:
+        response_parts.append("**🎯 AI-Generated Specific Suggestions:**\n")
+        for idx, llm_sug in enumerate(llm_suggestions[:2], 1):  # Show max 2 LLM suggestions
+            suggestion_text = llm_sug['suggestion']
+            
+            # Format the suggestion nicely
+            response_parts.append(f"{idx}. {suggestion_text}")
+            
+            # Add context if available
+            if llm_sug['title']:
+                response_parts.append(f"   - *From: {llm_sug['title'][:60]}...*")
+        
+        if len(llm_suggestions) > 2:
+            response_parts.append(f"\n   *...and {len(llm_suggestions) - 2} more suggestion(s)*")
+        
+        response_parts.append("\n\n**💡 General Best Practice:**\n" + base_remedy)
+    else:
+        # No LLM suggestions, just show the generic remedy
+        response_parts.append(base_remedy)
+    
+    # Add specific examples from evidence if provided (but not LLM suggestions)
     if issue_items and len(issue_items) > 0:
         examples = []
         max_examples = 3  # Limit to first 3 examples for clarity
 
         for item in issue_items[:max_examples]:
+            # Skip if we already showed this as an LLM suggestion
+            if item.get('suggestion'):
+                continue
+                
             evidence = item.get('evidence', '').strip()
             title = item.get('title', '').strip()
             url = item.get('url', '').strip()
 
-            if evidence:
+            if evidence and 'LLM:' not in evidence:  # Don't duplicate LLM evidence
                 # Create a specific example with evidence
                 example_parts = []
                 if title:
@@ -179,13 +241,13 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             example_text = "\n\n**Specific issues detected:**\n" + "\n".join(f"• {ex}" for ex in examples)
 
             # Show count if there are more issues
-            total_count = len(issue_items)
+            total_count = len([i for i in issue_items if not i.get('suggestion')])
             if total_count > max_examples:
                 example_text += f"\n\n*...and {total_count - max_examples} more instance{'s' if total_count - max_examples > 1 else ''}*"
 
-            return base_remedy + example_text
+            response_parts.append(example_text)
 
-    return base_remedy
+    return "\n".join(response_parts)
 
 
 def generate_rating_recommendation(avg_rating: float, dimension_breakdown: Dict[str, Any], items: List[Dict[str, Any]]) -> str:

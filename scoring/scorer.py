@@ -308,13 +308,31 @@ class ContentScorer:
         return result.get('score', 0.5)
     
     def _score_coherence(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
-        """Score Coherence dimension: consistency across channels"""
+        """Score Coherence dimension: consistency across channels with brand guidelines"""
+        
+        # Load brand guidelines if available
+        brand_id = brand_context.get('brand_name', '').lower().strip().replace(' ', '_')
+        brand_guidelines = self._load_brand_guidelines(brand_id)
         
         # Detect content type to adjust scoring criteria
         content_type = self._determine_content_type(content)
         
         # Build context guidance for the feedback step
-        if content_type in ['landing_page', 'product_page', 'other']:
+        if brand_guidelines:
+            # Use brand-specific guidelines
+            guidelines_preview = brand_guidelines[:1500]  # First 1500 chars
+            context_guidance = f"""
+            BRAND GUIDELINES FOR {brand_id.upper()}:
+            
+            {guidelines_preview}
+            
+            {'... [guidelines truncated]' if len(brand_guidelines) > 1500 else ''}
+            
+            CRITICAL: Compare the content against these SPECIFIC brand guidelines.
+            Flag inconsistencies with the documented voice, tone, vocabulary, and style rules.
+            Reference specific guideline sections in your suggestions.
+            """
+        elif content_type in ['landing_page', 'product_page', 'other']:
             context_guidance = """
             CONTENT TYPE: Marketing/Landing Page
             
@@ -451,6 +469,30 @@ class ContentScorer:
                 return 'social_post'
         
         return 'other'
+    
+    def _load_brand_guidelines(self, brand_id: str) -> Optional[str]:
+        """
+        Load brand guidelines from storage if available.
+        
+        Args:
+            brand_id: Brand identifier
+        
+        Returns:
+            Guidelines text or None if not found
+        """
+        if not brand_id:
+            return None
+        
+        try:
+            from utils.document_processor import BrandGuidelinesProcessor
+            processor = BrandGuidelinesProcessor()
+            guidelines = processor.load_guidelines(brand_id)
+            if guidelines:
+                logger.info(f"Loaded brand guidelines for {brand_id}: {len(guidelines)} characters")
+            return guidelines
+        except Exception as e:
+            logger.warning(f"Failed to load brand guidelines for {brand_id}: {e}")
+            return None
     
     def _score_resonance(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
         """Score Resonance dimension: cultural fit, organic engagement"""
@@ -700,13 +742,13 @@ class ContentScorer:
         
         # Step 2: Get feedback based on score
         if score < 0.9:
-            # Low/medium score: Ask for specific issues
+            # Low/medium score: Ask for specific issues with concrete rewrites
             feedback_prompt = f"""
             You scored this content's {dimension} as {score:.1f} out of 1.0.
             
             {context_guidance}
             
-            What specific issues caused this lower score? Provide actionable feedback.
+            What specific issues caused this lower score? Provide actionable feedback with CONCRETE REWRITES.
             
             Content:
             Title: {content.title}
@@ -719,16 +761,26 @@ class ContentScorer:
                         "type": "issue_type",
                         "confidence": 0.85,
                         "severity": "high",
-                        "evidence": "EXACT QUOTE: 'specific text from content'",
-                        "suggestion": "Specific action to fix this"
+                        "evidence": "EXACT QUOTE: 'specific problematic text from content'",
+                        "suggestion": "Change '[exact problematic text]' → '[improved version]'. This improves [dimension] because [brief explanation]."
                     }}
                 ]
             }}
             
-            CRITICAL: Provide EXACT QUOTES as evidence. Only report issues you can support with specific text.
+            CRITICAL REQUIREMENTS:
+            1. Provide EXACT QUOTES in evidence field
+            2. In suggestion field, show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
+            3. Include brief explanation of WHY the change improves {dimension}
+            4. Only report issues you can support with specific text
+            
+            EXAMPLE GOOD SUGGESTION:
+            "Change 'Find the right type of Mastercard payment card for you' → 'Discover the perfect Mastercard for your needs'. This improves coherence by using more consistent, engaging brand voice."
+            
+            EXAMPLE BAD SUGGESTION (DO NOT DO THIS):
+            "Improve the wording" or "Make it more professional" (too vague, no concrete rewrite)
             """
         else:
-            # High score: Ask for improvement suggestions
+            # High score: Ask for improvement suggestions with concrete rewrites
             feedback_prompt = f"""
             You scored this content's {dimension} as {score:.1f} out of 1.0 - this is good!
             
@@ -736,7 +788,7 @@ class ContentScorer:
             
             The client wants to know: "Why didn't I get 100%? What specific thing could make this even better?"
             
-            Provide ONE specific, actionable improvement that would move the score closer to 100%.
+            Provide ONE specific, actionable improvement with a CONCRETE REWRITE that would move the score closer to 100%.
             
             Content:
             Title: {content.title}
@@ -745,8 +797,8 @@ class ContentScorer:
             CRITICAL REQUIREMENTS:
             1. Identify ONE specific area for improvement (not multiple)
             2. Provide a SINGLE exact quote showing what could be improved
-            3. Explain WHY this prevents a perfect score
-            4. Give a SPECIFIC, actionable suggestion on how to improve it
+            3. Show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
+            4. Explain WHY this change would improve the score
             
             Respond with JSON in this exact format:
             {{
@@ -756,20 +808,20 @@ class ContentScorer:
                         "confidence": 0.75,
                         "severity": "low",
                         "evidence": "EXACT QUOTE: 'single specific text that could be improved'",
-                        "suggestion": "Specific action: [Explain WHY this matters and HOW to improve it]"
+                        "suggestion": "Change '[exact text from evidence]' → '[improved version]'. This would improve {dimension} by [brief explanation]."
                     }}
                 ]
             }}
             
-            EXAMPLES OF GOOD IMPROVEMENT SUGGESTIONS:
-            - "Add a clear call-to-action in the closing paragraph to guide user next steps"
-            - "Include the publication date to improve content freshness signals"
-            - "Add internal links to related content to improve navigation"
+            EXAMPLES OF GOOD SUGGESTIONS WITH CONCRETE REWRITES:
+            - "Change 'Click here to learn more' → 'Explore our complete product guide'. This improves coherence by providing specific, descriptive CTAs."
+            - "Change 'Posted recently' → 'Published on January 15, 2024'. This improves transparency by adding specific timestamps."
+            - "Change 'Our product is the best' → 'Our product has been rated #1 by TechReview (2024)'. This improves verification by adding credible sources."
             
             EXAMPLES OF BAD SUGGESTIONS (DO NOT DO THIS):
-            - Quoting multiple random text snippets without explanation
-            - Generic advice like "improve quality" without specifics
-            - Listing multiple improvements instead of focusing on ONE
+            - "Add a call-to-action" (no concrete rewrite shown)
+            - "Improve the wording" (too vague)
+            - Listing multiple improvements instead of ONE concrete rewrite
             
             If the content is truly excellent and you cannot identify a meaningful improvement, return an empty issues array.
             """
@@ -879,13 +931,17 @@ class ContentScorer:
                         else:  # low
                             value = 7.0
                         
+                        # Extract suggestion from LLM issue
+                        suggestion = llm_issue.get('suggestion', None)
+                        
                         new_attr = DetectedAttribute(
                             attribute_id=attr_id,
                             dimension=dimension,
                             label=label,
                             value=value,
                             evidence=f"LLM: {llm_issue.get('evidence', 'Issue detected')}",
-                            confidence=0.6  # Lowered from 0.7 for more LLM-only attributes
+                            confidence=0.6,  # Lowered from 0.7 for more LLM-only attributes
+                            suggestion=suggestion  # Preserve LLM suggestion
                         )
                         merged_attrs.append(new_attr)
                         detector_attr_ids.add(attr_id)
@@ -987,7 +1043,8 @@ class ContentScorer:
                                 "label": attr.label,
                                 "value": attr.value,
                                 "evidence": attr.evidence,
-                                "confidence": attr.confidence
+                                "confidence": attr.confidence,
+                                "suggestion": attr.suggestion  # Include LLM suggestion
                             }
                             for attr in detected_attrs
                         ] if detected_attrs else [],

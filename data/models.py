@@ -160,6 +160,7 @@ class DetectedAttribute:
     value: float  # 1-10 rating from Trust Stack scoring rules
     evidence: str  # What triggered the detection
     confidence: float = 1.0  # 0.0-1.0 confidence in detection
+    suggestion: Optional[str] = None  # LLM-generated improvement suggestion (e.g., "Change 'X' → 'Y'")
 
 @dataclass
 class TrustStackRating:
