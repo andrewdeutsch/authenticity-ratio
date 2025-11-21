@@ -229,17 +229,27 @@ class ContentScorer:
         # Filter out low-confidence issues
         issues = result.get('issues', [])
         filtered_issues = []
+        
+        # DIAGNOSTIC: Log all verification issues before filtering
+        if issues:
+            logger.info(f"[VERIFICATION DIAGNOSTIC] LLM detected {len(issues)} verification issues for {content.content_id[:30]}...")
+            for issue in issues:
+                logger.info(f"  - Type: {issue.get('type')}, Confidence: {issue.get('confidence', 0.0):.2f}, Severity: {issue.get('severity')}")
+        
         for issue in issues:
             confidence = issue.get('confidence', 0.0)
             if confidence >= 0.7:
                 filtered_issues.append(issue)
             else:
-                logger.debug(f"Filtered low-confidence Verification issue: {issue.get('type')} (confidence={confidence})")
+                logger.info(f"[VERIFICATION DIAGNOSTIC] Filtered low-confidence issue: {issue.get('type')} (confidence={confidence:.2f})")
         
         # Store LLM-identified issues in content metadata for later merging
         if not hasattr(content, '_llm_issues'):
             content._llm_issues = {}
         content._llm_issues['verification'] = filtered_issues
+        
+        # DIAGNOSTIC: Log final count after filtering
+        logger.info(f"[VERIFICATION DIAGNOSTIC] After filtering: {len(filtered_issues)} verification issues stored for merging")
         
         base_score = result.get('score', 0.5)
         
@@ -769,6 +779,11 @@ class ContentScorer:
         
         # Process LLM issues if they exist
         if hasattr(content, '_llm_issues'):
+            # DIAGNOSTIC: Log LLM issues by dimension
+            for dim, issues in content._llm_issues.items():
+                if issues:
+                    logger.info(f"[MERGE DIAGNOSTIC] Processing {len(issues)} LLM issues for {dim} dimension")
+            
             for dimension, llm_issues in content._llm_issues.items():
                 for llm_issue in llm_issues:
                     issue_type = llm_issue.get('type', '')
@@ -792,9 +807,12 @@ class ContentScorer:
                     # Map LLM issue type to attribute ID
                     attr_id = map_llm_issue_to_attribute(issue_type)
                     
+                    # DIAGNOSTIC: Log mapping result
+                    logger.info(f"[MERGE DIAGNOSTIC] Mapping '{issue_type}' ({dimension}) → attribute_id: {attr_id}")
+                    
                     if not attr_id:
                         # Log unmapped issues for debugging
-                        logger.warning(f"Unmapped LLM issue type '{issue_type}' in {dimension} dimension for content {content.content_id}")
+                        logger.warning(f"[MERGE DIAGNOSTIC] UNMAPPED LLM issue type '{issue_type}' in {dimension} dimension for content {content.content_id}")
                         continue
                     
                     # Check if detector also found this issue
@@ -837,7 +855,13 @@ class ContentScorer:
                         )
                         merged_attrs.append(new_attr)
                         detector_attr_ids.add(attr_id)
-                        logger.info(f"Added LLM-only attribute '{label}' (value={value}) for {dimension} dimension")
+                        logger.info(f"[MERGE DIAGNOSTIC] Added LLM-only attribute '{label}' (value={value}) for {dimension} dimension")
+        
+        # DIAGNOSTIC: Log final merged attributes by dimension
+        attrs_by_dim = {}
+        for attr in merged_attrs:
+            attrs_by_dim[attr.dimension] = attrs_by_dim.get(attr.dimension, 0) + 1
+        logger.info(f"[MERGE DIAGNOSTIC] Final merged attributes by dimension: {attrs_by_dim}")
         
         return merged_attrs
     
