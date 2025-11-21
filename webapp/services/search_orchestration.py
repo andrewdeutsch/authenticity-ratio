@@ -22,6 +22,11 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                     brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None,
                     collection_strategy: str = 'both', brand_owned_ratio: int = 60):
     """Search for URLs and store them in session state for user selection"""
+    
+    # Initialize log handler variables for cleanup in finally block
+    log_handler = None
+    search_logger = None
+    original_level = None
 
     progress_animator = ProgressAnimator()
     progress_bar = st.progress(0)
@@ -192,17 +197,12 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                     log_handler.setFormatter(log_formatter)
                     search_logger.addHandler(log_handler)
 
-                    try:
-                        pages = collect_serper_pages(
-                            query=query,
-                            target_count=web_pages,
-                            pool_size=pool_size,
-                            url_collection_config=url_collection_config
-                        )
-                    finally:
-                        # Clean up handler and restore original level
-                        search_logger.removeHandler(log_handler)
-                        search_logger.setLevel(original_level)
+                    pages = collect_serper_pages(
+                        query=query,
+                        target_count=web_pages,
+                        pool_size=pool_size,
+                        url_collection_config=url_collection_config
+                    )
                     # Convert to search result format and show URLs as we process them
                     total_pages = len(pages)
                     for idx, page in enumerate(pages):
@@ -381,5 +381,13 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
         try:
             progress_bar.empty()
             progress_animator.clear()
+            # Clean up log handler if it was created
+            if log_handler and search_logger:
+                try:
+                    search_logger.removeHandler(log_handler)
+                    if original_level is not None:
+                        search_logger.setLevel(original_level)
+                except:
+                    pass
         except:
             pass
