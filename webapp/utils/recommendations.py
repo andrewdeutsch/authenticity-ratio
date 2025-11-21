@@ -220,7 +220,6 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                     if len(parts) > 1:
                         suggestion = parts[1].strip()
             
-            if suggestion:
                 # FIX #4: Apply confidence threshold (≥0.8)
                 confidence = item.get('confidence', 0.0)
                 if confidence < 0.8:
@@ -342,26 +341,10 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             response_parts.append(f"\n💡 **General Best Practice:** {contextual_remedy}")
     else:
         # No valid LLM suggestions (filtered out or none provided)
-        # Show affected content with URLs and general guidance
-        if issue_items and len(issue_items) > 0:
-            response_parts.append("**Affected Content:**\n")
-            for idx, item in enumerate(issue_items[:5], 1):  # Show up to 5 items
-                url = item.get('url', '')
-                title = item.get('title', 'Unknown')
-                
-                if url:
-                    response_parts.append(f"{idx}. 🔗 {url}")
-                    response_parts.append(f"   * From: {title[:60]}...")
-                else:
-                    response_parts.append(f"{idx}. {title[:60]}...")
-            
-            if len(issue_items) > 5:
-                response_parts.append(f"\n*...and {len(issue_items) - 5} more affected page(s)*")
-            
-            response_parts.append(f"\n💡 **General Best Practice:** {base_remedy}")
-        else:
-            # Truly no information available
-            response_parts.append(base_remedy)
+        # User requested to remove "iffy" suggestions altogether, so we don't show the "Affected Content" list
+        # which would look incomplete without specific fixes.
+        # Just return the general best practice.
+        response_parts.append(f"💡 **General Best Practice:** {base_remedy}")
     
     # Don't add the old "specific examples" section - we've already shown everything above
     return "\n".join(response_parts)

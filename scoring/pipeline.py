@@ -10,7 +10,7 @@ import logging
 
 from data.models import NormalizedContent, ContentScores, PipelineRun, AuthenticityRatio
 from .scorer import ContentScorer
-from .triage import triage_filter
+from .scorer import ContentScorer
 from config.settings import SETTINGS
 from .classifier import ContentClassifier
 
@@ -82,71 +82,37 @@ class ScoringPipeline:
                 if content.language != 'en':
                     logger.info(f"Detected non-English content: {content.title} ({content.language})")
             
-            triage_enabled = SETTINGS.get('triage_enabled', True)
+            # Step 1: Score content (Triage is handled internally by ContentScorer)
+            logger.info("Step 1: Scoring content on 5D dimensions")
+            scores_list = self.scorer.batch_score_content(content_list, brand_config)
+            pipeline_run.items_processed += len(scores_list)
+            
+            # Filter out demoted items if configured
             exclude_demoted = SETTINGS.get('exclude_demoted_from_upload', False)
-
-            if triage_enabled:
-                logger.info("Step 1: Running triage filter to reduce expensive scoring")
-                promoted, demoted = triage_filter(content_list, brand_config.get('keywords', []), promote_threshold=None)
-
-                # Step 2: Score promoted items with the high-quality LLM scorer
-                logger.info("Step 2: Scoring promoted content on 5D dimensions")
-                high_quality_scores = self.scorer.batch_score_content(promoted, brand_config) if promoted else []
-                pipeline_run.items_processed += len(high_quality_scores)
-
-                if exclude_demoted:
-                    # If configured, exclude demoted items from uploads/reports
-                    scores_list = high_quality_scores
-                else:
-                    # Create neutral ContentScores for demoted items to keep them in reports
-                    neutral_scores = []
-                    for c in demoted:
-                        # Smart fallback: derive channel/platform_type from src if unknown
-                        channel = getattr(c, 'channel', 'unknown')
-                        platform_type = getattr(c, 'platform_type', 'unknown')
-
-                        if channel == 'unknown' or not channel:
-                            # Derive from src field
-                            src_to_channel = {
-                                'reddit': ('reddit', 'social'),
-                                'youtube': ('youtube', 'social'),
-                                'amazon': ('amazon', 'marketplace'),
-                                'brave': ('web', 'web'),
-                            }
-                            if c.src in src_to_channel:
-                                channel, platform_type = src_to_channel[c.src]
-                            else:
-                                channel = c.src  # Use src as channel
-                                platform_type = 'unknown'
-
-                        neutral = ContentScores(
-                            content_id=c.content_id,
-                            brand=brand_config.get('brand_id', 'unknown'),
-                            src=c.src,
-                            event_ts=c.event_ts,
-                            score_provenance=0.5,
-                            score_resonance=0.5,
-                            score_coherence=0.5,
-                            score_transparency=0.5,
-                            score_verification=0.5,
-                            class_label='pending',
-                            is_authentic=False,
-                            rubric_version=self.scorer.rubric_version,
-                            run_id=run_id,
-                            modality=getattr(c, 'modality', 'text'),
-                            channel=channel,
-                            platform_type=platform_type,
-                            meta='{"triage": "demoted"}'
-                        )
-                        neutral_scores.append(neutral)
-
-                    # Combine high-quality scores with neutral demoted scores for classification/upload
-                    scores_list = high_quality_scores + neutral_scores
-            else:
-                # Triage disabled: run full scoring on all items
-                logger.info("Triage disabled; scoring all content on 5D dimensions")
-                scores_list = self.scorer.batch_score_content(content_list, brand_config)
-                pipeline_run.items_processed += len(scores_list)
+            if exclude_demoted:
+                original_count = len(scores_list)
+                scores_list = [s for s in scores_list if not (isinstance(s.meta, dict) and s.meta.get('triage_status') == 'skipped')]
+                # Handle case where meta is a string (JSON)
+                if len(scores_list) == original_count:
+                    # Try checking serialized meta if dict check didn't filter anything
+                    import json
+                    filtered = []
+                    for s in scores_list:
+                        try:
+                            if isinstance(s.meta, str):
+                                m = json.loads(s.meta)
+                                if m.get('triage_status') == 'skipped':
+                                    continue
+                            elif isinstance(s.meta, dict):
+                                if s.meta.get('triage_status') == 'skipped':
+                                    continue
+                        except:
+                            pass
+                        filtered.append(s)
+                    scores_list = filtered
+                
+                if len(scores_list) < original_count:
+                    logger.info(f"Excluded {original_count - len(scores_list)} demoted items from results")
             
             # Step 2: Classify content (Authentic/Suspect/Inauthentic)
             logger.info("Step 2: Classifying content")

@@ -60,12 +60,15 @@ def load_rubric(path: str = None) -> Dict[str, Any]:
     thresholds = data.get("thresholds", DEFAULT_RUBRIC["thresholds"])
     attributes = data.get("attributes", DEFAULT_RUBRIC["attributes"])
 
+    score_multipliers = data.get("score_multipliers", DEFAULT_RUBRIC.get("score_multipliers", {}))
+
     return {
         "version": data.get("version", DEFAULT_RUBRIC.get("version")),
         "dimension_weights": dim,
         "thresholds": thresholds,
         "attributes": attributes,
         "defaults": defaults,
+        "score_multipliers": score_multipliers,
     }
 
 

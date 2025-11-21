@@ -185,39 +185,36 @@ class LLMScoringClient:
         else:
             # High score (0.9-1.0): Suggestions are optional, especially for very high scores
             if score >= 0.95:
-                # Very high score (≥0.95): Suggestions are OPTIONAL
+                # Very high score (≥0.95): Request minor optimization tips
                 feedback_prompt = f"""
                 You scored this content's {dimension} as {score:.1f} out of 1.0 - this is excellent!
                 
                 {context_guidance}
                 
-                This content is already very high quality. Only suggest improvements if you can identify a CLEAR, SPECIFIC issue with an EXACT QUOTE from the content.
+                Even excellent content can be optimized. The client wants to know: "What is one small thing I could do to make this perfect?"
+                
+                Provide ONE minor, specific optimization tip with a CONCRETE REWRITE.
                 
                 Content:
                 Title: {content.title}
                 Body: {content.body[:5000]}
                 
                 CRITICAL REQUIREMENTS:
-                1. Suggestions are OPTIONAL - if the content is truly excellent, return an empty issues array
-                2. ONLY suggest improvements if you find specific text that could be better
-                3. The quoted text MUST appear in the content above - do NOT make up quotes
+                1. Provide exactly ONE optimization tip
+                2. Use the issue type "improvement_opportunity"
+                3. The quoted text MUST appear in the content above
                 4. Show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
-                5. If you cannot find a specific quote in the content, return an empty array
+                5. Explain WHY this small change improves the content
                 
                 Respond with JSON in this exact format:
-                {{
-                    "issues": []
-                }}
-                
-                OR if you find a genuine improvement:
                 {{
                     "issues": [
                         {{
                             "type": "improvement_opportunity",
-                            "confidence": 0.75,
+                            "confidence": 0.6,
                             "severity": "low",
-                            "evidence": "EXACT QUOTE: 'specific text from content above'",
-                            "suggestion": "Change '[exact text from evidence]' → '[improved version]'. This would improve {dimension} by [brief explanation]."
+                            "evidence": "EXACT QUOTE: 'specific text'",
+                            "suggestion": "Change '[text]' → '[optimized version]'. This is a minor optimization to [reason]."
                         }}
                     ]
                 }}

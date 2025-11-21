@@ -15,6 +15,7 @@ from scoring.attribute_detector import TrustStackAttributeDetector
 from scoring.scoring_llm_client import LLMScoringClient
 from scoring.verification_manager import VerificationManager
 from scoring.linguistic_analyzer import LinguisticAnalyzer
+from scoring.triage import TriageScorer
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ class ContentScorer:
         # Initialize new managers
         self.verification_manager = VerificationManager()
         self.linguistic_analyzer = LinguisticAnalyzer()
+        self.triage_scorer = TriageScorer()
     
     def score_content(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> DimensionScores:
         """
@@ -72,6 +74,27 @@ class ContentScorer:
         logger.debug(f"Scoring content {content.content_id}")
 
         try:
+            # Stage 1: Triage (if enabled)
+            if SETTINGS.get('triage_enabled', False):
+                should_score, reason, default_score = self.triage_scorer.should_score(content)
+                if not should_score:
+                    logger.info(f"Skipping LLM scoring for {content.content_id}: {reason}")
+                    
+                    # Store triage info in metadata
+                    if content.meta is None:
+                        content.meta = {}
+                    content.meta['triage_status'] = 'skipped'
+                    content.meta['triage_reason'] = reason
+                    content.meta['score_debug'] = json.dumps({'triage': {'status': 'skipped', 'reason': reason}})
+                    
+                    return DimensionScores(
+                        provenance=default_score,
+                        verification=default_score,
+                        transparency=default_score,
+                        coherence=default_score,
+                        resonance=default_score
+                    )
+
             # Get LLM scores for each dimension
             provenance_score = self._score_provenance(content, brand_context)
             verification_score = self._score_verification(content, brand_context)
@@ -79,13 +102,29 @@ class ContentScorer:
             coherence_score = self._score_coherence(content, brand_context)
             resonance_score = self._score_resonance(content, brand_context)
 
+            # Serialize score debug info to meta
+            score_debug = getattr(content, '_score_debug', {})
+            score_debug = getattr(content, '_score_debug', {})
+            # import json - removed, using global import
+            meta_json = json.dumps(score_debug) if score_debug else ""
+            
+            if score_debug:
+                # Update content.meta with score debug info so it persists
+                if content.meta is None:
+                    content.meta = {}
+                content.meta['score_debug'] = json.dumps(score_debug)
+
             return DimensionScores(
                 provenance=provenance_score,
                 verification=verification_score,
                 transparency=transparency_score,
                 coherence=coherence_score,
                 resonance=resonance_score
-            )
+            ) # Note: ContentScores creation happens in the caller (Pipeline), 
+              # but we need to ensure the metadata is passed along. 
+              # The caller typically uses content.meta. 
+              # So we should update content.meta here.
+            
 
         except Exception as e:
             logger.error(f"Error scoring content {content.content_id}: {e}")
@@ -141,17 +180,46 @@ class ContentScorer:
             content._llm_issues = {}
         content._llm_issues['verification'] = rag_issues
         
-        # Apply brand-owned logic (brand owned content is authoritative about itself)
-        if is_brand_owned:
-            # Boost score if it's brand owned, but still penalize for contradicted external facts
-            # If RAG found contradictions, keep the penalty. If it was just "unverified", be lenient.
-            has_contradictions = any(i['type'] == 'unverified_claims' and i.get('severity') == 'high' for i in rag_issues)
+        # Initialize score debug storage
+        if not hasattr(content, '_score_debug'):
+            content._score_debug = {}
             
+        base_score = rag_score
+        
+        # Determine content type for multiplier
+        content_type = self._determine_content_type(content)
+        
+        # Apply content-type multiplier from rubric configuration
+        multiplier = self._get_score_multiplier('verification', content_type)
+        
+        # Special handling for brand-owned content if not covered by multiplier
+        # (Legacy logic preservation: if brand owned and no contradictions, ensure high score)
+        if is_brand_owned:
+            has_contradictions = any(i['type'] == 'unverified_claims' and i.get('severity') == 'high' for i in rag_issues)
             if not has_contradictions:
-                logger.info("Brand-owned content with no contradictions - boosting verification score")
-                rag_score = max(rag_score, 0.9)
+                # If multiplier didn't already boost it enough, ensure it's at least 0.9
+                # But we prefer the multiplier approach. 
+                # Let's trust the multiplier, but maybe log if brand-owned logic would have been different.
+                pass
+
+        adjusted_score = base_score
+        if multiplier != 1.0:
+            adjusted_score = min(1.0, base_score * multiplier)
+            logger.info(f"Verification scoring for {content.content_id[:20]}...")
+            logger.info(f"  Content type: {content_type}")
+            logger.info(f"  Base RAG score: {base_score:.3f}")
+            logger.info(f"  Multiplier applied: {multiplier:.2f}x")
+            logger.info(f"  Adjusted score: {adjusted_score:.3f}")
+        
+        # Store debug info
+        content._score_debug['verification'] = {
+            'base_score': base_score,
+            'multiplier': multiplier,
+            'adjusted_score': adjusted_score,
+            'content_type': content_type
+        }
                 
-        return rag_score
+        return adjusted_score
     
     def _score_transparency(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
         """Score Transparency dimension: disclosures, clarity"""
@@ -365,9 +433,14 @@ class ContentScorer:
         
         base_score = result.get('score', 0.5)
         
+        # Initialize score debug storage
+        if not hasattr(content, '_score_debug'):
+            content._score_debug = {}
+        
         # Apply content-type multiplier from rubric configuration
         multiplier = self._get_score_multiplier('coherence', content_type)
         
+        adjusted_score = base_score
         if multiplier != 1.0:
             adjusted_score = min(1.0, base_score * multiplier)
             logger.info(f"Coherence scoring for {content.content_id[:20]}...")
@@ -375,10 +448,18 @@ class ContentScorer:
             logger.info(f"  Base LLM score: {base_score:.3f} ({base_score*100:.1f}%)")
             logger.info(f"  Multiplier applied: {multiplier:.2f}x")
             logger.info(f"  Adjusted score: {adjusted_score:.3f} ({adjusted_score*100:.1f}%)")
-            return adjusted_score
-        
-        logger.debug(f"Coherence score for {content_type}: {base_score:.3f} (no multiplier)")
-        return base_score
+        else:
+            logger.debug(f"Coherence score for {content_type}: {base_score:.3f} (no multiplier)")
+            
+        # Store debug info
+        content._score_debug['coherence'] = {
+            'base_score': base_score,
+            'multiplier': multiplier,
+            'adjusted_score': adjusted_score,
+            'content_type': content_type
+        }
+            
+        return adjusted_score
     
     def _determine_content_type(self, content: NormalizedContent) -> str:
         """

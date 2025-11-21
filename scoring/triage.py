@@ -1,73 +1,52 @@
-"""Lightweight triage scorer to cheaply filter content before full LLM scoring.
 
-This module provides a fast heuristic scorer that assigns a cheap authenticity
-probability (0.0-1.0) based on simple signals (presence of brand keywords,
-length of body, presence of external links). The scoring pipeline will run
-the triage stage first to reduce the number of items sent to the expensive
-LLM-based `ContentScorer`.
-"""
-from __future__ import annotations
-
-from typing import List, Dict, Any
 import logging
-import os
-
-from config.settings import SETTINGS
+from typing import Dict, Any, Optional, Tuple
+from data.models import NormalizedContent
 
 logger = logging.getLogger(__name__)
 
-
-def _get_threshold(default: float = 0.45) -> float:
-    try:
-        return float(SETTINGS.get('triage_promote_threshold', default))
-    except Exception:
-        return default
-
-
-def triage_score_item(content, brand_keywords: List[str]) -> float:
-    """Compute a cheap triage score for a single content item.
-
-    Returns a float between 0.0 and 1.0 where higher means more likely authentic
-    and should be promoted to the high-quality scorer.
+class TriageScorer:
     """
-    text = (getattr(content, 'body', '') or '') + ' ' + (getattr(content, 'title', '') or '')
-    text_l = text.lower()
-
-    score = 0.5
-
-    # Boost if brand keywords appear (slightly larger boost to promote relevant content)
-    for kw in brand_keywords:
-        if kw.lower() in text_l:
-            score += 0.20
-
-    # Penalize extremely short content (likely low-value) but less harshly
-    if len(text_l.split()) < 30:
-        score -= 0.10
-
-    # Slight boost if there are external http links present (citations)
-    if 'http://' in text_l or 'https://' in text_l:
-        score += 0.05
-
-    final = max(0.0, min(1.0, score))
-    logger.debug('Triage score for content %s = %s', getattr(content, 'content_id', 'unknown'), final)
-    return final
-
-
-def triage_filter(content_list: List, brand_keywords: List[str], promote_threshold: float | None = None):
-    """Return a tuple (promoted, demoted) where promoted items have triage score >= threshold.
-
-    If promote_threshold is None, the value will be read from configuration.
+    Stage 1 Scorer: Fast, rule-based triage to filter out irrelevant content
+    before sending it to the expensive Stage 2 (LLM) scorer.
     """
-    if promote_threshold is None:
-        promote_threshold = _get_threshold()
-
-    promoted = []
-    demoted = []
-    for c in content_list:
-        s = triage_score_item(c, brand_keywords)
-        if s >= promote_threshold:
-            promoted.append(c)
-        else:
-            demoted.append(c)
-    logger.info('Triage filter: %d promoted, %d demoted (threshold=%s)', len(promoted), len(demoted), promote_threshold)
-    return promoted, demoted
+    
+    def __init__(self):
+        pass
+        
+    def should_score(self, content: NormalizedContent) -> Tuple[bool, str, float]:
+        """
+        Determine if content should be scored by the LLM.
+        
+        Args:
+            content: The content item to evaluate
+            
+        Returns:
+            Tuple containing:
+            - should_score (bool): True if content needs LLM scoring, False if it should be skipped
+            - reason (str): Reason for the decision
+            - default_score (float): Default score to assign if skipped (usually 0.5)
+        """
+        # Rule 1: Length Check
+        # Skip very short content (likely navigation, buttons, or empty pages)
+        if not content.body or len(content.body.strip()) < 100:
+            return False, "Content too short (< 100 chars)", 0.5
+            
+        # Rule 2: Keyword Check for Functional Pages
+        # Skip Login / Sign Up / Cart pages if they don't have substantial content
+        title_lower = content.title.lower() if content.title else ""
+        functional_keywords = ['login', 'sign in', 'sign up', 'register', 'cart', 'checkout', 'forgot password']
+        
+        if any(kw in title_lower for kw in functional_keywords):
+            # If it's a functional page AND has relatively short content, skip it
+            if len(content.body.strip()) < 300:
+                return False, f"Functional page detected: {content.title}", 0.5
+                
+        # Rule 3: Error Pages
+        # Skip 404s, 500s, etc. that might have been indexed
+        error_keywords = ['404', 'page not found', 'internal server error', 'access denied']
+        if any(kw in title_lower for kw in error_keywords):
+             return False, f"Error page detected: {content.title}", 0.5
+             
+        # Default: Content passes triage
+        return True, "Passed triage", 0.0
