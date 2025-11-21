@@ -186,8 +186,9 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                     from ingestion.serper_search import collect_serper_pages
                     progress_animator.show(f"Executing Google Search API requests ({brand_owned_ratio}% brand-owned target)", "⚡")
 
-                    # Set up log capture for the search process
-                    search_logger = logging.getLogger('ingestion.serper_search')
+                    # Set up log capture for the entire search process
+                    # Attach to root logger to capture logs from all modules
+                    search_logger = logging.getLogger()  # Root logger
                     original_level = search_logger.level
                     search_logger.setLevel(logging.INFO)  # Ensure logger captures INFO level
                     log_handler = StreamlitLogHandler(progress_animator)
