@@ -134,7 +134,7 @@ class ProgressAnimator:
         </div>
         """
 
-        self.container.markdown(html, unsafe_allow_html=True)
+        self.container.html(html)
 
     def _process_log_message(self, log_message: str) -> str:
         """
