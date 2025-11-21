@@ -885,7 +885,10 @@ def show_analyze_page():
                 guidelines = processor.load_guidelines(brand_id_normalized)
                 metadata = processor.load_metadata(brand_id_normalized)
                 
-                if guidelines:
+                # Check if we should ignore these guidelines for this session
+                ignore_key = f"ignore_guidelines_{brand_id_normalized}"
+                
+                if guidelines and not st.session_state.get(ignore_key, False):
                     # Guidelines found - show checkbox
                     word_count = metadata.get('word_count', 0) if metadata else 0
                     
@@ -894,15 +897,14 @@ def show_analyze_page():
                     with col_msg:
                         st.success(f"✅ Guidelines found ({word_count:,} words)")
                     with col_del:
-                        if st.button("🗑️", key=f"del_guidelines_{brand_id_normalized}", help="Delete these guidelines"):
-                            if processor.delete_guidelines(brand_id_normalized):
-                                st.success("Deleted!")
-                                # Clear session state
-                                if 'use_guidelines' in st.session_state:
-                                    del st.session_state['use_guidelines']
-                                if 'brand_id_for_guidelines' in st.session_state:
-                                    del st.session_state['brand_id_for_guidelines']
-                                st.rerun()
+                        if st.button("🗑️", key=f"del_guidelines_{brand_id_normalized}", help="Remove these guidelines from this analysis"):
+                            st.session_state[ignore_key] = True
+                            # Clear session state
+                            if 'use_guidelines' in st.session_state:
+                                del st.session_state['use_guidelines']
+                            if 'brand_id_for_guidelines' in st.session_state:
+                                del st.session_state['brand_id_for_guidelines']
+                            st.rerun()
                     
                     use_guidelines = st.checkbox(
                         "Use brand guidelines for coherence analysis",
@@ -955,7 +957,12 @@ def show_analyze_page():
                                         )
                                         
                                         st.success(f"✅ Guidelines uploaded! ({metadata['word_count']:,} words)")
-                                        st.info("Please refresh the page or re-enter the brand ID to use the guidelines.")
+                                        
+                                        # Clear ignore flag if it exists so they show up immediately
+                                        if f"ignore_guidelines_{brand_id_normalized}" in st.session_state:
+                                            del st.session_state[f"ignore_guidelines_{brand_id_normalized}"]
+                                            
+                                        st.rerun()
                                         
                                     except Exception as e:
                                         st.error(f"❌ Error processing document: {str(e)}")
