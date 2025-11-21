@@ -158,8 +158,8 @@ class LLMScoringClient:
                         "type": "issue_type",
                         "confidence": 0.85,
                         "severity": "high",
-                        "evidence": "EXACT QUOTE: 'specific problematic text from content'",
-                        "suggestion": "Change '[exact problematic text]' → '[improved version]'. This improves {dimension} because [brief explanation]."
+                        "evidence": "EXACT QUOTE: 'the actual text from the content'",
+                        "suggestion": "Change 'the actual text from the content' → 'the corrected text'. This improves {dimension} because [reason]."
                     }}
                 ]
             }}
@@ -211,10 +211,10 @@ class LLMScoringClient:
                     "issues": [
                         {{
                             "type": "improvement_opportunity",
-                            "confidence": 0.6,
+                            "confidence": 0.7,
                             "severity": "low",
-                            "evidence": "EXACT QUOTE: 'specific text'",
-                            "suggestion": "Change '[text]' → '[optimized version]'. This is a minor optimization to [reason]."
+                            "evidence": "EXACT QUOTE: 'the actual text'",
+                            "suggestion": "Change 'the actual text' → 'the optimized text'. This is a minor optimization to [reason]."
                         }}
                     ]
                 }}
@@ -249,8 +249,8 @@ class LLMScoringClient:
                             "type": "improvement_opportunity",
                             "confidence": 0.75,
                             "severity": "low",
-                            "evidence": "EXACT QUOTE: 'single specific text that could be improved'",
-                            "suggestion": "Change '[exact text from evidence]' → '[improved version]'. This would improve {dimension} by [brief explanation]."
+                            "evidence": "EXACT QUOTE: 'the actual text from content'",
+                            "suggestion": "Change 'the actual text from content' → 'the enhanced text'. This would improve {dimension} by [reason]."
                         }}
                     ]
                 }}

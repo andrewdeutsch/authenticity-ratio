@@ -227,18 +227,23 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             if not suggestion:
                 continue
             
-            # FIX #4: Apply confidence threshold (≥0.8)
+            # FIX #4: Apply confidence threshold (≥0.7 for improvement_opportunity, ≥0.8 for others)
             confidence = item.get('confidence', 0.0)
-            if confidence < 0.8:
-                logger.debug(f"Filtering low-confidence suggestion (confidence={confidence:.2f}): {suggestion[:100]}")
+            issue_type = item.get('issue', '')
+            
+            # Lower threshold for improvement opportunities (high-scoring content)
+            min_confidence = 0.7 if 'improvement' in issue_type.lower() or 'opportunity' in issue_type.lower() else 0.8
+            
+            if confidence < min_confidence:
+                logger.debug(f"Filtering low-confidence suggestion (confidence={confidence:.2f}, threshold={min_confidence}): {suggestion[:100]}")
                 continue
             
             # Filter out placeholder/template suggestions from the LLM
             evidence_text = item.get('evidence', '')
             
             # Check if this is a placeholder response (LLM returned template text)
+            # Only filter if the suggestion is MOSTLY placeholder text (not just contains a phrase)
             placeholder_indicators = [
-                'single specific text that could be improved',
                 'specific problematic text from content',
                 'exact problematic text',
                 'improved version',
@@ -246,11 +251,18 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             ]
             
             is_placeholder = False
+            suggestion_lower = suggestion.lower()
+            evidence_lower = evidence_text.lower()
+            
+            # Only flag as placeholder if it contains the phrase AND lacks concrete content
             for indicator in placeholder_indicators:
-                if indicator in evidence_text.lower() or indicator in suggestion.lower():
-                    logger.debug(f"Filtering placeholder suggestion containing: '{indicator}'")
-                    is_placeholder = True
-                    break
+                if indicator in suggestion_lower or indicator in evidence_lower:
+                    # Check if there's actual concrete content (quotes with real text)
+                    has_concrete_quotes = "'" in suggestion and suggestion.count("'") >= 4  # At least 2 quoted phrases
+                    if not has_concrete_quotes:
+                        logger.debug(f"Filtering placeholder suggestion containing: '{indicator}'")
+                        is_placeholder = True
+                        break
             
             if is_placeholder:
                 continue
@@ -348,10 +360,52 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             response_parts.append(f"\n💡 **General Best Practice:** {contextual_remedy}")
     else:
         # No valid LLM suggestions (filtered out or none provided)
-        # User requested to remove "iffy" suggestions altogether, so we don't show the "Affected Content" list
-        # which would look incomplete without specific fixes.
-        # Just return the general best practice.
+        # Show the generic best practice
         response_parts.append(f"💡 **General Best Practice:** {base_remedy}")
+        
+        # Add fallback: show specific issues with evidence (non-LLM suggestions)
+        if issue_items and len(issue_items) > 0:
+            examples = []
+            max_examples = 3
+            
+            for item in issue_items[:max_examples]:
+                # Skip if we already tried to show this as an LLM suggestion
+                if item.get('suggestion'):
+                    continue
+                
+                evidence = item.get('evidence', '').strip()
+                title = item.get('title', '').strip()
+                url = item.get('url', '').strip()
+                
+                if evidence and 'LLM:' not in evidence:
+                    example_parts = []
+                    if title:
+                        example_parts.append(f"**{title}**")
+                    example_parts.append(f"{evidence}")
+                    if url:
+                        display_url = url if len(url) <= 60 else url[:57] + "..."
+                        example_parts.append(f"({display_url})")
+                    
+                    examples.append(" - ".join(example_parts))
+                    
+                    if item.get('language', 'en') != 'en':
+                        lang_code = item.get('language', '').upper()
+                        examples[-1] += f" (🌐 Translated from {lang_code})"
+                elif title or url:
+                    if title and url:
+                        display_url = url if len(url) <= 60 else url[:57] + "..."
+                        examples.append(f"**{title}** ({display_url})")
+                    elif title:
+                        examples.append(f"**{title}**")
+            
+            if examples:
+                example_text = "\n\n**Affected content:**\n" + "\n".join(f"• {ex}" for ex in examples)
+                
+                total_count = len([i for i in issue_items if not i.get('suggestion')])
+                if total_count > max_examples:
+                    example_text += f"\n\n*...and {total_count - max_examples} more instance{'s' if total_count - max_examples > 1 else ''}*"
+                
+                response_parts.append(example_text)
     
     # Don't add the old "specific examples" section - we've already shown everything above
     return "\n".join(response_parts)
