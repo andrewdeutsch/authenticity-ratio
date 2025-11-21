@@ -275,6 +275,10 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
         progress_bar.progress(100)
         progress_animator.show("Analysis complete!", "✅")
         progress_animator.clear()
+        
+        # Clear the progress container from session state so it doesn't appear on results page
+        if 'progress_container' in st.session_state:
+            st.session_state['progress_container'] = None
 
         st.success(f"✅ Analysis completed successfully! Analyzed {len(normalized_content)} content items.")
 

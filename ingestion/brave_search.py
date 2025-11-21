@@ -129,7 +129,7 @@ try:
 except Exception:
     _PLAYWRIGHT_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('ingestion.page_fetcher')
 
 BRAVE_SEARCH_URL = "https://search.brave.com/search"
 
