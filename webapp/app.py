@@ -750,7 +750,7 @@ st.markdown("""
         font-size: 0.5rem !important;
         color: white !important;
         z-index: 10;
-        opacity: 0.24 !important;
+        opacity: 0.64 !important;
         text-align: center !important;
         width: 80%;
         max-width: 80%;
