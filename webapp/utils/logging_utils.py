@@ -134,7 +134,7 @@ class ProgressAnimator:
         """
         Process a log message to make it display-friendly.
         
-        Intelligently truncates long query strings while preserving:
+        Intelligently truncates long messages while preserving:
         - Timestamps
         - Logger names
         - Log levels (WARNING, ERROR, INFO)
@@ -149,34 +149,42 @@ class ProgressAnimator:
         import re
         
         # Pattern to match standard log format: timestamp - logger - level - message
-        # Example: "2025-11-20 21:56:09.973 - ingestion.brave_search - WARNING - Fetching ..."
-        log_pattern = r'^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[.,]\d{3})\s*-\s*([^\s-]+)\s*-\s*(\w+)\s*-\s*(.+)$'
+        # Handle both comma and period in timestamp (e.g., "22:08:24,779" or "22:08:24.779")
+        log_pattern = r'^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[.,]\d{3})\s*-\s*([^\s]+)\s*-\s*(\w+)\s*-\s*(.+)$'
         
         match = re.match(log_pattern, log_message)
         if match:
             timestamp, logger_name, level, message = match.groups()
             
-            # Truncate query strings in the message
-            # Look for patterns like "query=..." or "for query=..."
-            if 'query=' in message.lower():
-                # Find the query portion and truncate it
-                query_pattern = r'(query=)([^,]+)(.*)'
-                query_match = re.search(query_pattern, message, re.IGNORECASE)
-                if query_match:
-                    prefix = query_match.group(1)
-                    query_value = query_match.group(2)
-                    suffix = query_match.group(3)
-                    
-                    # Truncate the query value if it's too long
-                    max_query_length = 50
-                    if len(query_value) > max_query_length:
-                        query_value = query_value[:max_query_length] + "..."
-                    
-                    # Reconstruct the message
-                    message = message[:query_match.start()] + prefix + query_value + suffix
+            # For very long messages, show only the most relevant part
+            # Priority: show warnings/errors in full, truncate info messages
+            if level in ['WARNING', 'ERROR', 'CRITICAL']:
+                # Keep warnings/errors mostly intact, just limit extreme length
+                max_message_length = 200
+            else:
+                # For INFO/DEBUG, be more aggressive with truncation
+                max_message_length = 100
+                
+                # If message contains query string, truncate it
+                if 'query=' in message.lower():
+                    # Find the query portion and truncate it
+                    query_pattern = r'(query=)([^,\)]+)'
+                    query_match = re.search(query_pattern, message, re.IGNORECASE)
+                    if query_match:
+                        prefix_text = message[:query_match.start()]
+                        query_prefix = query_match.group(1)
+                        query_value = query_match.group(2)
+                        suffix_text = message[query_match.end():]
+                        
+                        # Truncate the query value if it's too long
+                        max_query_length = 40
+                        if len(query_value) > max_query_length:
+                            query_value = query_value[:max_query_length] + "..."
+                        
+                        # Reconstruct the message
+                        message = prefix_text + query_prefix + query_value + suffix_text
             
-            # Truncate the overall message if still too long
-            max_message_length = 150
+            # Final truncation if still too long
             if len(message) > max_message_length:
                 message = message[:max_message_length] + "..."
             
@@ -184,7 +192,7 @@ class ProgressAnimator:
             return f"{timestamp} - {logger_name} - {level} - {message}"
         else:
             # If it doesn't match the expected format, just truncate the whole thing
-            max_length = 200
+            max_length = 150
             if len(log_message) > max_length:
                 return log_message[:max_length] + "..."
             return log_message

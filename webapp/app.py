@@ -745,12 +745,15 @@ st.markdown("""
 
     .progress-logs {
         margin-top: 0.75rem;
-        font-size: 0.55rem;
+        margin-left: auto;
+        margin-right: auto;
+        font-size: 0.6rem;
         color: white;
+        z-index: 10;
         opacity: 0.24;
-        text-align: left;
-        width: 100%;
-        max-width: 100%;
+        text-align: center;
+        width: 80%;
+        max-width: 80%;
         overflow: hidden;
         font-family: monospace;
         line-height: 1.3;
@@ -761,7 +764,7 @@ st.markdown("""
     .progress-log-entry {
         white-space: pre-wrap;
         word-wrap: break-word;
-        word-break: break-all;
+        word-break: normal;
         overflow-wrap: anywhere;
         max-width: 100%;
         overflow: hidden;
