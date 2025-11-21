@@ -30,7 +30,9 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
                 meta = json.loads(meta)
             except:
                 meta = {}
-        elif meta is None:
+        
+        # Ensure meta is a dict (handle None or other types)
+        if not isinstance(meta, dict):
             meta = {}
 
         # Extract detected attributes

@@ -888,7 +888,21 @@ def show_analyze_page():
                 if guidelines:
                     # Guidelines found - show checkbox
                     word_count = metadata.get('word_count', 0) if metadata else 0
-                    st.success(f"✅ Guidelines found ({word_count:,} words)")
+                    
+                    # Header with delete option
+                    col_msg, col_del = st.columns([5, 1])
+                    with col_msg:
+                        st.success(f"✅ Guidelines found ({word_count:,} words)")
+                    with col_del:
+                        if st.button("🗑️", key=f"del_guidelines_{brand_id_normalized}", help="Delete these guidelines"):
+                            if processor.delete_guidelines(brand_id_normalized):
+                                st.success("Deleted!")
+                                # Clear session state
+                                if 'use_guidelines' in st.session_state:
+                                    del st.session_state['use_guidelines']
+                                if 'brand_id_for_guidelines' in st.session_state:
+                                    del st.session_state['brand_id_for_guidelines']
+                                st.rerun()
                     
                     use_guidelines = st.checkbox(
                         "Use brand guidelines for coherence analysis",
