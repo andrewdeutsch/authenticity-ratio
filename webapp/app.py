@@ -785,6 +785,48 @@ st.markdown("""
         border: none !important;
         font-family: monospace !important;
     }
+
+    /* Override all Streamlit wrapper classes within progress logs */
+    .progress-logs *,
+    .progress-log-entry * {
+        font-size: 0.5rem !important;
+        color: white !important;
+        background: transparent !important;
+        font-family: monospace !important;
+    }
+
+    /* Target specific Streamlit emotion cache classes */
+    .progress-logs [class*="st-emotion-cache"],
+    .progress-log-entry [class*="st-emotion-cache"] {
+        font-size: 0.5rem !important;
+        color: white !important;
+        background: transparent !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        font-family: monospace !important;
+    }
+
+    /* Override Streamlit markdown container */
+    .progress-logs .stMarkdown,
+    .progress-log-entry .stMarkdown {
+        font-size: 0.5rem !important;
+        color: white !important;
+        background: transparent !important;
+    }
+
+    /* Override any p, span, div within logs */
+    .progress-logs p,
+    .progress-logs span,
+    .progress-logs div,
+    .progress-log-entry p,
+    .progress-log-entry span,
+    .progress-log-entry div {
+        font-size: 0.5rem !important;
+        color: white !important;
+        background: transparent !important;
+        font-family: monospace !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
