@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import sys
 import os
+from pathlib import Path
 
 # Ensure project root is on PYTHONPATH
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
