@@ -1804,17 +1804,6 @@ def show_results_page():
                     if remedy:
                         st.info(f"**💡 Recommended Fix:** {remedy}")
 
-                    # Show first few affected pages
-                    with st.expander(f"View affected content ({len(type_issues)} items)"):
-                        for idx, issue in enumerate(type_issues[:10]):  # Limit to first 10
-                            st.markdown(f"- **{issue['title']}**")
-                            if issue['evidence']:
-                                st.caption(f"  📝 {issue['evidence']}")
-                            if issue['url']:
-                                st.caption(f"  🔗 {issue['url']}")
-                        if len(type_issues) > 10:
-                            st.caption(f"... and {len(type_issues) - 10} more items")
-
                     st.markdown("")  # Spacing
     else:
         st.success("✅ No major issues detected! Your content shows strong trust signals across all dimensions.")

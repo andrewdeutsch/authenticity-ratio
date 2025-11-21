@@ -30,19 +30,19 @@ def _generate_contextual_remedy(issue_type: str, dimension: str, llm_suggestions
     
     # Create context-specific guidance based on common patterns
     if 'punctuation' in all_suggestions_text or 'spacing' in all_suggestions_text or 'colon' in all_suggestions_text:
-        return f"Review all content for proper punctuation, spacing, and formatting consistency. Pay special attention to colons, commas, and spacing after punctuation marks. {base_remedy.split('.')[0]}."
+        return "Review all content for proper punctuation, spacing, and formatting consistency. Pay special attention to colons, commas, and spacing after punctuation marks."
     
     elif 'title' in all_suggestions_text and 'align' in all_suggestions_text:
-        return f"Ensure page titles accurately reflect the content and purpose of each page. Titles should be descriptive and aligned with the actual content to improve clarity and SEO. {base_remedy.split('.')[0]}."
+        return "Ensure page titles accurately reflect the content and purpose of each page. Titles should be descriptive and aligned with the actual content to improve clarity and SEO."
     
     elif 'readability' in all_suggestions_text or 'clarity' in all_suggestions_text:
-        return f"Focus on improving content readability and clarity. Break up long sentences, use clear headings, and ensure the content flows logically. {base_remedy.split('.')[0]}."
+        return "Focus on improving content readability and clarity. Break up long sentences, use clear headings, and ensure the content flows logically."
     
     elif 'consistency' in all_suggestions_text or 'inconsistent' in all_suggestions_text:
-        return f"Audit content across all pages to ensure consistency in messaging, terminology, and formatting. Create a style guide if one doesn't exist. {base_remedy.split('.')[0]}."
+        return "Audit content across all pages to ensure consistency in messaging, terminology, and formatting. Create a style guide if one doesn't exist."
     
     elif 'metadata' in all_suggestions_text or 'schema' in all_suggestions_text:
-        return f"Implement comprehensive metadata and structured data across all pages. This improves discoverability and helps search engines understand your content. {base_remedy.split('.')[0]}."
+        return "Implement comprehensive metadata and structured data across all pages. This improves discoverability and helps search engines understand your content."
     
     else:
         # Default: use the first sentence of base remedy with a contextual prefix
@@ -229,10 +229,10 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             
             # FIX #4: Apply confidence threshold (≥0.7 for improvement_opportunity, ≥0.8 for others)
             confidence = item.get('confidence', 0.0)
-            issue_type = item.get('issue', '')
+            issue_type_val = item.get('issue', '')
             
             # Lower threshold for improvement opportunities (high-scoring content)
-            min_confidence = 0.7 if 'improvement' in issue_type.lower() or 'opportunity' in issue_type.lower() else 0.8
+            min_confidence = 0.7 if 'improvement' in issue_type_val.lower() or 'opportunity' in issue_type_val.lower() else 0.8
             
             if confidence < min_confidence:
                 logger.debug(f"Filtering low-confidence suggestion (confidence={confidence:.2f}, threshold={min_confidence}): {suggestion[:100]}")
@@ -329,46 +329,44 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
     # Build the response
     response_parts = []
     
-    # If we have LLM suggestions, show them in numbered list with URLs first
+    # If we have LLM suggestions, show them in numbered list
     if llm_suggestions:
         for idx, llm_sug in enumerate(llm_suggestions, 1):
             suggestion_text = llm_sug['suggestion']
             url = llm_sug.get('url', '')
             title = llm_sug.get('title', '')
             
-            # Format the suggestion with URL first, then suggestion
+            # Format the suggestion with URL and text on same line
             lang_indicator = ""
             if llm_sug.get('language', 'en') != 'en':
                 lang_code = llm_sug.get('language', '').upper()
                 lang_indicator = f" (🌐 Translated from {lang_code})"
             
-            # Build the numbered item with URL first
+            # Format: {number}. 🔗 {url} {suggestion_text}
             if url:
-                response_parts.append(f"{idx}. 🔗 {url}")
-                response_parts.append(f"   {suggestion_text}{lang_indicator}")
+                response_parts.append(f"{idx}. 🔗 {url} {suggestion_text}{lang_indicator}")
             else:
                 response_parts.append(f"{idx}. {suggestion_text}{lang_indicator}")
             
             # Add page title as sub-bullet if available
             if title:
-                response_parts.append(f"   * From: {title[:60]}...")
-        
+                # Truncate title to ~60 chars
+                truncated_title = title[:60] + "..." if len(title) > 60 else title
+                response_parts.append(f"    * From: {truncated_title}")
+                
+        # Add contextual General Best Practice at the end
         # Generate context-specific best practice based on the suggestions
-        if len(llm_suggestions) > 0:
-            # Create a more relevant best practice based on the issue type
-            contextual_remedy = _generate_contextual_remedy(issue_type, dimension, llm_suggestions, base_remedy)
-            response_parts.append(f"\n💡 **General Best Practice:** {contextual_remedy}")
+        contextual_remedy = _generate_contextual_remedy(issue_type, dimension, llm_suggestions, base_remedy)
+        response_parts.append(f"\n💡 **General Best Practice:** {contextual_remedy}")
+        
     else:
         # No valid LLM suggestions (filtered out or none provided)
-        # Show the generic best practice
-        response_parts.append(f"💡 **General Best Practice:** {base_remedy}")
-        
         # Add fallback: show specific issues with evidence (non-LLM suggestions)
         if issue_items and len(issue_items) > 0:
             examples = []
             max_examples = 3
             
-            for item in issue_items[:max_examples]:
+            for idx, item in enumerate(issue_items[:max_examples], 1):
                 # Skip if we already tried to show this as an LLM suggestion
                 if item.get('suggestion'):
                     continue
@@ -377,37 +375,36 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                 title = item.get('title', '').strip()
                 url = item.get('url', '').strip()
                 
-                if evidence and 'LLM:' not in evidence:
-                    example_parts = []
-                    if title:
-                        example_parts.append(f"**{title}**")
-                    example_parts.append(f"{evidence}")
-                    if url:
-                        display_url = url if len(url) <= 60 else url[:57] + "..."
-                        example_parts.append(f"({display_url})")
-                    
-                    examples.append(" - ".join(example_parts))
-                    
+                # Format similar to LLM suggestions: number. 🔗 url evidence
+                if url and evidence and 'LLM:' not in evidence:
+                    lang_indicator = ""
                     if item.get('language', 'en') != 'en':
                         lang_code = item.get('language', '').upper()
-                        examples[-1] += f" (🌐 Translated from {lang_code})"
-                elif title or url:
-                    if title and url:
-                        display_url = url if len(url) <= 60 else url[:57] + "..."
-                        examples.append(f"**{title}** ({display_url})")
-                    elif title:
-                        examples.append(f"**{title}**")
+                        lang_indicator = f" (🌐 Translated from {lang_code})"
+                    
+                    examples.append(f"{idx}. 🔗 {url} {evidence}{lang_indicator}")
+                    
+                    if title:
+                        truncated_title = title[:60] + "..." if len(title) > 60 else title
+                        examples.append(f"    * From: {truncated_title}")
             
             if examples:
-                example_text = "\n\n**Affected content:**\n" + "\n".join(f"• {ex}" for ex in examples)
+                # If we have examples but no LLM suggestions, list them
+                example_text = "\n".join(examples)
                 
                 total_count = len([i for i in issue_items if not i.get('suggestion')])
                 if total_count > max_examples:
                     example_text += f"\n\n*...and {total_count - max_examples} more instance{'s' if total_count - max_examples > 1 else ''}*"
                 
                 response_parts.append(example_text)
+            else:
+                response_parts.append("Review content for this issue.")
+        else:
+             response_parts.append("Review content for this issue.")
+
+        # Add General Best Practice (Generic) at the end
+        response_parts.append(f"\n💡 **General Best Practice:** {base_remedy}")
     
-    # Don't add the old "specific examples" section - we've already shown everything above
     return "\n".join(response_parts)
 
 

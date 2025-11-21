@@ -404,16 +404,6 @@ class ContentScorer:
                         'grievance redressal', 'global privacy'
                     ]
                     
-                    # Reject if evidence doesn't show CONTRAST
-                    if 'contrast:' not in evidence and 'vs' not in evidence:
-                        logger.debug(f"Filtered inconsistent_voice: no contrast shown in evidence")
-                        continue
-                    
-                    # Reject if evidence contains footer indicators
-                    if any(indicator in evidence for indicator in footer_indicators):
-                        logger.debug(f"Filtered inconsistent_voice: footer text detected")
-                        continue
-                    
                     # Reject if evidence is just repeated text (same phrase appears twice)
                     import re
                     quotes = re.findall(r"'([^']+)'", evidence)
@@ -783,6 +773,12 @@ class ContentScorer:
                             llm_issue['evidence'] = f"Verified broken links: {', '.join(broken_urls)}"
                             logger.info(f"Verified {len(actual_broken_links)} broken links for content {content.content_id}")
                     
+                    # Verify quotes exist in content (prevent hallucinations)
+                    # This applies to ALL issue types that provide quotes
+                    if not self._verify_issue_quotes(content, llm_issue):
+                        logger.warning(f"Filtered LLM issue '{issue_type}' - quote not found in content")
+                        continue
+                    
                     # Map LLM issue type to attribute ID
                     attr_id = map_llm_issue_to_attribute(issue_type)
                     
@@ -801,48 +797,95 @@ class ContentScorer:
                             if attr.attribute_id == attr_id:
                                 # Boost confidence when both LLM and detector agree
                                 attr.confidence = min(1.0, attr.confidence * 1.2)
-                                # Enhance evidence with LLM reasoning
-                                llm_evidence = llm_issue.get('evidence', '')
-                                if llm_evidence and llm_evidence not in attr.evidence:
-                                    attr.evidence = f"{attr.evidence} | LLM: {llm_evidence}"
+                                # Add LLM evidence if not present
+                                if llm_issue.get('evidence') and llm_issue['evidence'] not in attr.evidence:
+                                    attr.evidence += f" | LLM Note: {llm_issue['evidence']}"
+                                # Add suggestion
+                                if llm_issue.get('suggestion'):
+                                    attr.suggestion = llm_issue['suggestion']
                                 break
                     else:
-                        # Only LLM found it - create new attribute
-                        # Get label from rubric or use issue type
-                        label = llm_issue.get('type', '').replace('_', ' ').title()
-                        
-                        # Determine value based on severity
-                        severity = llm_issue.get('severity', 'medium')
-                        if severity == 'high':
-                            value = 2.0
-                        elif severity == 'medium':
-                            value = 5.0
-                        else:  # low
-                            value = 7.0
-                        
-                        # Extract suggestion from LLM issue
-                        suggestion = llm_issue.get('suggestion', None)
+                        # LLM found an issue not detected by the attribute detector
+                        # Map it to a new DetectedAttribute
+                        # Import DetectedAttribute if not already imported, but it should be available in the scope
+                        from .attribute_detector import DetectedAttribute
                         
                         new_attr = DetectedAttribute(
                             attribute_id=attr_id,
                             dimension=dimension,
-                            label=label,
-                            value=value,
-                            evidence=f"LLM: {llm_issue.get('evidence', 'Issue detected')}",
-                            confidence=0.6,  # Lowered from 0.7 for more LLM-only attributes
-                            suggestion=suggestion  # Preserve LLM suggestion
+                            value=5,  # Default low score for issues
+                            confidence=llm_issue.get('confidence', 0.8),
+                            evidence=llm_issue.get('evidence', 'Detected by AI analysis'),
+                            label=llm_issue.get('type', attr_id).replace('_', ' ').title(),
+                            suggestion=llm_issue.get('suggestion')
                         )
                         merged_attrs.append(new_attr)
-                        detector_attr_ids.add(attr_id)
-                        logger.info(f"[MERGE DIAGNOSTIC] Added LLM-only attribute '{label}' (value={value}) for {dimension} dimension")
-        
-        # DIAGNOSTIC: Log final merged attributes by dimension
-        attrs_by_dim = {}
-        for attr in merged_attrs:
-            attrs_by_dim[attr.dimension] = attrs_by_dim.get(attr.dimension, 0) + 1
-        logger.info(f"[MERGE DIAGNOSTIC] Final merged attributes by dimension: {attrs_by_dim}")
-        
+
         return merged_attrs
+
+    def _verify_issue_quotes(self, content: NormalizedContent, issue: Dict[str, Any]) -> bool:
+        """
+        Verify that quotes in the issue actually exist in the content.
+        Prevents hallucinations where LLM invents text.
+        
+        Args:
+            content: Content object
+            issue: Issue dictionary from LLM
+            
+        Returns:
+            True if quotes are valid (or no quotes to check), False if hallucinated
+        """
+        # Get text to check
+        evidence = issue.get('evidence', '')
+        suggestion = issue.get('suggestion', '')
+        
+        # Combine title and body for search
+        full_text = (content.title + " " + content.body).lower()
+        
+        # Extract quotes from evidence (e.g., "EXACT QUOTE: 'text'")
+        import re
+        evidence_quotes = re.findall(r"'([^']+)'", evidence)
+        
+        # Extract quotes from suggestion (e.g., "Change 'text' -> 'new'")
+        # We only care about the "before" part
+        suggestion_quotes = []
+        if "Change '" in suggestion:
+            parts = suggestion.split("Change '")
+            for part in parts[1:]:
+                quote_end = part.find("'")
+                if quote_end != -1:
+                    suggestion_quotes.append(part[:quote_end])
+        
+        # Check all extracted quotes
+        all_quotes = evidence_quotes + suggestion_quotes
+        
+        if not all_quotes:
+            return True  # No quotes to verify
+            
+        for quote in all_quotes:
+            quote_clean = quote.lower().strip()
+            if len(quote_clean) < 10:
+                continue  # Skip very short quotes (too common)
+                
+            # Check if quote exists in content
+            # Use simple substring search first
+            if quote_clean in full_text:
+                continue
+                
+            # Try fuzzy match (ignore whitespace differences)
+            # Normalize whitespace in both
+            quote_norm = " ".join(quote_clean.split())
+            text_norm = " ".join(full_text.split())
+            
+            if quote_norm in text_norm:
+                continue
+                
+            # Quote not found
+            logger.debug(f"Quote verification failed: '{quote_clean}' not found in content")
+            return False
+            
+        return True
+
     
     def batch_score_content(self, content_list: List[NormalizedContent],
                           brand_context: Dict[str, Any]) -> List[ContentScores]:
