@@ -70,6 +70,12 @@ class ProgressAnimator:
             self.logs = self.logs[-self.max_logs:]
         # Re-render with the new log
         self._render()
+        
+        # DEBUG: Pause for 30 seconds after first log to allow DOM inspection
+        if len(self.logs) == 1:
+            import time
+            time.sleep(30)
+        
         # Small sleep to allow Streamlit to update UI
         time.sleep(0.01)
 
