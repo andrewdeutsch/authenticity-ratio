@@ -889,10 +889,9 @@ def show_analyze_page():
                 # Check if we should ignore these guidelines for this session
                 ignore_key = f"ignore_guidelines_{brand_id_normalized}"
                 
-                if guidelines and not st.session_state.get(ignore_key, False):
+                if guidelines:
                     # Guidelines found - show toggle
                     word_count = metadata.get('word_count', 0) if metadata else 0
-                    st.success(f"✅ Guidelines found ({word_count:,} words)")
                     
                     use_guidelines = st.toggle(
                         "Use brand guidelines for coherence analysis",
@@ -901,19 +900,16 @@ def show_analyze_page():
                         help="Toggle off to exclude these guidelines from this analysis"
                     )
                     
-                    # If toggled off, set ignore flag
-                    if not use_guidelines:
-                        st.session_state[ignore_key] = True
-                        # Clear session state
-                        if 'use_guidelines' in st.session_state:
-                            del st.session_state['use_guidelines']
-                        if 'brand_id_for_guidelines' in st.session_state:
-                            del st.session_state['brand_id_for_guidelines']
-                        st.rerun()
+                    # Apply opacity styling based on toggle state
+                    opacity_style = "" if use_guidelines else "opacity: 0.5;"
+                    
+                    st.markdown(f'<div style="{opacity_style}">', unsafe_allow_html=True)
+                    st.success(f"✅ Guidelines found ({word_count:,} words)")
                     
                     # Preview option
                     with st.expander("📋 View guidelines preview", expanded=False):
                         st.text_area("", guidelines, height=400, disabled=True, label_visibility="collapsed")
+                    st.markdown('</div>', unsafe_allow_html=True)
                     
                     # Store in session state
                     st.session_state['use_guidelines'] = use_guidelines
