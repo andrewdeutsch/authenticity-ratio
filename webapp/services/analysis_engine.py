@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import List, Dict, Any
 
 from webapp.services.brand_discovery import detect_brand_owned_url
+from webapp.utils.logging_utils import ProgressAnimator, StreamlitLogHandler
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +46,22 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
 
     # Progress tracking
     progress_bar = st.progress(0)
-    status_text = st.empty()
+    progress_animator = ProgressAnimator()
+    
+    # Set up log capture for the entire analysis process
+    # Attach to root logger to capture logs from all modules
+    root_logger = logging.getLogger()
+    original_level = root_logger.level
+    root_logger.setLevel(logging.INFO)
+    log_handler = StreamlitLogHandler(progress_animator)
+    log_handler.setLevel(logging.INFO)
+    log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    log_handler.setFormatter(log_formatter)
+    root_logger.addHandler(log_handler)
 
     try:
         # Step 1: Import modules
-        status_text.text("Initializing pipeline components...")
+        progress_animator.show("Initializing pipeline components...", "🔧")
         progress_bar.progress(10)
 
         from ingestion.brave_search import collect_brave_pages, fetch_page
@@ -70,7 +82,7 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
             YouTubeScraper = None
 
         # Step 2: Data Ingestion
-        status_text.text(f"Ingesting content from {', '.join(sources)}...")
+        progress_animator.show(f"Ingesting content from {', '.join(sources)}...", "📥")
         progress_bar.progress(20)
 
         all_content = []
@@ -188,14 +200,14 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
             return
 
         # Step 3: Normalization
-        status_text.text("Normalizing content...")
+        progress_animator.show("Normalizing content...", "🔄")
         progress_bar.progress(40)
 
         normalizer = ContentNormalizer()
         normalized_content = normalizer.normalize_content(all_content)
 
         # Step 4: Scoring
-        status_text.text("Scoring content on 5D Trust dimensions...")
+        progress_animator.show("Scoring content on 5D Trust dimensions...", "📊")
         progress_bar.progress(60)
 
         scoring_pipeline = ScoringPipeline()
@@ -214,7 +226,7 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
         pipeline_run = scoring_pipeline.run_scoring_pipeline(normalized_content, brand_config)
 
         # Step 5: Generate Reports
-        status_text.text("Generating reports...")
+        progress_animator.show("Generating reports...", "📄")
         progress_bar.progress(80)
 
         scores_list = pipeline_run.classified_scores or []
@@ -254,7 +266,8 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
 
         # Complete
         progress_bar.progress(100)
-        status_text.text("✓ Analysis complete!")
+        progress_animator.show("Analysis complete!", "✅")
+        progress_animator.clear()
 
         st.success(f"✅ Analysis completed successfully! Analyzed {len(normalized_content)} content items.")
 
@@ -270,3 +283,13 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
         st.error(f"❌ Analysis failed: {e}")
         import traceback
         st.code(traceback.format_exc())
+    
+    finally:
+        # Clean up log handler
+        try:
+            if log_handler and root_logger:
+                root_logger.removeHandler(log_handler)
+                if original_level is not None:
+                    root_logger.setLevel(original_level)
+        except:
+            pass

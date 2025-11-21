@@ -138,32 +138,28 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
 
                 progress_animator.show(f"Collecting from pool of {pool_size} URLs with {collection_strategy} filtering", "🔄")
 
+                # Set up log capture for the entire search process
+                # Attach to root logger to capture logs from all modules
+                search_logger = logging.getLogger()  # Root logger
+                original_level = search_logger.level
+                search_logger.setLevel(logging.INFO)  # Ensure logger captures INFO level
+                log_handler = StreamlitLogHandler(progress_animator)
+                log_handler.setLevel(logging.INFO)
+                # Use full formatter with timestamp
+                log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+                log_handler.setFormatter(log_formatter)
+                search_logger.addHandler(log_handler)
+
                 if search_provider == 'brave':
                     from ingestion.brave_search import collect_brave_pages
-                    progress_animator.show(f"Executing Brave Search API requests ({brand_owned_ratio}% brand-owned target)", "⚡")
+                    progress_animator.show(f"Executing Brave Search API requests ({brand_owned_ratio}% brand-owned target)", "🌐")
 
-                    # Set up log capture for the search process
-                    search_logger = logging.getLogger('ingestion.brave_search')
-                    original_level = search_logger.level
-                    search_logger.setLevel(logging.INFO)  # Ensure logger captures INFO level
-                    log_handler = StreamlitLogHandler(progress_animator)
-                    log_handler.setLevel(logging.INFO)
-                    # Use full formatter with timestamp
-                    log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-                    log_handler.setFormatter(log_formatter)
-                    search_logger.addHandler(log_handler)
-
-                    try:
-                        pages = collect_brave_pages(
-                            query=query,
-                            target_count=web_pages,
-                            pool_size=pool_size,
-                            url_collection_config=url_collection_config
-                        )
-                    finally:
-                        # Clean up handler and restore original level
-                        search_logger.removeHandler(log_handler)
-                        search_logger.setLevel(original_level)
+                    pages = collect_brave_pages(
+                        query=query,
+                        target_count=web_pages,
+                        pool_size=pool_size,
+                        url_collection_config=url_collection_config
+                    )
                     # Convert to search result format and show URLs as we process them
                     total_pages = len(pages)
                     for idx, page in enumerate(pages):
