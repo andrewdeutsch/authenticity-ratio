@@ -13,6 +13,8 @@ from config.settings import SETTINGS
 from data.models import NormalizedContent, ContentScores, DetectedAttribute
 from scoring.attribute_detector import TrustStackAttributeDetector
 from scoring.scoring_llm_client import LLMScoringClient
+from scoring.verification_manager import VerificationManager
+from scoring.linguistic_analyzer import LinguisticAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,10 @@ class ContentScorer:
                 self.attribute_detector = None
         else:
             self.attribute_detector = None
+            
+        # Initialize new managers
+        self.verification_manager = VerificationManager()
+        self.linguistic_analyzer = LinguisticAnalyzer()
     
     def score_content(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> DimensionScores:
         """
@@ -116,158 +122,36 @@ class ContentScorer:
         return self._get_llm_score(prompt)
     
     def _score_verification(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
-        """Score Verification dimension: factual accuracy vs trusted DBs"""
+        """Score Verification dimension: factual accuracy vs trusted DBs (Fact-Checked)"""
         
         # Detect if content is from brand's own domain
         content_url = getattr(content, 'url', '').lower()
         brand_keywords = [kw.lower() for kw in brand_context.get('keywords', [])]
         is_brand_owned = any(keyword in content_url for keyword in brand_keywords if keyword)
         
-        # Adjust verification criteria based on content ownership
-        if is_brand_owned:
-            ownership_guidance = """
-            CONTENT OWNERSHIP: Brand-Owned Content (Official Brand Domain)
-            
-            ADJUSTED VERIFICATION CRITERIA:
-            - Brand statements about their OWN products/services are AUTHORITATIVE (not unverified)
-            - DO NOT flag self-descriptive claims like "Our platform offers X feature"
-            - ONLY flag these types of unverified claims:
-              1. Statistical claims without sources ("99% customer satisfaction", "10x faster")
-              2. Comparative claims without proof ("#1 in industry", "better than competitors")
-              3. External facts needing citations ("According to studies...", "Research shows...")
-              4. Extraordinary claims that seem suspicious
-            
-            EXAMPLES FOR BRAND-OWNED CONTENT:
-            - NOT unverified: "Mastercard Engage offers a directory of approved specialists"
-            - NOT unverified: "Our API enables secure payment processing"
-            - UNVERIFIED: "We have 99% customer satisfaction" (needs source)
-            - UNVERIFIED: "We're the #1 payment company globally" (needs proof)
-            """
-        else:
-            ownership_guidance = """
-            CONTENT OWNERSHIP: Third-Party Content
-            
-            STANDARD VERIFICATION CRITERIA:
-            - Apply strict verification standards
-            - Flag all factual claims about the brand without sources
-            - Flag statistics, rankings, and comparative claims
-            - Require citations for all substantive claims
-            """
+        # Use VerificationManager for RAG-based verification
+        logger.info(f"Starting RAG verification for {content.content_id}")
+        verification_result = self.verification_manager.verify_content(content)
         
-        prompt = f"""
-        Score the VERIFICATION of this content and identify specific issues.
+        rag_score = verification_result.get('score', 0.5)
+        rag_issues = verification_result.get('issues', [])
         
-        {ownership_guidance}
-        
-        Verification evaluates: factual accuracy, consistency with known facts
-        
-        Content:
-        Title: {content.title}
-        Body: {content.body[:2000]}
-        URL: {content_url}
-        
-        Brand Context: {brand_context.get('keywords', [])}
-        
-        CRITICAL REQUIREMENTS:
-        1. For EACH issue, provide an EXACT QUOTE from the content as evidence
-        2. Do NOT report issues you cannot support with specific text from the content
-        3. Include a confidence score (0.0-1.0) for each issue
-        4. Only report issues with confidence >= 0.7
-        
-        EXAMPLES:
-        
-        Example 1 - High Verification (0.9):
-        Content: "According to the Federal Reserve's 2023 report, inflation decreased to 3.2%."
-        Response: {{"score": 0.9, "issues": []}}
-        
-        Example 2 - Low Verification (0.3):
-        Content: "We are the world's #1 payment company with 99% customer satisfaction."
-        Response: {{
-            "score": 0.3,
-            "issues": [
-                {{
-                    "type": "unverified_claims",
-                    "confidence": 0.9,
-                    "severity": "high",
-                    "evidence": "EXACT QUOTE: 'world's #1 payment company with 99% customer satisfaction'",
-                    "suggestion": "Add citations for ranking and satisfaction claims"
-                }}
-            ]
-        }}
-        
-        Respond with JSON in this exact format:
-        {{
-            "score": 0.5,
-            "issues": [
-                {{
-                    "type": "unverified_claims",
-                    "confidence": 0.85,
-                    "severity": "high",
-                    "evidence": "EXACT QUOTE: 'specific text from content'",
-                    "suggestion": "Add citations to authoritative sources"
-                }}
-            ]
-        }}
-        
-        Scoring criteria:
-        - 0.8-1.0: Highly verifiable facts, consistent with known information
-        - 0.6-0.8: Mostly accurate, minor inconsistencies
-        - 0.4-0.6: Some accurate info, some questionable claims
-        - 0.2-0.4: Several inaccuracies or unverifiable claims
-        - 0.0-0.2: Major inaccuracies or completely unverifiable
-        
-        Common verification issues (only report if you can quote specific text):
-        - "unverified_claims": Claims without sources (quote the claim)
-        - "fake_engagement": Suspicious engagement patterns (quote suspicious metrics)
-        - "unlabeled_ads": Sponsored content without disclosure (quote promotional language)
-        
-        Return valid JSON with score (0.0-1.0) and issues array. ONLY include issues with exact quotes and confidence >= 0.7.
-        """
-        
-        result = self._get_llm_score_with_reasoning(prompt)
-        
-        # Filter out low-confidence issues
-        issues = result.get('issues', [])
-        filtered_issues = []
-        
-        # DIAGNOSTIC: Log all verification issues before filtering
-        if issues:
-            logger.info(f"[VERIFICATION DIAGNOSTIC] LLM detected {len(issues)} verification issues for {content.content_id[:30]}...")
-            for issue in issues:
-                logger.info(f"  - Type: {issue.get('type')}, Confidence: {issue.get('confidence', 0.0):.2f}, Severity: {issue.get('severity')}")
-        
-        for issue in issues:
-            confidence = issue.get('confidence', 0.0)
-            if confidence >= 0.7:
-                filtered_issues.append(issue)
-            else:
-                logger.info(f"[VERIFICATION DIAGNOSTIC] Filtered low-confidence issue: {issue.get('type')} (confidence={confidence:.2f})")
-        
-        # Store LLM-identified issues in content metadata for later merging
+        # Store issues
         if not hasattr(content, '_llm_issues'):
             content._llm_issues = {}
-        content._llm_issues['verification'] = filtered_issues
+        content._llm_issues['verification'] = rag_issues
         
-        # DIAGNOSTIC: Log final count after filtering
-        logger.info(f"[VERIFICATION DIAGNOSTIC] After filtering: {len(filtered_issues)} verification issues stored for merging")
-        
-        base_score = result.get('score', 0.5)
-        
-        # Apply content-type multiplier from rubric configuration
-        content_type = self._determine_content_type(content)
-        multiplier = self._get_score_multiplier('verification', content_type)
-        
-        if multiplier != 1.0:
-            adjusted_score = min(1.0, base_score * multiplier)
-            logger.info(f"Verification scoring for {content.content_id[:20]}...")
-            logger.info(f"  Content type: {content_type}")
-            logger.info(f"  Base LLM score: {base_score:.3f} ({base_score*100:.1f}%)")
-            logger.info(f"  Multiplier applied: {multiplier:.2f}x")
-            logger.info(f"  Adjusted score: {adjusted_score:.3f} ({adjusted_score*100:.1f}%)")
-            return adjusted_score
-        
-        logger.debug(f"Verification score for {content_type}: {base_score:.3f} (no multiplier)")
-        return base_score
+        # Apply brand-owned logic (brand owned content is authoritative about itself)
+        if is_brand_owned:
+            # Boost score if it's brand owned, but still penalize for contradicted external facts
+            # If RAG found contradictions, keep the penalty. If it was just "unverified", be lenient.
+            has_contradictions = any(i['type'] == 'unverified_claims' and i.get('severity') == 'high' for i in rag_issues)
+            
+            if not has_contradictions:
+                logger.info("Brand-owned content with no contradictions - boosting verification score")
+                rag_score = max(rag_score, 0.9)
+                
+        return rag_score
     
     def _score_transparency(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
         """Score Transparency dimension: disclosures, clarity"""
@@ -342,7 +226,19 @@ class ContentScorer:
         # Detect content type to adjust scoring criteria
         content_type = self._determine_content_type(content)
         
+        # Run deterministic linguistic analysis
+        linguistic_data = self.linguistic_analyzer.analyze(content.body)
+        passive_voice_issues = linguistic_data.get('passive_voice', [])
+        readability = linguistic_data.get('readability', {})
+        
         # Build context guidance for the feedback step
+        deterministic_context = ""
+        if passive_voice_issues:
+            deterministic_context += f"\n\nDETECTED PASSIVE VOICE (Use these as evidence if relevant):\n" + "\n".join([f"- {s}" for s in passive_voice_issues])
+        
+        if readability.get('flesch_kincaid_grade', 0) > 12:
+            deterministic_context += f"\n\nDETECTED READABILITY ISSUE: Grade Level {readability.get('flesch_kincaid_grade')} (Too complex). Suggest simplifying."
+
         if brand_guidelines:
             # Use brand-specific guidelines
             guidelines_preview = brand_guidelines[:1500]  # First 1500 chars
@@ -356,6 +252,8 @@ class ContentScorer:
             CRITICAL: Compare the content against these SPECIFIC brand guidelines.
             Flag inconsistencies with the documented voice, tone, vocabulary, and style rules.
             Reference specific guideline sections in your suggestions.
+            
+            {deterministic_context}
             """
         elif content_type in ['landing_page', 'product_page', 'other']:
             context_guidance = """
@@ -373,7 +271,7 @@ class ContentScorer:
             the visual layout, making it appear jumbled. Do NOT flag product grids as 
             coherence issues unless there are actual contradictions or errors in the product 
             information itself.
-            """
+            """ + deterministic_context
         elif content_type in ['blog', 'article', 'news']:
             context_guidance = """
             CONTENT TYPE: Editorial/Blog/News
@@ -382,13 +280,13 @@ class ContentScorer:
             - Brand voice consistency throughout
             - No broken links or contradictions
             - High professional quality expected
-            """
+            """ + deterministic_context
         else:
             context_guidance = """
             CONTENT TYPE: General/Social
             
             Apply standard coherence criteria when providing feedback.
-            """
+            """ + deterministic_context
         
         # Step 1: Simple scoring prompt
         score_prompt = f"""

@@ -227,6 +227,36 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                     logger.debug(f"Filtering low-confidence suggestion (confidence={confidence:.2f}): {suggestion[:100]}")
                     continue
                 
+                # Filter out placeholder/template suggestions from the LLM
+                evidence_text = item.get('evidence', '')
+                
+                # Check if this is a placeholder response (LLM returned template text)
+                placeholder_indicators = [
+                    'single specific text that could be improved',
+                    'specific problematic text from content',
+                    'exact problematic text',
+                    'improved version',
+                    'brief explanation'
+                ]
+                
+                is_placeholder = False
+                for indicator in placeholder_indicators:
+                    if indicator in evidence_text.lower() or indicator in suggestion.lower():
+                        logger.debug(f"Filtering placeholder suggestion containing: '{indicator}'")
+                        is_placeholder = True
+                        break
+                
+                if is_placeholder:
+                    continue
+                
+                # Validate that the suggestion contains an actual concrete rewrite
+                # Should have format: "Change 'X' → 'Y'" or "Change 'X' -> 'Y'"
+                has_concrete_rewrite = ("Change '" in suggestion and ("→" in suggestion or "->" in suggestion))
+                
+                if not has_concrete_rewrite:
+                    logger.debug(f"Filtering suggestion without concrete rewrite: {suggestion[:100]}")
+                    continue
+                
                 # FIX #2: Validate that quoted text exists in the content
                 # Extract the quoted text from the suggestion (text between quotes or after "Change '")
                 quote_validated = True
@@ -311,58 +341,29 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             contextual_remedy = _generate_contextual_remedy(issue_type, dimension, llm_suggestions, base_remedy)
             response_parts.append(f"\n💡 **General Best Practice:** {contextual_remedy}")
     else:
-        # No LLM suggestions, just show the generic remedy
-        response_parts.append(base_remedy)
-    
-    # Add specific examples from evidence if provided (but not LLM suggestions)
-    if issue_items and len(issue_items) > 0:
-        examples = []
-        max_examples = 3  # Limit to first 3 examples for clarity
-
-        for item in issue_items[:max_examples]:
-            # Skip if we already showed this as an LLM suggestion
-            if item.get('suggestion'):
-                continue
+        # No valid LLM suggestions (filtered out or none provided)
+        # Show affected content with URLs and general guidance
+        if issue_items and len(issue_items) > 0:
+            response_parts.append("**Affected Content:**\n")
+            for idx, item in enumerate(issue_items[:5], 1):  # Show up to 5 items
+                url = item.get('url', '')
+                title = item.get('title', 'Unknown')
                 
-            evidence = item.get('evidence', '').strip()
-            title = item.get('title', '').strip()
-            url = item.get('url', '').strip()
-
-            if evidence and 'LLM:' not in evidence:  # Don't duplicate LLM evidence
-                # Create a specific example with evidence
-                example_parts = []
-                if title:
-                    example_parts.append(f"**{title}**")
-                example_parts.append(f"{evidence}")
                 if url:
-                    # Truncate long URLs for readability
-                    display_url = url if len(url) <= 60 else url[:57] + "..."
-                    example_parts.append(f"({display_url})")
-
-                examples.append(" - ".join(example_parts))
-                
-                # Add translation indicator if needed
-                if item.get('language', 'en') != 'en':
-                    lang_code = item.get('language', '').upper()
-                    examples[-1] += f" (🌐 Translated from {lang_code})"
-            elif title or url:
-                # If no evidence but have title/url, still show it
-                if title and url:
-                    display_url = url if len(url) <= 60 else url[:57] + "..."
-                    examples.append(f"**{title}** ({display_url})")
-                elif title:
-                    examples.append(f"**{title}**")
-
-        if examples:
-            example_text = "\n\n**Specific issues detected:**\n" + "\n".join(f"• {ex}" for ex in examples)
-
-            # Show count if there are more issues
-            total_count = len([i for i in issue_items if not i.get('suggestion')])
-            if total_count > max_examples:
-                example_text += f"\n\n*...and {total_count - max_examples} more instance{'s' if total_count - max_examples > 1 else ''}*"
-
-            response_parts.append(example_text)
-
+                    response_parts.append(f"{idx}. 🔗 {url}")
+                    response_parts.append(f"   * From: {title[:60]}...")
+                else:
+                    response_parts.append(f"{idx}. {title[:60]}...")
+            
+            if len(issue_items) > 5:
+                response_parts.append(f"\n*...and {len(issue_items) - 5} more affected page(s)*")
+            
+            response_parts.append(f"\n💡 **General Best Practice:** {base_remedy}")
+        else:
+            # Truly no information available
+            response_parts.append(base_remedy)
+    
+    # Don't add the old "specific examples" section - we've already shown everything above
     return "\n".join(response_parts)
 
 
