@@ -890,29 +890,26 @@ def show_analyze_page():
                 ignore_key = f"ignore_guidelines_{brand_id_normalized}"
                 
                 if guidelines and not st.session_state.get(ignore_key, False):
-                    # Guidelines found - show checkbox
+                    # Guidelines found - show toggle
                     word_count = metadata.get('word_count', 0) if metadata else 0
+                    st.success(f"✅ Guidelines found ({word_count:,} words)")
                     
-                    # Header with delete option
-                    col_msg, col_del = st.columns([5, 1])
-                    with col_msg:
-                        st.success(f"✅ Guidelines found ({word_count:,} words)")
-                    with col_del:
-                        if st.button("🗑️", key=f"del_guidelines_{brand_id_normalized}", help="Remove these guidelines from this analysis"):
-                            st.session_state[ignore_key] = True
-                            # Clear session state
-                            if 'use_guidelines' in st.session_state:
-                                del st.session_state['use_guidelines']
-                            if 'brand_id_for_guidelines' in st.session_state:
-                                del st.session_state['brand_id_for_guidelines']
-                            st.rerun()
-                    
-                    use_guidelines = st.checkbox(
+                    use_guidelines = st.toggle(
                         "Use brand guidelines for coherence analysis",
                         value=True,
                         key=f"use_guidelines_{brand_id_normalized}",
-                        help="Uncheck to analyze without brand-specific guidelines"
+                        help="Toggle off to exclude these guidelines from this analysis"
                     )
+                    
+                    # If toggled off, set ignore flag
+                    if not use_guidelines:
+                        st.session_state[ignore_key] = True
+                        # Clear session state
+                        if 'use_guidelines' in st.session_state:
+                            del st.session_state['use_guidelines']
+                        if 'brand_id_for_guidelines' in st.session_state:
+                            del st.session_state['brand_id_for_guidelines']
+                        st.rerun()
                     
                     # Preview option
                     with st.expander("📋 View guidelines preview", expanded=False):
