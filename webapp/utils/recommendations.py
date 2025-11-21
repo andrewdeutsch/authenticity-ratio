@@ -70,21 +70,24 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
     }
 
     for item in items:
-        meta = item.get('meta', {})
-        if isinstance(meta, str):
+        meta = item.get('meta')
+        
+        # Ensure meta is always a dict
+        if meta is None:
+            meta = {}
+        elif isinstance(meta, str):
             try:
                 meta = json.loads(meta)
             except:
                 meta = {}
-        
-        # Ensure meta is a dict (handle None or other types)
-        if not isinstance(meta, dict):
+        elif not isinstance(meta, dict):
             meta = {}
 
-        # Extract detected attributes
+        # Extract detected attributes - meta is guaranteed to be a dict here
         detected_attrs = meta.get('detected_attributes', [])
-        title = meta.get('title', meta.get('name', 'Unknown content'))[:60]
-        url = meta.get('source_url', meta.get('url', ''))
+        title = meta.get('title') or meta.get('name') or 'Unknown content'
+        title = title[:60]  # Truncate after ensuring it's a string
+        url = meta.get('source_url') or meta.get('url') or ''
         language = meta.get('language', 'en')
 
 
@@ -220,92 +223,96 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                     if len(parts) > 1:
                         suggestion = parts[1].strip()
             
-                # FIX #4: Apply confidence threshold (≥0.8)
-                confidence = item.get('confidence', 0.0)
-                if confidence < 0.8:
-                    logger.debug(f"Filtering low-confidence suggestion (confidence={confidence:.2f}): {suggestion[:100]}")
-                    continue
-                
-                # Filter out placeholder/template suggestions from the LLM
-                evidence_text = item.get('evidence', '')
-                
-                # Check if this is a placeholder response (LLM returned template text)
-                placeholder_indicators = [
-                    'single specific text that could be improved',
-                    'specific problematic text from content',
-                    'exact problematic text',
-                    'improved version',
-                    'brief explanation'
-                ]
-                
-                is_placeholder = False
-                for indicator in placeholder_indicators:
-                    if indicator in evidence_text.lower() or indicator in suggestion.lower():
-                        logger.debug(f"Filtering placeholder suggestion containing: '{indicator}'")
-                        is_placeholder = True
-                        break
-                
-                if is_placeholder:
-                    continue
-                
-                # Validate that the suggestion contains an actual concrete rewrite
-                # Should have format: "Change 'X' → 'Y'" or "Change 'X' -> 'Y'"
-                has_concrete_rewrite = ("Change '" in suggestion and ("→" in suggestion or "->" in suggestion))
-                
-                if not has_concrete_rewrite:
-                    logger.debug(f"Filtering suggestion without concrete rewrite: {suggestion[:100]}")
-                    continue
-                
-                # FIX #2: Validate that quoted text exists in the content
-                # Extract the quoted text from the suggestion (text between quotes or after "Change '")
-                quote_validated = True
-                evidence_text = item.get('evidence', '')
-                
-                # Try to extract the quote from evidence (format: "EXACT QUOTE: 'text'")
-                if 'EXACT QUOTE:' in evidence_text:
-                    quote_start = evidence_text.find("'")
-                    quote_end = evidence_text.rfind("'")
-                    if quote_start != -1 and quote_end != -1 and quote_start < quote_end:
-                        quoted_text = evidence_text[quote_start+1:quote_end]
-                        
-                        # Check if this quote exists in the original content
-                        # We need to check against the full content body
-                        # Note: We don't have access to full content here, but we can check evidence
-                        # The validation will be done at display time in the UI
-                        # For now, we'll trust high-confidence suggestions
-                        if len(quoted_text) < 10:
-                            # Very short quotes are suspicious
-                            logger.debug(f"Filtering suggestion with suspiciously short quote: '{quoted_text}'")
-                            quote_validated = False
-                
-                # Also check if the suggestion itself looks like a hallucination
-                # (e.g., suggests changing text that seems generic/made-up)
-                if "Change '" in suggestion:
-                    # Extract the "before" text from suggestion
-                    before_start = suggestion.find("Change '") + 8
-                    before_end = suggestion.find("'", before_start)
-                    if before_start > 7 and before_end != -1:
-                        before_text = suggestion[before_start:before_end]
-                        
-                        # If the before text is very generic, it might be hallucinated
-                        generic_phrases = [
-                            'click here', 'learn more', 'read more', 'find out',
-                            'our product', 'our service', 'contact us'
-                        ]
-                        # Only flag as suspicious if it's ONLY a generic phrase with no context
-                        if before_text.lower().strip() in generic_phrases and len(before_text) < 20:
-                            logger.debug(f"Potentially generic suggestion: {before_text}")
-                            # Don't filter, but log for monitoring
-                
-                if quote_validated:
-                    llm_suggestions.append({
-                        'suggestion': suggestion,
-                        'title': item.get('title', ''),
-                        'url': item.get('url', ''),
-                        'evidence': item.get('evidence', ''),
-                        'language': item.get('language', 'en'),
-                        'confidence': confidence
-                    })
+            # Skip if we still don't have a suggestion after trying to extract
+            if not suggestion:
+                continue
+            
+            # FIX #4: Apply confidence threshold (≥0.8)
+            confidence = item.get('confidence', 0.0)
+            if confidence < 0.8:
+                logger.debug(f"Filtering low-confidence suggestion (confidence={confidence:.2f}): {suggestion[:100]}")
+                continue
+            
+            # Filter out placeholder/template suggestions from the LLM
+            evidence_text = item.get('evidence', '')
+            
+            # Check if this is a placeholder response (LLM returned template text)
+            placeholder_indicators = [
+                'single specific text that could be improved',
+                'specific problematic text from content',
+                'exact problematic text',
+                'improved version',
+                'brief explanation'
+            ]
+            
+            is_placeholder = False
+            for indicator in placeholder_indicators:
+                if indicator in evidence_text.lower() or indicator in suggestion.lower():
+                    logger.debug(f"Filtering placeholder suggestion containing: '{indicator}'")
+                    is_placeholder = True
+                    break
+            
+            if is_placeholder:
+                continue
+            
+            # Validate that the suggestion contains an actual concrete rewrite
+            # Should have format: "Change 'X' → 'Y'" or "Change 'X' -> 'Y'"
+            has_concrete_rewrite = ("Change '" in suggestion and ("→" in suggestion or "->" in suggestion))
+            
+            if not has_concrete_rewrite:
+                logger.debug(f"Filtering suggestion without concrete rewrite: {suggestion[:100]}")
+                continue
+            
+            # FIX #2: Validate that quoted text exists in the content
+            # Extract the quoted text from the suggestion (text between quotes or after "Change '")
+            quote_validated = True
+            evidence_text = item.get('evidence', '')
+            
+            # Try to extract the quote from evidence (format: "EXACT QUOTE: 'text'")
+            if 'EXACT QUOTE:' in evidence_text:
+                quote_start = evidence_text.find("'")
+                quote_end = evidence_text.rfind("'")
+                if quote_start != -1 and quote_end != -1 and quote_start < quote_end:
+                    quoted_text = evidence_text[quote_start+1:quote_end]
+                    
+                    # Check if this quote exists in the original content
+                    # We need to check against the full content body
+                    # Note: We don't have access to full content here, but we can check evidence
+                    # The validation will be done at display time in the UI
+                    # For now, we'll trust high-confidence suggestions
+                    if len(quoted_text) < 10:
+                        # Very short quotes are suspicious
+                        logger.debug(f"Filtering suggestion with suspiciously short quote: '{quoted_text}'")
+                        quote_validated = False
+            
+            # Also check if the suggestion itself looks like a hallucination
+            # (e.g., suggests changing text that seems generic/made-up)
+            if "Change '" in suggestion:
+                # Extract the "before" text from suggestion
+                before_start = suggestion.find("Change '") + 8
+                before_end = suggestion.find("'", before_start)
+                if before_start > 7 and before_end != -1:
+                    before_text = suggestion[before_start:before_end]
+                    
+                    # If the before text is very generic, it might be hallucinated
+                    generic_phrases = [
+                        'click here', 'learn more', 'read more', 'find out',
+                        'our product', 'our service', 'contact us'
+                    ]
+                    # Only flag as suspicious if it's ONLY a generic phrase with no context
+                    if before_text.lower().strip() in generic_phrases and len(before_text) < 20:
+                        logger.debug(f"Potentially generic suggestion: {before_text}")
+                        # Don't filter, but log for monitoring
+            
+            if quote_validated:
+                llm_suggestions.append({
+                    'suggestion': suggestion,
+                    'title': item.get('title', ''),
+                    'url': item.get('url', ''),
+                    'evidence': item.get('evidence', ''),
+                    'language': item.get('language', 'en'),
+                    'confidence': confidence
+                })
 
     # Build the response
     response_parts = []
