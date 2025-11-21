@@ -747,27 +747,43 @@ st.markdown("""
         margin-top: 0.75rem;
         margin-left: auto;
         margin-right: auto;
-        font-size: 0.6rem;
-        color: white;
+        font-size: 0.5rem !important;
+        color: white !important;
         z-index: 10;
-        opacity: 0.24;
-        text-align: center;
+        opacity: 0.24 !important;
+        text-align: center !important;
         width: 80%;
         max-width: 80%;
         overflow: hidden;
-        font-family: monospace;
-        line-height: 1.3;
+        font-family: monospace !important;
+        line-height: 1.3 !important;
         animation: fadeIn 0.3s ease-out;
         box-sizing: border-box;
     }
 
     .progress-log-entry {
-        white-space: pre-wrap;
-        word-wrap: break-word;
-        word-break: normal;
-        overflow-wrap: anywhere;
+        white-space: pre-wrap !important;
+        word-wrap: break-word !important;
+        word-break: normal !important;
+        overflow-wrap: anywhere !important;
         max-width: 100%;
         overflow: hidden;
+        font-size: 0.5rem !important;
+        color: white !important;
+        background: transparent !important;
+        padding: 0 !important;
+        border: none !important;
+    }
+
+    /* Override Streamlit's code block styling */
+    .progress-logs code,
+    .progress-log-entry code {
+        font-size: 0.5rem !important;
+        color: white !important;
+        background: transparent !important;
+        padding: 0 !important;
+        border: none !important;
+        font-family: monospace !important;
     }
 </style>
 """, unsafe_allow_html=True)
