@@ -192,6 +192,10 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                     log_handler.setFormatter(log_formatter)
                     search_logger.addHandler(log_handler)
 
+                    # DEBUG: Pause for 30 seconds after first log to allow DOM inspection
+                    import time
+                    time.sleep(30)
+
                     try:
                         pages = collect_serper_pages(
                             query=query,
