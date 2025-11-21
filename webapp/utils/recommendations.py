@@ -5,7 +5,50 @@ import json
 from typing import Dict, List, Any
 
 
+def _generate_contextual_remedy(issue_type: str, dimension: str, llm_suggestions: List[Dict[str, Any]], base_remedy: str) -> str:
+    """
+    Generate a contextual best practice based on the specific LLM suggestions.
+    
+    Args:
+        issue_type: Type of issue detected
+        dimension: Dimension the issue belongs to
+        llm_suggestions: List of LLM-generated suggestions
+        base_remedy: The generic base remedy
+        
+    Returns:
+        A more contextual and specific best practice
+    """
+    # Analyze the suggestions to create a more specific remedy
+    if not llm_suggestions:
+        return base_remedy
+    
+    # Extract common themes from suggestions
+    all_suggestions_text = " ".join([s.get('suggestion', '') for s in llm_suggestions]).lower()
+    
+    # Create context-specific guidance based on common patterns
+    if 'punctuation' in all_suggestions_text or 'spacing' in all_suggestions_text or 'colon' in all_suggestions_text:
+        return f"Review all content for proper punctuation, spacing, and formatting consistency. Pay special attention to colons, commas, and spacing after punctuation marks. {base_remedy.split('.')[0]}."
+    
+    elif 'title' in all_suggestions_text and 'align' in all_suggestions_text:
+        return f"Ensure page titles accurately reflect the content and purpose of each page. Titles should be descriptive and aligned with the actual content to improve clarity and SEO. {base_remedy.split('.')[0]}."
+    
+    elif 'readability' in all_suggestions_text or 'clarity' in all_suggestions_text:
+        return f"Focus on improving content readability and clarity. Break up long sentences, use clear headings, and ensure the content flows logically. {base_remedy.split('.')[0]}."
+    
+    elif 'consistency' in all_suggestions_text or 'inconsistent' in all_suggestions_text:
+        return f"Audit content across all pages to ensure consistency in messaging, terminology, and formatting. Create a style guide if one doesn't exist. {base_remedy.split('.')[0]}."
+    
+    elif 'metadata' in all_suggestions_text or 'schema' in all_suggestions_text:
+        return f"Implement comprehensive metadata and structured data across all pages. This improves discoverability and helps search engines understand your content. {base_remedy.split('.')[0]}."
+    
+    else:
+        # Default: use the first sentence of base remedy with a contextual prefix
+        first_sentence = base_remedy.split('.')[0] if '.' in base_remedy else base_remedy
+        return f"Based on the specific issues detected, {first_sentence.lower()}."
+
+
 def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+
     """
     Extract specific issues from content items grouped by dimension.
 
@@ -188,28 +231,35 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
     # Build the response
     response_parts = []
     
-    # If we have LLM suggestions, show them first
+    # If we have LLM suggestions, show them in numbered list with URLs first
     if llm_suggestions:
-        response_parts.append("**🎯 AI-Generated Specific Suggestions:**\n")
-        for idx, llm_sug in enumerate(llm_suggestions[:2], 1):  # Show max 2 LLM suggestions
+        for idx, llm_sug in enumerate(llm_suggestions, 1):
             suggestion_text = llm_sug['suggestion']
+            url = llm_sug.get('url', '')
+            title = llm_sug.get('title', '')
             
-            # Format the suggestion nicely
+            # Format the suggestion with URL first, then suggestion
             lang_indicator = ""
             if llm_sug.get('language', 'en') != 'en':
                 lang_code = llm_sug.get('language', '').upper()
                 lang_indicator = f" (🌐 Translated from {lang_code})"
-                
-            response_parts.append(f"{idx}. {suggestion_text}{lang_indicator}")
             
-            # Add context if available
-            if llm_sug['title']:
-                response_parts.append(f"   - *From: {llm_sug['title'][:60]}...*")
+            # Build the numbered item with URL first
+            if url:
+                response_parts.append(f"{idx}. 🔗 {url}")
+                response_parts.append(f"   {suggestion_text}{lang_indicator}")
+            else:
+                response_parts.append(f"{idx}. {suggestion_text}{lang_indicator}")
+            
+            # Add page title as sub-bullet if available
+            if title:
+                response_parts.append(f"   * From: {title[:60]}...")
         
-        if len(llm_suggestions) > 2:
-            response_parts.append(f"\n   *...and {len(llm_suggestions) - 2} more suggestion(s)*")
-        
-        response_parts.append("\n\n**💡 General Best Practice:**\n" + base_remedy)
+        # Generate context-specific best practice based on the suggestions
+        if len(llm_suggestions) > 0:
+            # Create a more relevant best practice based on the issue type
+            contextual_remedy = _generate_contextual_remedy(issue_type, dimension, llm_suggestions, base_remedy)
+            response_parts.append(f"\n💡 **General Best Practice:** {contextual_remedy}")
     else:
         # No LLM suggestions, just show the generic remedy
         response_parts.append(base_remedy)

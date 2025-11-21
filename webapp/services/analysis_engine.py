@@ -46,7 +46,14 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
 
     # Progress tracking
     progress_bar = st.progress(0)
-    progress_animator = ProgressAnimator()
+    
+    # Reuse existing progress container if available, otherwise create new one
+    if 'progress_container' in st.session_state and st.session_state['progress_container'] is not None:
+        progress_animator = ProgressAnimator(container=st.session_state['progress_container'])
+    else:
+        progress_container = st.empty()
+        progress_animator = ProgressAnimator(container=progress_container)
+        st.session_state['progress_container'] = progress_container
     
     # Set up log capture for the entire analysis process
     # Attach to root logger to capture logs from all modules
