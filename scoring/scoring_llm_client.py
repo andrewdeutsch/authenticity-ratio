@@ -149,7 +149,7 @@ class LLMScoringClient:
             
             Content:
             Title: {content.title}
-            Body: {content.body[:2000]}
+            Body: {content.body[:5000]}
             
             Respond with JSON in this exact format:
             {{
@@ -169,68 +169,104 @@ class LLMScoringClient:
             
             CRITICAL REQUIREMENTS:
             1. Use ONLY the issue types listed above
-            2. Provide EXACT QUOTES in evidence field
+            2. Provide EXACT QUOTES in evidence field - the quoted text MUST appear in the content above
             3. In suggestion field, show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
             4. Include brief explanation of WHY the change improves {dimension}
-            5. Only report issues you can support with specific text
+            5. Only report issues you can support with specific text FROM THE CONTENT PROVIDED
+            6. If you cannot find a specific quote in the content, DO NOT make up suggestions
             
             EXAMPLE GOOD SUGGESTION:
             "Change 'Find the right type of Mastercard payment card for you' → 'Discover the perfect Mastercard for your needs'. This improves coherence by using more consistent, engaging brand voice."
             
             EXAMPLE BAD SUGGESTION (DO NOT DO THIS):
             "Improve the wording" or "Make it more professional" (too vague, no concrete rewrite)
+            Suggesting changes to text that doesn't appear in the content provided
             """
         else:
-            # High score: Ask for improvement suggestions with concrete rewrites
-            # MANDATE at least one suggestion - users need to understand "why not 100%?"
-            feedback_prompt = f"""
-            You scored this content's {dimension} as {score:.1f} out of 1.0 - this is good!
-            
-            {context_guidance}
-            
-            The client wants to know: "Why didn't I get 100%? What specific thing could make this even better?"
-            
-            You MUST provide at least ONE specific, actionable improvement with a CONCRETE REWRITE that would move the score closer to 100%.
-            
-            Even excellent content can be refined through micro-optimizations, A/B testing opportunities, or advanced best practices.
-            
-            Content:
-            Title: {content.title}
-            Body: {content.body[:2000]}
-            
-            CRITICAL REQUIREMENTS:
-            1. You MUST provide at least ONE improvement (empty array is NOT acceptable)
-            2. Identify ONE specific area for improvement (not multiple)
-            3. Provide a SINGLE exact quote showing what could be improved
-            4. Show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
-            5. Explain WHY this change would improve the score
-            
-            Respond with JSON in this exact format:
-            {{
-                "issues": [
-                    {{
-                        "type": "improvement_opportunity",
-                        "confidence": 0.75,
-                        "severity": "low",
-                        "evidence": "EXACT QUOTE: 'single specific text that could be improved'",
-                        "suggestion": "Change '[exact text from evidence]' → '[improved version]'. This would improve {dimension} by [brief explanation]."
-                    }}
-                ]
-            }}
-            
-            EXAMPLES OF GOOD SUGGESTIONS WITH CONCRETE REWRITES:
-            - "Change 'Click here to learn more' → 'Explore our complete product guide'. This improves coherence by providing specific, descriptive CTAs."
-            - "Change 'Posted recently' → 'Published on January 15, 2024'. This improves transparency by adding specific timestamps."
-            - "Change 'Our product is the best' → 'Our product has been rated #1 by TechReview (2024)'. This improves verification by adding credible sources."
-            
-            EXAMPLES OF BAD SUGGESTIONS (DO NOT DO THIS):
-            - "Add a call-to-action" (no concrete rewrite shown)
-            - "Improve the wording" (too vague)
-            - Listing multiple improvements instead of ONE concrete rewrite
-            - Returning an empty issues array (NOT ALLOWED - you MUST provide at least one suggestion)
-            
-            REMEMBER: You MUST provide at least ONE improvement opportunity. Empty arrays are not acceptable for high scores.
-            """
+            # High score (0.9-1.0): Suggestions are optional, especially for very high scores
+            if score >= 0.95:
+                # Very high score (≥0.95): Suggestions are OPTIONAL
+                feedback_prompt = f"""
+                You scored this content's {dimension} as {score:.1f} out of 1.0 - this is excellent!
+                
+                {context_guidance}
+                
+                This content is already very high quality. Only suggest improvements if you can identify a CLEAR, SPECIFIC issue with an EXACT QUOTE from the content.
+                
+                Content:
+                Title: {content.title}
+                Body: {content.body[:5000]}
+                
+                CRITICAL REQUIREMENTS:
+                1. Suggestions are OPTIONAL - if the content is truly excellent, return an empty issues array
+                2. ONLY suggest improvements if you find specific text that could be better
+                3. The quoted text MUST appear in the content above - do NOT make up quotes
+                4. Show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
+                5. If you cannot find a specific quote in the content, return an empty array
+                
+                Respond with JSON in this exact format:
+                {{
+                    "issues": []
+                }}
+                
+                OR if you find a genuine improvement:
+                {{
+                    "issues": [
+                        {{
+                            "type": "improvement_opportunity",
+                            "confidence": 0.75,
+                            "severity": "low",
+                            "evidence": "EXACT QUOTE: 'specific text from content above'",
+                            "suggestion": "Change '[exact text from evidence]' → '[improved version]'. This would improve {dimension} by [brief explanation]."
+                        }}
+                    ]
+                }}
+                """
+            else:
+                # High score (0.9-0.95): Ask for improvement suggestions with concrete rewrites
+                feedback_prompt = f"""
+                You scored this content's {dimension} as {score:.1f} out of 1.0 - this is good!
+                
+                {context_guidance}
+                
+                The client wants to know: "Why didn't I get 100%? What specific thing could make this even better?"
+                
+                Provide at least ONE specific, actionable improvement with a CONCRETE REWRITE that would move the score closer to 100%.
+                
+                Content:
+                Title: {content.title}
+                Body: {content.body[:5000]}
+                
+                CRITICAL REQUIREMENTS:
+                1. Provide at least ONE improvement if possible
+                2. The quoted text MUST appear in the content above - do NOT make up quotes
+                3. Provide a SINGLE exact quote showing what could be improved
+                4. Show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
+                5. Explain WHY this change would improve the score
+                6. If you cannot find specific text to quote, return an empty issues array
+                
+                Respond with JSON in this exact format:
+                {{
+                    "issues": [
+                        {{
+                            "type": "improvement_opportunity",
+                            "confidence": 0.75,
+                            "severity": "low",
+                            "evidence": "EXACT QUOTE: 'single specific text that could be improved'",
+                            "suggestion": "Change '[exact text from evidence]' → '[improved version]'. This would improve {dimension} by [brief explanation]."
+                        }}
+                    ]
+                }}
+                
+                EXAMPLES OF GOOD SUGGESTIONS WITH CONCRETE REWRITES:
+                - "Change 'Click here to learn more' → 'Explore our complete product guide'. This improves coherence by providing specific, descriptive CTAs."
+                - "Change 'Posted recently' → 'Published on January 15, 2024'. This improves transparency by adding specific timestamps."
+                
+                EXAMPLES OF BAD SUGGESTIONS (DO NOT DO THIS):
+                - "Add a call-to-action" (no concrete rewrite shown)
+                - "Improve the wording" (too vague)
+                - Suggesting changes to text that doesn't appear in the content provided
+                """
         
         # Get feedback from LLM
         try:
