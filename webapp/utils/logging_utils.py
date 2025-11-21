@@ -106,9 +106,11 @@ class ProgressAnimator:
         # Build logs display
         logs_html = ""
         if self.logs:
-            # Escape HTML in log messages for security and show only the last log
-            last_log = html_module.escape(self.logs[-1])
-            logs_html = f'<div class="progress-logs"><div class="progress-log-entry">{last_log}</div></div>'
+            # Get the last log and intelligently truncate it
+            last_log = self.logs[-1]
+            processed_log = self._process_log_message(last_log)
+            safe_log = html_module.escape(processed_log)
+            logs_html = f'<div class="progress-logs"><div class="progress-log-entry">{safe_log}</div></div>'
 
         # Escape message and emoji
         safe_message = html_module.escape(self.current_message) if self.current_message else ""
@@ -127,6 +129,65 @@ class ProgressAnimator:
         """
 
         self.container.markdown(html, unsafe_allow_html=True)
+
+    def _process_log_message(self, log_message: str) -> str:
+        """
+        Process a log message to make it display-friendly.
+        
+        Intelligently truncates long query strings while preserving:
+        - Timestamps
+        - Logger names
+        - Log levels (WARNING, ERROR, INFO)
+        - Meaningful message content
+        
+        Args:
+            log_message: Raw log message from the logger
+            
+        Returns:
+            Processed log message suitable for display
+        """
+        import re
+        
+        # Pattern to match standard log format: timestamp - logger - level - message
+        # Example: "2025-11-20 21:56:09.973 - ingestion.brave_search - WARNING - Fetching ..."
+        log_pattern = r'^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[.,]\d{3})\s*-\s*([^\s-]+)\s*-\s*(\w+)\s*-\s*(.+)$'
+        
+        match = re.match(log_pattern, log_message)
+        if match:
+            timestamp, logger_name, level, message = match.groups()
+            
+            # Truncate query strings in the message
+            # Look for patterns like "query=..." or "for query=..."
+            if 'query=' in message.lower():
+                # Find the query portion and truncate it
+                query_pattern = r'(query=)([^,]+)(.*)'
+                query_match = re.search(query_pattern, message, re.IGNORECASE)
+                if query_match:
+                    prefix = query_match.group(1)
+                    query_value = query_match.group(2)
+                    suffix = query_match.group(3)
+                    
+                    # Truncate the query value if it's too long
+                    max_query_length = 50
+                    if len(query_value) > max_query_length:
+                        query_value = query_value[:max_query_length] + "..."
+                    
+                    # Reconstruct the message
+                    message = message[:query_match.start()] + prefix + query_value + suffix
+            
+            # Truncate the overall message if still too long
+            max_message_length = 150
+            if len(message) > max_message_length:
+                message = message[:max_message_length] + "..."
+            
+            # Reconstruct the log with all components
+            return f"{timestamp} - {logger_name} - {level} - {message}"
+        else:
+            # If it doesn't match the expected format, just truncate the whole thing
+            max_length = 200
+            if len(log_message) > max_length:
+                return log_message[:max_length] + "..."
+            return log_message
 
     def clear(self):
         """Clear the progress display."""
