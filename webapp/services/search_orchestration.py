@@ -119,7 +119,8 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                     # For brand_controlled and both, we need brand_domains to identify brand URLs
                     # For third_party, we can proceed with empty brand_domains (everything is 3rd party)
                     if collection_strategy in ["brand_controlled", "both"] and not brand_domains:
-                        logger.warning(f"Cannot use {collection_strategy} strategy without brand_domains, falling back to no ratio enforcement")
+                        logger.error(f"⚠️ FILTERING DISABLED: {collection_strategy} strategy requires brand_domains, but none were provided. All URLs (brand-owned AND third-party) will be collected without filtering.")
+                        logger.error(f"⚠️ This means third-party URLs will appear in results even with 'brand-controlled' selected!")
                     else:
                         from ingestion.domain_classifier import URLCollectionConfig
 
@@ -134,7 +135,10 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                             brand_subdomains=brand_subdomains or [],
                             brand_social_handles=brand_social_handles or []
                         )
-                        logger.info(f"Created URLCollectionConfig with {collection_strategy} strategy: {brand_ratio:.1%} brand-owned, {third_party_ratio:.1%} 3rd party")
+                        logger.info(f"✓ Created URLCollectionConfig with {collection_strategy} strategy: {brand_ratio:.1%} brand-owned, {third_party_ratio:.1%} 3rd party")
+                        logger.info(f"✓ Brand domains for filtering: {brand_domains[:5]}{'...' if len(brand_domains) > 5 else ''} ({len(brand_domains)} total)")
+                        logger.info(f"✓ Brand subdomains: {brand_subdomains[:3]}{'...' if len(brand_subdomains) > 3 else ''} ({len(brand_subdomains)} total)")
+                        logger.info(f"✓ Social handles: {brand_social_handles[:3]}{'...' if len(brand_social_handles) > 3 else ''} ({len(brand_social_handles)} total)")
 
                 progress_bar.progress(50)
 
