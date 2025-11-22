@@ -186,6 +186,8 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
 
         # Coherence
         'Brand Voice Consistency Score': 'Audit all content for consistent brand voice and tone. Create written brand voice guidelines covering: vocabulary preferences, sentence structure, formality level, personality traits (e.g., professional vs. casual). Train all content creators on these guidelines and review content before publishing.',
+        'Inconsistent Voice': 'Audit all content for consistent brand voice and tone. Create written brand voice guidelines covering: vocabulary preferences, sentence structure, formality level, personality traits (e.g., professional vs. casual). Train all content creators on these guidelines and review content before publishing. Ensure the same voice is used across all channels and content types.',
+        'Tone Shift': 'Review content for abrupt changes in tone or formality. Ensure consistent tone throughout each piece of content and across all brand communications. Common causes: multiple authors without style guide, mixing formal/informal language, inconsistent use of pronouns (we/you/they). Establish tone guidelines and have a single editor review for consistency.',
         'Broken Link Rate': 'Regularly audit and fix broken links using automated link checkers. Recommended tools: Broken Link Checker, Screaming Frog, or Ahrefs. Run checks weekly and fix broken links within 24-48 hours. Set up monitoring alerts for broken links.',
         'Claim Consistency Across Pages': 'Ensure factual claims are consistent across all pages and channels. Identify contradictions where different pages state different facts, figures, or positions. Create a content style guide with a single source of truth for key claims (pricing, product specs, company facts).',
         'Email-Asset Consistency Check': 'Standardize email templates to match website branding. Ensure consistency in: logo usage, color schemes, typography, button styles, promotional claims, pricing. Verify that email links point to landing pages with matching offers and messaging.',
@@ -267,11 +269,25 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             if is_placeholder:
                 continue
             
-            # Validate that the suggestion contains an actual concrete rewrite
-            # Should have format: "Change 'X' → 'Y'" or "Change 'X' -> 'Y'"
+            # Define issue types that don't require concrete rewrites (general guidance is acceptable)
+            GENERAL_GUIDANCE_ISSUES = [
+                'inconsistent voice',
+                'tone shift', 
+                'brand voice inconsistency',
+                'vocabulary',
+                'improvement_opportunity',
+                'poor readability',
+                'inappropriate tone'
+            ]
+            
+            # Check if this issue type allows general guidance
+            issue_type_lower = issue_type_val.lower()
+            allows_general_guidance = any(pattern in issue_type_lower for pattern in GENERAL_GUIDANCE_ISSUES)
+            
+            # Validate that the suggestion contains an actual concrete rewrite (unless general guidance is allowed)
             has_concrete_rewrite = ("Change '" in suggestion and ("→" in suggestion or "->" in suggestion))
             
-            if not has_concrete_rewrite:
+            if not has_concrete_rewrite and not allows_general_guidance:
                 logger.debug(f"Filtering suggestion without concrete rewrite: {suggestion[:100]}")
                 continue
             
@@ -331,6 +347,7 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
     
     # If we have LLM suggestions, show them in numbered list
     if llm_suggestions:
+        recommendation_items = []
         for idx, llm_sug in enumerate(llm_suggestions, 1):
             suggestion_text = llm_sug['suggestion']
             url = llm_sug.get('url', '')
@@ -342,17 +359,25 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                 lang_code = llm_sug.get('language', '').upper()
                 lang_indicator = f" (🌐 Translated from {lang_code})"
             
+            # Build each recommendation as a multi-line item
+            item_lines = []
             # Format: {number}. 🔗 {url} {suggestion_text}
             if url:
-                response_parts.append(f"{idx}. 🔗 {url} {suggestion_text}{lang_indicator}")
+                item_lines.append(f"{idx}. 🔗 {url} {suggestion_text}{lang_indicator}")
             else:
-                response_parts.append(f"{idx}. {suggestion_text}{lang_indicator}")
+                item_lines.append(f"{idx}. {suggestion_text}{lang_indicator}")
             
             # Add page title as sub-bullet if available
             if title:
                 # Truncate title to ~60 chars
                 truncated_title = title[:60] + "..." if len(title) > 60 else title
-                response_parts.append(f"    * From: {truncated_title}")
+                item_lines.append(f"    * From: {truncated_title}")
+            
+            # Join the lines for this item and add to list
+            recommendation_items.append("\n".join(item_lines))
+        
+        # Join all recommendation items with blank lines between them
+        response_parts.append("\n\n".join(recommendation_items))
                 
         # Add contextual General Best Practice at the end
         # Generate context-specific best practice based on the suggestions
@@ -363,7 +388,7 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
         # No valid LLM suggestions (filtered out or none provided)
         # Add fallback: show specific issues with evidence (non-LLM suggestions)
         if issue_items and len(issue_items) > 0:
-            examples = []
+            example_items = []
             max_examples = 3
             
             for idx, item in enumerate(issue_items[:max_examples], 1):
@@ -382,15 +407,20 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                         lang_code = item.get('language', '').upper()
                         lang_indicator = f" (🌐 Translated from {lang_code})"
                     
-                    examples.append(f"{idx}. 🔗 {url} {evidence}{lang_indicator}")
+                    # Build each example as a multi-line item
+                    item_lines = []
+                    item_lines.append(f"{idx}. 🔗 {url} {evidence}{lang_indicator}")
                     
                     if title:
                         truncated_title = title[:60] + "..." if len(title) > 60 else title
-                        examples.append(f"    * From: {truncated_title}")
+                        item_lines.append(f"    * From: {truncated_title}")
+                    
+                    # Join the lines for this item and add to list
+                    example_items.append("\n".join(item_lines))
             
-            if examples:
-                # If we have examples but no LLM suggestions, list them
-                example_text = "\n".join(examples)
+            if example_items:
+                # If we have examples but no LLM suggestions, list them with blank lines between
+                example_text = "\n\n".join(example_items)
                 
                 total_count = len([i for i in issue_items if not i.get('suggestion')])
                 if total_count > max_examples:
