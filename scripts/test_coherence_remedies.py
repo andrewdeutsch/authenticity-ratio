@@ -32,7 +32,8 @@ def test_coherence_remedies():
     remedy = get_remedy_for_issue('Inconsistent Voice', 'coherence', issue_items)
     print(remedy)
     
-    if remedy and 'Audit all content for consistent brand voice' in remedy:
+    # Check that both the LLM suggestion AND the predefined remedy are shown
+    if remedy and 'Maintain consistent brand voice' in remedy and 'General Best Practice' in remedy:
         print("\n✅ PASS: Remedy displayed for general guidance")
     else:
         print("\n❌ FAIL: No remedy or wrong remedy")

@@ -165,6 +165,9 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
         'Source Domain Trust Baseline': 'Improve domain reputation. Ensure you have: valid SSL certificate (HTTPS), accessible privacy policy, clear contact information, professional domain age, and no association with spam or malware. Consider third-party verification badges.',
         'Schema Compliance': 'Implement schema.org structured data markup (JSON-LD) for all content types. This helps search engines understand your content and can improve visibility and trust signals.',
         'Metadata Completeness': 'Add complete metadata to all pages. Required elements: title tag, meta description, author attribution, publication/modified date, Open Graph tags (og:title, og:description, og:image), and Twitter Card tags.',
+        'unclear_authorship': 'Add clear author attribution to all content. For blog posts and articles: include visible bylines with author names and optional author bio pages. For corporate pages and landing pages: add schema.org markup with author/publisher information using JSON-LD format, include <meta name="author"> tags, or add subtle footer attribution like "Content by [Team/Name]". Create an About page listing content contributors and link to it from main pages.',
+        'missing_metadata': 'Add complete metadata to all pages. Required elements: title tag, meta description, author attribution, publication/modified date, Open Graph tags (og:title, og:description, og:image), and Twitter Card tags. Use tools like Google Rich Results Test to validate your metadata.',
+        'no_schema_markup': 'Implement schema.org structured data markup (JSON-LD) for all content types. This helps search engines understand your content and can improve visibility and trust signals. Common schema types: Article, Product, Organization, LocalBusiness, FAQPage.',
 
         # Verification
         'Ad/Sponsored Label Consistency': 'Clearly label all sponsored content and advertisements. Use consistent, prominent labels: "Sponsored", "Ad", "Paid Partnership", or "Promoted". Ensure labels appear: on social media posts, in email campaigns, on website promotional content. Labels must be visible before user interaction.',
@@ -183,6 +186,10 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
         'Caption/Subtitle Availability & Accuracy': 'Add accurate captions and subtitles to all video content. Use professional captioning services or human review to verify auto-generated captions. Ensure captions include: speaker identification, relevant sound effects, music descriptions for accessibility.',
         'Data Source Citations for Claims': 'Add inline citations for all data-driven claims. Each statistic, fact, or research finding should link to: primary source (research paper, official report), publication date, credible organization. Format citations consistently (footnotes, inline links, or reference section).',
         'Privacy Policy Link Availability & Clarity': 'Add a clear Privacy Policy link to your footer and top navigation. Ensure the policy: is written in plain language (avoid legalese), clearly explains data collection practices, is updated regularly (review annually), is mobile-friendly. Consider adding a summary or FAQ section.',
+        'missing_privacy_policy': 'Add a clear Privacy Policy link to your footer and top navigation. Ensure the policy: is written in plain language (avoid legalese), clearly explains data collection practices, is updated regularly (review annually), is mobile-friendly. Consider adding a summary or FAQ section.',
+        'no_ai_disclosure': 'Clearly disclose when content is AI-generated or AI-assisted. Add disclosure statements prominently: "This content was created with AI assistance" or "AI-generated summary". Use visual indicators (badges, labels) and schema.org markup (digital-document-permission property).',
+        'missing_data_source_citations': 'Add inline citations for all data-driven claims. Each statistic, fact, or research finding should link to: primary source (research paper, official report), publication date, credible organization. Format citations consistently (footnotes, inline links, or reference section).',
+        'hidden_sponsored_content': 'Clearly label all sponsored content and advertisements. Use consistent, prominent labels: "Sponsored", "Ad", "Paid Partnership", or "Promoted". Ensure labels appear before user interaction and are visible on all platforms.',
 
         # Coherence
         'Brand Voice Consistency Score': 'Audit all content for consistent brand voice and tone. Create written brand voice guidelines covering: vocabulary preferences, sentence structure, formality level, personality traits (e.g., professional vs. casual). Train all content creators on these guidelines and review content before publishing.',
@@ -271,13 +278,32 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             
             # Define issue types that don't require concrete rewrites (general guidance is acceptable)
             GENERAL_GUIDANCE_ISSUES = [
+                # Coherence (tone/voice)
                 'inconsistent voice',
                 'tone shift', 
                 'brand voice inconsistency',
                 'vocabulary',
-                'improvement_opportunity',
+                
+                # Resonance (audience fit)
                 'poor readability',
-                'inappropriate tone'
+                'inappropriate tone',
+                
+                # High-score optimizations
+                'improvement_opportunity',
+                
+                # Transparency structural issues (missing elements)
+                'missing_privacy_policy',
+                'no_ai_disclosure',
+                'missing_data_source_citations',
+                'hidden_sponsored_content',
+                
+                # Provenance structural issues (missing elements)
+                'unclear_authorship',
+                'missing_metadata',
+                'no_schema_markup',
+                
+                # Verification pattern analysis
+                'fake_engagement'
             ]
             
             # Check if this issue type allows general guidance
