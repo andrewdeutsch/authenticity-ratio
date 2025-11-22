@@ -827,6 +827,13 @@ st.markdown("""
         background: transparent !important;
         font-family: monospace !important;
     }
+
+    /* Style expanded remedy sections with white background at 80% opacity */
+    [data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+        background: rgba(255, 255, 255, 0.8) !important;
+        padding: 1rem;
+        border-radius: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
